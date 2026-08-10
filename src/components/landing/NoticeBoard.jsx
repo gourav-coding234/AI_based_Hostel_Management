@@ -8,33 +8,30 @@ const SAMPLE_NOTICES = [
     title: "Hostel re-registration for the new semester opens Monday",
     date: "12 Aug 2026",
     tag: "Admin",
+    isNew: true,
   },
   {
     id: "n2",
     title: "Mess menu revised — new weekly schedule posted on the board",
     date: "10 Aug 2026",
     tag: "Mess",
+    isNew: true,
   },
   {
     id: "n3",
     title: "Fire safety drill scheduled for all blocks this Saturday, 10 AM",
     date: "08 Aug 2026",
     tag: "Safety",
+    isNew: false,
   },
   {
     id: "n4",
     title: "Gate pass requests must be submitted 24 hours in advance",
     date: "05 Aug 2026",
     tag: "Security",
+    isNew: false,
   },
 ];
-
-const TAG_STYLES = {
-  Admin: "bg-teal-500/10 text-teal-700",
-  Mess: "bg-amber-500/10 text-amber-700",
-  Safety: "bg-rose-500/10 text-rose-700",
-  Security: "bg-navy-700/10 text-navy-800",
-};
 
 export default function NoticeBoard() {
   return (
@@ -42,7 +39,7 @@ export default function NoticeBoard() {
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-600">
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">
               Stay informed
             </span>
             <h2 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">
@@ -55,26 +52,30 @@ export default function NoticeBoard() {
           </p>
         </div>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {SAMPLE_NOTICES.map((notice) => (
-            <article
+        <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {SAMPLE_NOTICES.map((notice, i) => (
+            <a
               key={notice.id}
-              className="rounded-2xl border border-slate-200 bg-white p-6 transition-shadow hover:shadow-soft"
+              href="#notices"
+              className={`flex flex-col gap-2 px-6 py-5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:gap-6 ${
+                i !== 0 ? "border-t border-slate-100" : ""
+              }`}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                    TAG_STYLES[notice.tag] ?? "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {notice.tag}
-                </span>
-                <time className="text-xs text-slate-400">{notice.date}</time>
-              </div>
-              <h3 className="mt-4 font-display text-lg font-medium leading-snug text-ink">
+              <time className="shrink-0 text-xs font-semibold uppercase tracking-wide text-navy-800 sm:w-28">
+                {notice.date}
+              </time>
+              <span className="flex-1 text-sm font-medium text-ink sm:text-base">
                 {notice.title}
-              </h3>
-            </article>
+                {notice.isNew && (
+                  <span className="ml-2 inline-block rounded-full bg-red-600 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-white">
+                    New
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {notice.tag}
+              </span>
+            </a>
           ))}
         </div>
       </div>

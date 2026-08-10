@@ -55,7 +55,7 @@ export default function Facilities() {
   return (
     <section id="facilities" className="bg-white py-20">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-600">
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">
           What's on campus
         </span>
         <h2 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">
@@ -66,9 +66,9 @@ export default function Facilities() {
           {FACILITIES.map((f) => (
             <div
               key={f.title}
-              className="rounded-2xl border border-slate-200 p-6 transition-colors hover:border-teal-400/50"
+              className="rounded-2xl border border-slate-200 p-6 transition-colors hover:border-navy-800/40 hover:shadow-soft"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-navy-950 text-teal-400">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-navy-950 text-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   {f.icon}
                 </svg>

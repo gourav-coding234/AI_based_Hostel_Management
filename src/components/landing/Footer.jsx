@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
+import collegeLogo from "../../assets/college-logo-circle.png";
 
 export default function Footer() {
   return (
-    <footer id="contact" className="bg-ink py-14 text-slate-400">
+    <footer id="contact" className="bg-navy-950 py-14 text-slate-400">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid gap-10 sm:grid-cols-3">
           <div>
             <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/15 font-display text-base font-semibold text-teal-400">
-                G
+              <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-white">
+                <img src={collegeLogo} alt="GCE Keonjhar crest" className="h-full w-full object-contain" />
               </span>
               <span className="font-display text-base font-semibold text-white">GCE Keonjhar</span>
             </div>
@@ -30,15 +31,16 @@ export default function Footer() {
           <div>
             <h4 className="font-display text-sm font-semibold text-white">Contact</h4>
             <ul className="mt-4 space-y-2 text-sm">
-              <li>GCE Keonjhar Campus, Odisha, India</li>
-              <li>hostel.office@gcekjr.ac.in</li>
-              <li>+91 00000 00000</li>
+              <li>Jamunalia, Old Town, Keonjhar – 758002, Odisha</li>
+              <li>principal@gcekjr.ac.in</li>
+              <li>06766-213180</li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-12 border-t border-white/10 pt-6 text-xs">
-          © {new Date().getFullYear()} GCE Keonjhar Hostel Management. All rights reserved.
+        <div className="mt-12 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} GCE Keonjhar Hostel Management. All rights reserved.</span>
+          <span className="text-red-500/80">A constituent college of Biju Patnaik University of Technology</span>
         </div>
       </div>
     </footer>
