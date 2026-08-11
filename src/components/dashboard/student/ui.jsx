@@ -28,12 +28,14 @@ const statusStyles = {
   "In Progress": "bg-amber-400/15 text-amber-600",
   Pending: "bg-amber-400/15 text-amber-600",
   Medium: "bg-amber-400/15 text-amber-600",
+  Partial: "bg-amber-400/15 text-amber-600",
   // reds
   Open: "bg-rose-500/10 text-rose-600",
   Rejected: "bg-rose-500/10 text-rose-600",
   Absent: "bg-rose-500/10 text-rose-600",
   Urgent: "bg-rose-500/10 text-rose-600",
   High: "bg-rose-500/10 text-rose-600",
+  Overdue: "bg-rose-500/10 text-rose-600",
   // neutrals
   Low: "bg-slate-100 text-slate-500",
   Normal: "bg-slate-100 text-slate-500",
