@@ -1,4 +1,4 @@
-import { doc, getDoc, collection, query, where, getDocs, orderBy, limit as fbLimit } from "firebase/firestore";
+import { doc, getDoc, deleteDoc, collection, query, where, getDocs, orderBy, limit as fbLimit } from "firebase/firestore";
 import { db } from "./config";
 
 /**
@@ -18,6 +18,20 @@ export async function getDocument(collectionName, id) {
   const ref = doc(db, collectionName, id);
   const snap = await getDoc(ref);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Deletes a user's profile document from the `users` collection.
+ *
+ * Note (client-SDK limitation): this removes the Firestore profile — which
+ * is what every route/role check in this app reads — so the account
+ * immediately loses access everywhere. It does NOT delete the underlying
+ * Firebase Auth credential; the client SDK can only delete the currently
+ * signed-in user, never an arbitrary other user. Fully deleting the Auth
+ * account requires the Firebase Admin SDK in a Cloud Function.
+ */
+export async function deleteUserProfile(uid) {
+  await deleteDoc(doc(db, "users", uid));
 }
 
 /**
