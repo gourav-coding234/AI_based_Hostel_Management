@@ -8,7 +8,6 @@ import {
   CheckSquareIcon,
   QrIcon,
   WrenchIcon,
-  PackageIcon,
   MegaphoneIcon,
 } from "../../components/dashboard/student/icons";
 
@@ -19,7 +18,6 @@ import Mess from "./student/Mess";
 import Attendance from "./student/Attendance";
 import GatePass from "./student/GatePass";
 import Complaints from "./student/Complaints";
-import Inventory from "./student/Inventory";
 import Notices from "./student/Notices";
 
 const navItems = [
@@ -30,7 +28,6 @@ const navItems = [
   { label: "Attendance", to: "/dashboard/student/attendance", icon: <CheckSquareIcon /> },
   { label: "Gate Pass", to: "/dashboard/student/gate-pass", icon: <QrIcon /> },
   { label: "Complaints", to: "/dashboard/student/complaints", icon: <WrenchIcon /> },
-  { label: "Inventory", to: "/dashboard/student/inventory", icon: <PackageIcon /> },
   { label: "Notices", to: "/dashboard/student/notices", icon: <MegaphoneIcon /> },
 ];
 
@@ -45,7 +42,6 @@ export default function StudentDashboard() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="gate-pass" element={<GatePass />} />
         <Route path="complaints" element={<Complaints />} />
-        <Route path="inventory" element={<Inventory />} />
         <Route path="notices" element={<Notices />} />
       </Routes>
     </DashboardLayout>

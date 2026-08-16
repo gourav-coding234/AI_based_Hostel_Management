@@ -29,6 +29,7 @@ const statusStyles = {
   Pending: "bg-amber-400/15 text-amber-600",
   Medium: "bg-amber-400/15 text-amber-600",
   Partial: "bg-amber-400/15 text-amber-600",
+  Leave: "bg-amber-400/15 text-amber-600",
   // reds
   Open: "bg-rose-500/10 text-rose-600",
   Rejected: "bg-rose-500/10 text-rose-600",

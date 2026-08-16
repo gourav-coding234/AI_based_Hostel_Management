@@ -126,6 +126,31 @@ export const attendanceHistory = [
 ];
 
 // ---------------------------------------------------------------------------
+// Personal day-by-day attendance log for the logged-in student, used by the
+// Attendance page's day-wise / month-wise / date-range views. Deterministic
+// pseudo-random generation so the demo data is stable across reloads.
+function seededFraction(i) {
+  const x = Math.sin(i * 12.9898) * 43758.5453;
+  return Math.abs(x - Math.floor(x));
+}
+
+function buildAttendanceLog(startISO, endISO) {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const log = [];
+  let i = 0;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1), i++) {
+    const f = seededFraction(i);
+    const status = f < 0.06 ? "Leave" : f < 0.15 ? "Absent" : "Present";
+    log.push({ date: d.toISOString().slice(0, 10), status });
+  }
+  return log;
+}
+
+export const attendanceLogRange = { start: "2026-03-01", end: "2026-08-11" };
+export const attendanceLog = buildAttendanceLog(attendanceLogRange.start, attendanceLogRange.end);
+
+// ---------------------------------------------------------------------------
 export const initialGatePasses = [
   {
     id: "GP-1042",

@@ -144,13 +144,13 @@ export default function Overview() {
             <p className="truncate text-xs text-slate-400">Food, utensils or quality</p>
           </div>
         </Link>
-        <Link to="/dashboard/student/inventory" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
+        <Link to="/dashboard/student/complaints" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600">
             <BedIcon />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Request extra furniture</p>
-            <p className="truncate text-xs text-slate-400">Bed, table or chair</p>
+            <p className="truncate text-xs text-slate-400">Raise it as a complaint</p>
           </div>
         </Link>
         <Link to="/dashboard/student/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">

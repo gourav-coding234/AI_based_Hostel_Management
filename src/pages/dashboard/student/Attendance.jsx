@@ -1,43 +1,102 @@
 import { useMemo, useState } from "react";
-import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
+import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/student/icons";
-import { attendanceWing, attendanceHistory } from "../../../data/studentMock";
+import { attendanceLog, attendanceLogRange } from "../../../data/studentMock";
+
+const MODES = [
+  { id: "day", label: "Day-wise" },
+  { id: "month", label: "Month-wise" },
+  { id: "range", label: "Date range" },
+];
+
+const STATUS_COLORS = {
+  Present: "text-teal-500",
+  Absent: "text-rose-500",
+  Leave: "text-amber-500",
+};
+
+const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+
+// date -> record, for O(1) lookups
+const logByDate = new Map(attendanceLog.map((r) => [r.date, r]));
+
+function toISO(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function summarize(records) {
+  const counts = { Present: 0, Absent: 0, Leave: 0 };
+  records.forEach((r) => {
+    counts[r.status] = (counts[r.status] || 0) + 1;
+  });
+  const total = records.length;
+  const pct = total ? Math.round((counts.Present / total) * 100) : 0;
+  return { counts, total, pct };
+}
+
+function segmentsFrom(counts) {
+  return [
+    { label: "Present", value: counts.Present, colorClass: STATUS_COLORS.Present },
+    { label: "Absent", value: counts.Absent, colorClass: STATUS_COLORS.Absent },
+    { label: "Leave", value: counts.Leave, colorClass: STATUS_COLORS.Leave },
+  ];
+}
+
+const allMonths = (() => {
+  const set = new Set(attendanceLog.map((r) => r.date.slice(0, 7)));
+  return Array.from(set).sort().reverse();
+})();
+
+function monthLabel(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
 
 export default function Attendance() {
-  const [wing, setWing] = useState(attendanceWing);
+  const [mode, setMode] = useState("day");
 
-  const { presentCount, totalCount } = useMemo(() => {
-    let present = 0;
-    let total = 0;
-    wing.forEach((room) =>
-      room.students.forEach((s) => {
-        total++;
-        if (s.present) present++;
-      })
-    );
-    return { presentCount: present, totalCount: total };
-  }, [wing]);
+  // ---- Day-wise state: a visible month + selected day within it ----------
+  const [calendarMonth, setCalendarMonth] = useState(allMonths[0]);
+  const [selectedDate, setSelectedDate] = useState(attendanceLogRange.end);
 
-  function toggleStudent(roomName, studentName) {
-    setWing((rooms) =>
-      rooms.map((r) =>
-        r.room !== roomName
-          ? r
-          : { ...r, students: r.students.map((s) => (s.name === studentName ? { ...s, present: !s.present } : s)) }
-      )
-    );
-  }
+  // ---- Month-wise state ----------------------------------------------------
+  const [pickedMonth, setPickedMonth] = useState(allMonths[0]);
 
-  function markRoom(roomName, present) {
-    setWing((rooms) =>
-      rooms.map((r) =>
-        r.room !== roomName ? r : { ...r, students: r.students.map((s) => ({ ...s, present })) }
-      )
-    );
-  }
+  // ---- Range state -----------------------------------------------------
+  const [rangeFrom, setRangeFrom] = useState(() => {
+    const end = new Date(attendanceLogRange.end);
+    end.setDate(end.getDate() - 29);
+    return toISO(end);
+  });
+  const [rangeTo, setRangeTo] = useState(attendanceLogRange.end);
 
-  function markWing(present) {
-    setWing((rooms) => rooms.map((r) => ({ ...r, students: r.students.map((s) => ({ ...s, present })) })));
+  const overall = useMemo(() => summarize(attendanceLog), []);
+
+  const calendarDays = useMemo(() => {
+    const [y, m] = calendarMonth.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const leadingBlanks = first.getDay();
+    const cells = Array.from({ length: leadingBlanks }, () => null);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = `${calendarMonth}-${String(day).padStart(2, "0")}`;
+      cells.push({ day, iso, record: logByDate.get(iso) });
+    }
+    return cells;
+  }, [calendarMonth]);
+
+  const selectedRecord = logByDate.get(selectedDate);
+  const monthSummary = useMemo(() => summarize(attendanceLog.filter((r) => r.date.slice(0, 7) === pickedMonth)), [pickedMonth]);
+  const rangeSummary = useMemo(
+    () => summarize(attendanceLog.filter((r) => r.date >= rangeFrom && r.date <= rangeTo)),
+    [rangeFrom, rangeTo]
+  );
+
+  function shiftCalendarMonth(delta) {
+    const idx = allMonths.indexOf(calendarMonth);
+    const nextIdx = idx - delta; // allMonths is newest-first
+    if (nextIdx >= 0 && nextIdx < allMonths.length) setCalendarMonth(allMonths[nextIdx]);
   }
 
   return (
@@ -49,79 +108,149 @@ export default function Attendance() {
               <CheckSquareIcon />
             </span>
             <div>
-              <p className="font-display text-lg font-semibold text-ink">Post-dinner roll call — B Wing</p>
-              <p className="text-sm text-slate-500">{presentCount} of {totalCount} present today</p>
+              <p className="font-display text-lg font-semibold text-ink">My attendance</p>
+              <p className="text-sm text-slate-500">
+                {overall.pct}% present overall · {attendanceLogRange.start} to {attendanceLogRange.end}
+              </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => markWing(true)}>Mark wing present</Button>
-            <Button variant="danger" onClick={() => markWing(false)}>Mark wing absent</Button>
+          <div className="flex gap-1 rounded-full border border-slate-200 p-1">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMode(m.id)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                  mode === m.id ? "bg-navy-950 text-white" : "text-slate-500 hover:text-ink"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
         </div>
       </Card>
 
-      <Card title="Room by room">
-        <div className="flex flex-col gap-4">
-          {wing.map((room) => {
-            const roomPresent = room.students.filter((s) => s.present).length;
-            return (
-              <div key={room.room} className="rounded-xl border border-slate-200 p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <p className="font-display text-sm font-semibold text-ink">{room.room}</p>
-                    <span className="text-xs text-slate-400">
-                      {roomPresent}/{room.students.length} present
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="px-3 py-1 text-xs" onClick={() => markRoom(room.room, true)}>
-                      Mark room present
-                    </Button>
-                    <Button variant="danger" className="px-3 py-1 text-xs" onClick={() => markRoom(room.room, false)}>
-                      Mark room absent
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {room.students.map((s) => (
-                    <button
-                      key={s.name}
-                      type="button"
-                      onClick={() => toggleStudent(room.room, s.name)}
-                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                        s.present
-                          ? "border-teal-200 bg-teal-500/5 text-teal-700"
-                          : "border-rose-200 bg-rose-500/5 text-rose-600"
-                      }`}
-                    >
-                      <span className="font-medium">{s.name}{s.isSelf ? " (You)" : ""}</span>
-                      <Pill tone={s.present ? "Present" : "Absent"}>{s.present ? "Present" : "Absent"}</Pill>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+      {mode === "day" && (
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => shiftCalendarMonth(-1)}
+              disabled={allMonths.indexOf(calendarMonth) >= allMonths.length - 1}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <p className="font-display text-sm font-semibold text-ink">{monthLabel(calendarMonth)}</p>
+            <button
+              type="button"
+              onClick={() => shiftCalendarMonth(1)}
+              disabled={allMonths.indexOf(calendarMonth) <= 0}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-500 transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
 
-      <Card title="This week's attendance">
-        <div className="flex items-end gap-3 sm:gap-5">
-          {attendanceHistory.map((d) => (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-2">
-              <div className="flex h-28 w-full items-end rounded-lg bg-slate-100">
-                <div
-                  className="w-full rounded-lg bg-teal-500"
-                  style={{ height: `${d.pct}%` }}
-                  title={`${d.pct}%`}
-                />
-              </div>
-              <span className="text-xs font-medium text-slate-500">{d.date}</span>
-              <span className="text-xs text-slate-400">{d.pct}%</span>
+          <div className="grid grid-cols-7 gap-1.5 text-center">
+            {WEEKDAY_LABELS.map((w, i) => (
+              <span key={i} className="pb-1 text-xs font-semibold text-slate-400">{w}</span>
+            ))}
+            {calendarDays.map((cell, i) => {
+              if (!cell) return <span key={i} />;
+              const isSelected = cell.iso === selectedDate;
+              const dotColor = cell.record ? STATUS_COLORS[cell.record.status] : "text-slate-200";
+              return (
+                <button
+                  key={cell.iso}
+                  type="button"
+                  onClick={() => setSelectedDate(cell.iso)}
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border text-xs transition-colors ${
+                    isSelected ? "border-navy-950 bg-navy-950/5 font-semibold text-ink" : "border-transparent text-slate-500 hover:border-slate-200"
+                  }`}
+                >
+                  {cell.day}
+                  <span className={`h-1.5 w-1.5 rounded-full bg-current ${dotColor}`} />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3.5">
+            <div>
+              <p className="text-sm font-medium text-ink">
+                {new Date(selectedDate).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </p>
+              <p className="text-xs text-slate-400">Tap any date above to see that day's status</p>
             </div>
-          ))}
-        </div>
-      </Card>
+            {selectedRecord ? (
+              <Pill tone={selectedRecord.status}>{selectedRecord.status}</Pill>
+            ) : (
+              <Pill tone="Normal">No record</Pill>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {mode === "month" && (
+        <Card title="Monthly breakdown">
+          <div className="mb-5">
+            <Field label="Month">
+              <select value={pickedMonth} onChange={(e) => setPickedMonth(e.target.value)} className={`${inputCls} sm:w-56`}>
+                {allMonths.map((ym) => (
+                  <option key={ym} value={ym}>{monthLabel(ym)}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <DonutChart
+            segments={segmentsFrom(monthSummary.counts)}
+            centerLabel={`${monthSummary.pct}%`}
+            centerSub="present"
+          />
+          <p className="mt-5 text-xs text-slate-400">{monthSummary.total} day{monthSummary.total === 1 ? "" : "s"} recorded in {monthLabel(pickedMonth)}</p>
+        </Card>
+      )}
+
+      {mode === "range" && (
+        <Card title="Custom date range">
+          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="From">
+              <input
+                type="date"
+                value={rangeFrom}
+                min={attendanceLogRange.start}
+                max={rangeTo}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="To">
+              <input
+                type="date"
+                value={rangeTo}
+                min={rangeFrom}
+                max={attendanceLogRange.end}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          {rangeSummary.total === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">No attendance records in this range.</p>
+          ) : (
+            <>
+              <DonutChart
+                segments={segmentsFrom(rangeSummary.counts)}
+                centerLabel={`${rangeSummary.pct}%`}
+                centerSub="present"
+              />
+              <p className="mt-5 text-xs text-slate-400">{rangeSummary.total} day{rangeSummary.total === 1 ? "" : "s"} between {rangeFrom} and {rangeTo}</p>
+            </>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
