@@ -86,3 +86,17 @@ export const ArrowRightIcon = (p) => (
     <path d="M4 10h12M11 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+export const UserIcon = (p) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <circle cx="10" cy="7" r="3.3" />
+    <path d="M3.5 17c0-3.3 2.9-5.6 6.5-5.6s6.5 2.3 6.5 5.6" strokeLinecap="round" />
+  </svg>
+);
+
+export const CameraIcon = (p) => (
+  <svg width="16" height="16" {...base} {...p}>
+    <path d="M3 7.2a1.2 1.2 0 0 1 1.2-1.2h1.6l.8-1.4h6.8l.8 1.4h1.6A1.2 1.2 0 0 1 17 7.2v7.6A1.2 1.2 0 0 1 15.8 16H4.2A1.2 1.2 0 0 1 3 14.8Z" strokeLinejoin="round" />
+    <circle cx="10" cy="10.8" r="3" />
+  </svg>
+);

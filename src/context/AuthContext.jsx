@@ -41,6 +41,19 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }
 
+  // Re-fetches the current user's profile doc without a full page reload —
+  // used after a self-service profile edit so the sidebar/topbar reflect
+  // the new name/photo right away. Doesn't touch the auth session itself.
+  async function refreshProfile() {
+    if (!user) return;
+    try {
+      const userProfile = await getUserProfile(user.uid);
+      setProfile(userProfile);
+    } catch (err) {
+      console.error("Failed to refresh user profile:", err);
+    }
+  }
+
   const value = {
     user,
     profile,
@@ -49,6 +62,7 @@ export function AuthProvider({ children }) {
     error,
     isAuthenticated: Boolean(user),
     logout,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

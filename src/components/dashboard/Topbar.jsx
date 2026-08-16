@@ -41,9 +41,13 @@ export default function Topbar({ title, onMenuClick }) {
           </span>
         )}
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-950 text-xs font-semibold text-white">
-            {initials}
-          </span>
+          {profile?.photoURL ? (
+            <img src={profile.photoURL} alt="" className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-950 text-xs font-semibold text-white">
+              {initials}
+            </span>
+          )}
           <span className="hidden text-sm font-medium text-ink sm:inline">{displayName}</span>
         </div>
         <button

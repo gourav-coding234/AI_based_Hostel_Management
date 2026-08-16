@@ -9,6 +9,7 @@ import {
   QrIcon,
   WrenchIcon,
   MegaphoneIcon,
+  UserIcon,
 } from "../../components/dashboard/student/icons";
 
 import Overview from "./student/Overview";
@@ -19,9 +20,11 @@ import Attendance from "./student/Attendance";
 import GatePass from "./student/GatePass";
 import Complaints from "./student/Complaints";
 import Notices from "./student/Notices";
+import Profile from "./student/Profile";
 
 const navItems = [
   { label: "Overview", to: "/dashboard/student", end: true, icon: <HomeIcon /> },
+  { label: "My Profile", to: "/dashboard/student/profile", icon: <UserIcon /> },
   { label: "Room & Bed", to: "/dashboard/student/rooms", icon: <BedIcon /> },
   { label: "Fees", to: "/dashboard/student/fees", icon: <WalletIcon /> },
   { label: "Mess", to: "/dashboard/student/mess", icon: <UtensilsIcon /> },
@@ -36,6 +39,7 @@ export default function StudentDashboard() {
     <DashboardLayout title="Student Dashboard" navItems={navItems}>
       <Routes>
         <Route index element={<Overview />} />
+        <Route path="profile" element={<Profile />} />
         <Route path="rooms" element={<RoomBed />} />
         <Route path="fees" element={<Fees />} />
         <Route path="mess" element={<Mess />} />
