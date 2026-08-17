@@ -1,10 +1,18 @@
 import { Card, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/parent/icons";
-import { initialGatePasses } from "../../../data/studentMock";
-import { myChild } from "../../../data/parentMock";
+import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
+import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
+import { useStudentCollection } from "../../../hooks/useStudentCollection";
 
 export default function ParentGatePass() {
-  const activePass = initialGatePasses.find((p) => p.status === "Approved");
+  const linked = useLinkedStudent();
+  const { studentUser, linkedStudentId } = linked;
+  const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from" });
+
+  const status = <LinkedStudentStatus {...linked} />;
+  if (status) return status;
+
+  const activePass = gatePasses.items.find((p) => p.status === "Approved");
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,36 +38,40 @@ export default function ParentGatePass() {
           <EmptyState
             icon={<QrIcon />}
             title="No approved gate pass right now"
-            description={`${myChild.name} doesn't have an active outing or home-visit pass.`}
+            description={`${studentUser?.name || "Your child"} doesn't have an active outing or home-visit pass.`}
           />
         )}
       </Card>
 
       <Card title="Gate pass history">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-sm">
-            <thead>
-              <tr className="text-xs uppercase tracking-wide text-slate-400">
-                <th className="pb-2 font-medium">ID</th>
-                <th className="pb-2 font-medium">Type</th>
-                <th className="pb-2 font-medium">Window</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 pr-0 text-right font-medium">Trip</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {initialGatePasses.map((p) => (
-                <tr key={p.id}>
-                  <td className="py-2.5 text-slate-400">{p.id}</td>
-                  <td className="py-2.5 font-medium text-ink">{p.type}</td>
-                  <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>
-                  <td className="py-2.5"><Pill tone={p.status}>{p.status}</Pill></td>
-                  <td className="py-2.5 pr-0 text-right text-slate-500">{p.tripState}</td>
+        {gatePasses.items.length === 0 ? (
+          <EmptyState icon={<QrIcon />} title="No gate passes yet" description="Requests your child submits will show up here once the warden acts on them." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wide text-slate-400">
+                  <th className="pb-2 font-medium">ID</th>
+                  <th className="pb-2 font-medium">Type</th>
+                  <th className="pb-2 font-medium">Window</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 pr-0 text-right font-medium">Trip</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {gatePasses.items.map((p) => (
+                  <tr key={p.id}>
+                    <td className="py-2.5 text-slate-400">{p.id}</td>
+                    <td className="py-2.5 font-medium text-ink">{p.type}</td>
+                    <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>
+                    <td className="py-2.5"><Pill tone={p.status}>{p.status}</Pill></td>
+                    <td className="py-2.5 pr-0 text-right text-slate-500">{p.tripState}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <p className="mt-4 text-xs text-slate-400">
           Gate pass requests are submitted by your child and approved by the warden. This view is read-only.
         </p>

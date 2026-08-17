@@ -4,7 +4,7 @@ import { updateUserProfile } from "../../../firebase/firestore";
 import { fileToResizedDataUrl } from "../../../utils/image";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { CameraIcon } from "../../../components/dashboard/parent/icons";
-import { myChild } from "../../../data/parentMock";
+import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 
 function initials(name, email) {
   const source = (name || email || "?").trim();
@@ -25,6 +25,7 @@ function toFormState(profile) {
 
 export default function ParentProfile() {
   const { user, profile, refreshProfile } = useAuth();
+  const { studentUser, studentRecord, notLinked } = useLinkedStudent();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -100,7 +101,7 @@ export default function ParentProfile() {
             <p className="mt-0.5 text-sm text-slate-300">{profile?.email}</p>
             <div className="mt-2 flex flex-wrap justify-center gap-2 sm:justify-start">
               {profile?.role && <Pill tone="General">{profile.role}</Pill>}
-              <Pill tone="Normal">Parent of {myChild.name}</Pill>
+              {studentUser?.name && <Pill tone="Normal">Parent of {studentUser.name}</Pill>}
             </div>
           </div>
         </div>
@@ -152,23 +153,33 @@ export default function ParentProfile() {
       </Card>
 
       <Card title="Linked student">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Name</p>
-            <p className="mt-1 text-sm text-ink">{myChild.name}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Student ID</p>
-            <p className="mt-1 text-sm text-ink">{myChild.studentId}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Room</p>
-            <p className="mt-1 text-sm text-ink">{myChild.room}, {myChild.wing}</p>
-          </div>
-        </div>
-        <p className="mt-4 text-xs text-slate-400">
-          Your account is linked to this student by the admin office. Contact them if this looks wrong.
-        </p>
+        {notLinked ? (
+          <p className="text-sm text-slate-500">
+            Your account isn't linked to a student yet. Contact the hostel office to get this set up.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Name</p>
+                <p className="mt-1 text-sm text-ink">{studentUser?.name || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Email</p>
+                <p className="mt-1 text-sm text-ink">{studentUser?.email || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Room</p>
+                <p className="mt-1 text-sm text-ink">
+                  {studentRecord?.room ? `${studentRecord.room}, ${studentRecord.wing}` : "Not yet allotted"}
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-slate-400">
+              Your account is linked to this student by the admin office. Contact them if this looks wrong.
+            </p>
+          </>
+        )}
       </Card>
     </div>
   );

@@ -159,6 +159,11 @@ export default function ManageUsers() {
     return counts;
   }, [users]);
 
+  // Real, existing Student accounts only — this is what backs the "Linked
+  // student" dropdown, so a Parent account can never point at an ID that
+  // doesn't correspond to an actual student.
+  const studentUsers = useMemo(() => users.filter((u) => u.role === "Student"), [users]);
+
   return (
     <div className="flex flex-col gap-6">
       <Card className="bg-navy-950 text-white">
@@ -247,14 +252,24 @@ export default function ManageUsers() {
                 />
               </Field>
               {form.role === "Parent" && (
-                <Field label="Linked student ID">
-                  <input
-                    type="text"
-                    placeholder="Linked student ID"
+                <Field label="Linked student">
+                  <select
                     value={form.linkedStudentId}
                     onChange={(e) => setForm({ ...form, linkedStudentId: e.target.value })}
                     className={inputCls}
-                  />
+                  >
+                    <option value="">Select a student…</option>
+                    {studentUsers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name || s.email} {s.hostelResidence ? `— ${s.hostelResidence}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {studentUsers.length === 0 && (
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      No student accounts yet — create the student's account first, then this parent.
+                    </p>
+                  )}
                 </Field>
               )}
             </div>

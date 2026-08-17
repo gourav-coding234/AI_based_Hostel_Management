@@ -10,6 +10,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    function myLinkedStudentId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentId;
+    }
+
     function isAdmin() {
       return signedIn() && userRole() == "Admin";
     }
@@ -30,53 +34,82 @@ service cloud.firestore {
       return signedIn() && userRole() == "Parent";
     }
 
+    // True for staff roles that legitimately need to see every student's
+    // records (wardens/admins run the hostel; security needs gate-pass
+    // lookups for anyone at the gate).
+    function isStaff() {
+      return isAdmin() || isWarden();
+    }
+
+    // A student may only read a record that is about *themselves*, and a
+    // parent only a record about the one child their account is linked to.
+    // This is the actual privacy boundary — everything else in this file is
+    // either full staff access or this same check reused per collection.
+    function isOwnRecord(studentId) {
+      return (isStudent() && request.auth.uid == studentId) ||
+             (isParent() && myLinkedStudentId() == studentId);
+    }
+
     match /users/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || isAdmin() || isWarden());
+      // Users can read their own profile; staff can read anyone's (needed
+      // for directories, room allotment, gate-pass lookups, etc.). A parent
+      // is deliberately NOT given blanket read here — they only ever see
+      // their linked child's profile via the /students/{studentId} document
+      // below, never the full account list.
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin() || isWarden() || isSecurity());
+      // Only the admin tooling creates/edits/removes accounts. `linkedStudentId`
+      // in particular must never be settable by the parent themselves — if it
+      // were, a parent could simply relink their own account to any student.
       allow write: if isAdmin();
     }
 
     match /students/{studentId} {
-      allow read: if isAdmin() || isWarden();
-      allow write: if isAdmin() || isWarden();
+      // Room/roommate/allocation record for one student. Staff see everyone;
+      // the student sees their own; a linked parent sees only their child's.
+      allow read: if isStaff() || isSecurity() || isOwnRecord(studentId);
+      allow write: if isStaff();
     }
 
     match /fees/{feeId} {
-      allow read: if isAdmin() || isWarden() || isStudent() || isParent();
-      allow write: if isAdmin() || isWarden();
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow write: if isStaff();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAdmin() || isWarden() || isStudent() || isParent();
-      allow write: if isAdmin() || isWarden();
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow write: if isStaff();
     }
 
     match /gatePasses/{gatePassId} {
-      allow read: if isAdmin() || isWarden() || isSecurity() || isStudent() || isParent();
-      allow create: if isAdmin() || isWarden() || isStudent();
-      allow update: if isAdmin() || isWarden() || isSecurity();
+      // Security needs to look up any student's pass at the gate, so it
+      // keeps blanket read — everyone else is scoped to their own record.
+      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update: if isStaff() || isSecurity();
       allow delete: if isAdmin();
     }
 
     match /visitors/{visitorId} {
-      allow read: if isAdmin() || isWarden() || isSecurity() || isStudent() || isParent();
-      allow write: if isAdmin() || isWarden() || isSecurity();
+      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow write: if isStaff() || isSecurity();
     }
 
     match /complaints/{complaintId} {
-      allow read: if isAdmin() || isWarden() || isStudent() || isParent();
-      allow create: if isAdmin() || isWarden() || isStudent();
-      allow update: if isAdmin() || isWarden();
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update: if isStaff();
       allow delete: if isAdmin();
     }
 
     match /inventory/{inventoryId} {
-      allow read: if isAdmin() || isWarden();
-      allow write: if isAdmin() || isWarden();
+      allow read: if isStaff();
+      allow write: if isStaff();
     }
 
     match /notices/{noticeId} {
+      // Notices are institution-wide, not per-student — no scoping needed.
       allow read: if signedIn();
-      allow write: if isAdmin() || isWarden();
+      allow write: if isStaff();
     }
 
     match /auditLogs/{auditLogId} {

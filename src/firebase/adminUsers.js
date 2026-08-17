@@ -26,6 +26,12 @@ function getSecondaryAuth() {
 /**
  * Creates one Firebase Auth account + matching Firestore `users/{uid}` profile.
  * Does not affect the currently signed-in admin.
+ *
+ * For a Student account, this also creates the matching `students/{uid}`
+ * record (room/bed fields start blank — the warden fills those in via room
+ * allotment). That document is what a Parent account's `linkedStudentId`
+ * actually points to, so the link has something real on the other end from
+ * the moment the student account exists.
  */
 export async function createUserAccount({ name, email, password, role, hostelResidence, linkedStudentId }) {
   const secondaryAuth = getSecondaryAuth();
@@ -46,6 +52,20 @@ export async function createUserAccount({ name, email, password, role, hostelRes
   }
 
   await setDoc(doc(db, "users", uid), profile);
+
+  if (role === "Student") {
+    await setDoc(doc(db, "students", uid), {
+      name: profile.name,
+      hostelResidence: profile.hostelResidence,
+      wing: "",
+      floor: "",
+      room: "",
+      bed: "",
+      allottedOn: "",
+      roommates: [],
+      createdAt: serverTimestamp(),
+    });
+  }
 
   return { uid, ...profile };
 }
