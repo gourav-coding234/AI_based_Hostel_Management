@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { Card, Pill, ProgressBar } from "../../../components/dashboard/student/ui";
 import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
+import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { notices } from "../../../data/studentMock";
+import { demoTotalFee, demoFeePayments, demoAttendance, demoGatePasses, demoRoomRecord } from "../../../data/parentDemoFallback";
 
 function initials(name) {
   const source = (name || "?").trim();
@@ -26,12 +28,24 @@ export default function ParentOverview() {
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  const paid = fees.items.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
-  const totalFee = studentRecord?.totalFee || 0;
+  // Real data always wins. Sample data only fills in a section that's
+  // genuinely empty so far — never overrides anything real.
+  const usingSampleFees = !studentRecord?.totalFee && fees.items.length === 0;
+  const usingSampleAttendance = attendance.items.length === 0;
+  const usingSampleGatePasses = gatePasses.items.length === 0;
+  const usingSampleRoom = !studentRecord?.room;
+
+  const feePayments = fees.items.length ? fees.items : usingSampleFees ? demoFeePayments : fees.items;
+  const totalFee = studentRecord?.totalFee || (usingSampleFees ? demoTotalFee : 0);
+  const attendanceLog = attendance.items.length ? attendance.items : usingSampleAttendance ? demoAttendance : attendance.items;
+  const passList = gatePasses.items.length ? gatePasses.items : usingSampleGatePasses ? demoGatePasses : gatePasses.items;
+  const room = studentRecord?.room ? studentRecord : usingSampleRoom ? demoRoomRecord : studentRecord;
+
+  const paid = feePayments.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
   const feeRemaining = Math.max(totalFee - paid, 0);
-  const presentCount = attendance.items.filter((a) => a.status === "Present").length;
-  const attendancePct = attendance.items.length ? Math.round((presentCount / attendance.items.length) * 100) : null;
-  const activePass = gatePasses.items.find((p) => p.status === "Approved");
+  const presentCount = attendanceLog.filter((a) => a.status === "Present").length;
+  const attendancePct = attendanceLog.length ? Math.round((presentCount / attendanceLog.length) * 100) : null;
+  const activePass = passList.find((p) => p.status === "Approved");
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,9 +58,9 @@ export default function ParentOverview() {
             <p className="text-sm text-slate-300">Keeping an eye on</p>
             <h2 className="font-display text-xl font-semibold">{studentUser?.name || studentUser?.email}</h2>
             <p className="mt-0.5 text-sm text-slate-300">{studentUser?.email}</p>
-            {studentRecord?.room ? (
+            {room?.room ? (
               <p className="mt-0.5 text-xs text-slate-400">
-                {studentRecord.wing} · {studentRecord.room}, {studentRecord.bed}
+                {room.wing} · {room.room}, {room.bed}
               </p>
             ) : (
               <p className="mt-0.5 text-xs text-slate-400">Room not yet allotted</p>
@@ -81,12 +95,12 @@ export default function ParentOverview() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
             <BedIcon />
           </span>
-          <p className="mt-4 font-display text-lg font-semibold text-ink">{studentRecord?.room || "—"}</p>
-          <p className="mt-0.5 text-sm text-slate-500">{studentRecord?.bed || "Not allotted"} {studentRecord?.wing ? `· ${studentRecord.wing}` : ""}</p>
+          <p className="mt-4 font-display text-lg font-semibold text-ink">{room?.room || "—"}</p>
+          <p className="mt-0.5 text-sm text-slate-500">{room?.bed || "Not allotted"} {room?.wing ? `· ${room.wing}` : ""}</p>
         </Link>
       </div>
 
-      <Card title="Fee status">
+      <Card title="Fee status" action={usingSampleFees && totalFee ? <SampleDataBadge /> : null}>
         {totalFee ? (
           <>
             <div className="mb-2 flex items-center justify-between text-sm">

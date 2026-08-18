@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, Pill, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Field, inputCls } from "../../../components/dashboard/student/ui";
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
+import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { demoAttendance } from "../../../data/parentDemoFallback";
 
 const MODES = [
   { id: "day", label: "Day-wise" },
@@ -54,7 +56,8 @@ export default function ParentAttendance() {
   const linked = useLinkedStudent();
   const { studentUser, linkedStudentId } = linked;
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date", orderByDirection: "asc" });
-  const log = attendance.items;
+  const usingSample = !attendance.loading && attendance.items.length === 0;
+  const log = usingSample ? demoAttendance : attendance.items;
 
   const logByDate = useMemo(() => new Map(log.map((r) => [r.date, r])), [log]);
   const allMonths = useMemo(() => {
@@ -131,7 +134,10 @@ export default function ParentAttendance() {
               <CheckSquareIcon />
             </span>
             <div>
-              <p className="font-display text-lg font-semibold text-ink">{studentUser?.name || "Your child"}'s attendance</p>
+              <div className="flex items-center gap-2">
+                <p className="font-display text-lg font-semibold text-ink">{studentUser?.name || "Your child"}'s attendance</p>
+                {usingSample && <SampleDataBadge />}
+              </div>
               <p className="text-sm text-slate-500">
                 {log.length === 0 ? "No records yet" : `${overall.pct}% present overall · ${rangeBounds.start} to ${rangeBounds.end}`}
               </p>
@@ -156,16 +162,8 @@ export default function ParentAttendance() {
         </div>
       </Card>
 
-      {attendance.loading && log.length === 0 && (
+      {attendance.loading && (
         <p className="py-8 text-center text-sm text-slate-400">Loading attendance…</p>
-      )}
-
-      {!attendance.loading && log.length === 0 && (
-        <EmptyState
-          icon={<CheckSquareIcon />}
-          title="No attendance records yet"
-          description="Night attendance the warden marks for your child will show up here."
-        />
       )}
 
       {log.length > 0 && mode === "day" && (

@@ -1,8 +1,10 @@
-import { Card, Pill, ProgressBar, EmptyState } from "../../../components/dashboard/student/ui";
+import { Card, ProgressBar, EmptyState } from "../../../components/dashboard/student/ui";
 import { WalletIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
+import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { demoTotalFee, demoFeePayments } from "../../../data/parentDemoFallback";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -16,13 +18,22 @@ export default function ParentFees() {
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  const totalFee = studentRecord?.totalFee || 0;
-  const paid = fees.items.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  const usingSample = !studentRecord?.totalFee && fees.items.length === 0;
+  const payments = fees.items.length ? fees.items : usingSample ? demoFeePayments : fees.items;
+  const totalFee = studentRecord?.totalFee || (usingSample ? demoTotalFee : 0);
+  const paid = payments.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
   const remaining = Math.max(totalFee - paid, 0);
   const pct = totalFee ? Math.round((paid / totalFee) * 100) : 0;
 
   return (
     <div className="flex flex-col gap-6">
+      {usingSample && (
+        <div className="flex items-center gap-2">
+          <SampleDataBadge />
+          <p className="text-xs text-slate-400">The fees office hasn't posted real records yet — showing an example of what this will look like.</p>
+        </div>
+      )}
+
       <Card>
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600">
@@ -68,7 +79,7 @@ export default function ParentFees() {
       )}
 
       <Card title="Payment history">
-        {fees.items.length === 0 ? (
+        {payments.length === 0 ? (
           <EmptyState icon={<WalletIcon />} title="No payments recorded yet" description="Payments your child's fees office logs will show up here." />
         ) : (
           <div className="overflow-x-auto">
@@ -83,7 +94,7 @@ export default function ParentFees() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {fees.items.map((p) => (
+                {payments.map((p) => (
                   <tr key={p.id}>
                     <td className="py-2.5 text-slate-500">{p.date}</td>
                     <td className="py-2.5 font-medium text-ink">{p.label}</td>
