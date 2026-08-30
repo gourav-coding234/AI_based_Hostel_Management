@@ -81,9 +81,13 @@ export default function Profile() {
     : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="bg-navy-950 text-white">
-        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden bg-navy-950 text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
+        />
+        <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
           <div className="relative shrink-0">
             {form.photoURL ? (
               <img src={form.photoURL} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white/10" />
@@ -96,7 +100,7 @@ export default function Profile() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto}
-              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-white shadow-md transition-colors hover:bg-teal-400 disabled:opacity-60"
+              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-white shadow-md shadow-teal-900/30 transition-all duration-150 hover:scale-105 hover:bg-teal-400 disabled:opacity-60 disabled:hover:scale-100"
               aria-label="Change photo"
             >
               <CameraIcon />
@@ -113,7 +117,7 @@ export default function Profile() {
             </div>
           </div>
         </div>
-        {uploadingPhoto && <p className="mt-3 text-xs text-teal-300">Processing photo…</p>}
+        {uploadingPhoto && <p className="relative mt-3 text-xs text-teal-300">Processing photo…</p>}
       </Card>
 
       <Card title="Edit your profile">

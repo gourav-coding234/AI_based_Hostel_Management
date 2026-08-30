@@ -100,11 +100,11 @@ export default function Attendance() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
               <CheckSquareIcon />
             </span>
             <div>
@@ -114,14 +114,14 @@ export default function Attendance() {
               </p>
             </div>
           </div>
-          <div className="flex gap-1 rounded-full border border-slate-200 p-1">
+          <div className="flex gap-1 rounded-full border border-slate-200 bg-slate-50/60 p-1">
             {MODES.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setMode(m.id)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                  mode === m.id ? "bg-navy-950 text-white" : "text-slate-500 hover:text-ink"
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 ${
+                  mode === m.id ? "bg-navy-950 text-white shadow-sm" : "text-slate-500 hover:text-ink"
                 }`}
               >
                 {m.label}
@@ -166,8 +166,10 @@ export default function Attendance() {
                   key={cell.iso}
                   type="button"
                   onClick={() => setSelectedDate(cell.iso)}
-                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border text-xs transition-colors ${
-                    isSelected ? "border-navy-950 bg-navy-950/5 font-semibold text-ink" : "border-transparent text-slate-500 hover:border-slate-200"
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border text-xs transition-all duration-150 ${
+                    isSelected
+                      ? "border-navy-950 bg-navy-950/5 font-semibold text-ink shadow-sm"
+                      : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50"
                   }`}
                 >
                   {cell.day}

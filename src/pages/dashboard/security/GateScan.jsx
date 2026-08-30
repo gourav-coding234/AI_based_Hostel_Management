@@ -30,7 +30,7 @@ export default function SecurityGateScan() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Verify a gate pass">
         <p className="-mt-2 mb-4 text-sm text-slate-500">
           In a phone-camera build this would scan the student's QR code directly — for now, enter the pass ID shown

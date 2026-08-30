@@ -28,11 +28,11 @@ export default function RoomBed() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Your allocation">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
               <BedIcon />
             </span>
             <div>
@@ -61,20 +61,24 @@ export default function RoomBed() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
-          <p className="font-display text-2xl font-semibold text-ink">{totalBeds}</p>
+          <p className="font-display text-2xl font-semibold tracking-tight text-ink">{totalBeds}</p>
           <p className="text-sm text-slate-500">Total beds in B Wing</p>
         </Card>
         <Card>
-          <p className="font-display text-2xl font-semibold text-teal-600">{vacantCount}</p>
+          <p className="font-display text-2xl font-semibold tracking-tight text-teal-600">{vacantCount}</p>
           <p className="text-sm text-slate-500">Vacant beds right now</p>
         </Card>
         <Card>
-          <p className="font-display text-2xl font-semibold text-ink">{occupiedCount}</p>
+          <p className="font-display text-2xl font-semibold tracking-tight text-ink">{occupiedCount}</p>
           <p className="text-sm text-slate-500">Beds occupied</p>
         </Card>
       </div>
 
-      <Card title="Wing vacancy — room by room" className="overflow-x-auto">
+      <Card
+        title="Wing vacancy — room by room"
+        subtitle="Green = vacant · Highlighted = your bed"
+        className="overflow-x-auto"
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {wingRooms.map((room) => (
             <div key={room.room} className="rounded-xl border border-slate-200 p-4">

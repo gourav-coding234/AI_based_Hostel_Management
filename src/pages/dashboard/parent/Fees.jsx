@@ -26,7 +26,7 @@ export default function ParentFees() {
   const pct = totalFee ? Math.round((paid / totalFee) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       {usingSample && (
         <div className="flex items-center gap-2">
           <SampleDataBadge />

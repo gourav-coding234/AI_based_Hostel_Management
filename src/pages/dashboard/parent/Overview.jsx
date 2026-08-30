@@ -48,8 +48,12 @@ export default function ParentOverview() {
   const activePass = passList.find((p) => p.status === "Approved");
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="bg-navy-950 text-white">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden bg-navy-950 text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
+        />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
           <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-500/20 font-display text-xl font-semibold text-teal-200 ring-4 ring-white/10">
             {initials(studentUser?.name)}

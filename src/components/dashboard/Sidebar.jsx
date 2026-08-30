@@ -12,18 +12,18 @@ export default function Sidebar({ items, open, onClose }) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 transform border-r border-slate-200 bg-navy-950 p-5 text-white transition-transform lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col border-r border-slate-200 bg-navy-950 p-5 text-white transition-transform lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center gap-3 px-1">
+        <div className="flex shrink-0 items-center gap-3 px-1">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/15 font-display text-base font-semibold text-teal-400">
             G
           </span>
           <span className="font-display text-sm font-semibold">GCE Keonjhar</span>
         </div>
 
-        <nav className="mt-8 flex flex-col gap-1">
+        <nav className="mt-8 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
           {items.map((item) => (
             <NavLink
               key={item.label}

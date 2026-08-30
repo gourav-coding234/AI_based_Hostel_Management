@@ -38,8 +38,12 @@ export default function AdminOverview() {
   const maxEnrollment = Math.max(...enrollmentTrend.map((d) => d.students));
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="bg-navy-950 text-white">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden bg-navy-950 text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
+        />
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <p className="text-sm text-slate-300">Welcome back,</p>

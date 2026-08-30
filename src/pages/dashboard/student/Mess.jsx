@@ -27,7 +27,7 @@ export default function Mess() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Today's mess menu">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
@@ -35,7 +35,10 @@ export default function Mess() {
             ["Lunch", messMenuToday.lunch],
             ["Dinner", messMenuToday.dinner],
           ].map(([meal, items]) => (
-            <div key={meal} className="rounded-xl border border-slate-200 p-4">
+            <div
+              key={meal}
+              className="rounded-xl border border-slate-200 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-sm"
+            >
               <div className="mb-2 flex items-center gap-2">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600">
                   <UtensilsIcon />

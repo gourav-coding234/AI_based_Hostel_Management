@@ -43,7 +43,7 @@ export default function RoomAllotment() {
   const currentWing = wingData.find((w) => w.name === activeWing);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="font-display text-2xl font-semibold text-ink">{totalBeds}</p>

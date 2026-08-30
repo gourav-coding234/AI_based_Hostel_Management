@@ -4,7 +4,7 @@ import { emergencyContacts } from "../../../data/parentMock";
 
 export default function EmergencyContacts() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">

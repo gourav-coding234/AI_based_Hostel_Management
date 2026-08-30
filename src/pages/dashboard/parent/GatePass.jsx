@@ -19,7 +19,7 @@ export default function ParentGatePass() {
   const activePass = passList.find((p) => p.status === "Approved");
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       {usingSample && (
         <div className="flex items-center gap-2">
           <SampleDataBadge />

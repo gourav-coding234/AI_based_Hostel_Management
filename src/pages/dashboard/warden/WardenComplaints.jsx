@@ -33,7 +33,7 @@ export default function WardenComplaints() {
   const resolved = complaints.filter((c) => c.status === "Resolved").length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Open</p>

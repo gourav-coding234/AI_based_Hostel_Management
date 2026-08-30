@@ -8,7 +8,7 @@ export default function WardenAttendance() {
   const overallPct = Math.round((totalPresent / totalStudents) * 100);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex items-center gap-4">
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">

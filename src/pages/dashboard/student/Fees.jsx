@@ -11,9 +11,13 @@ export default function Fees() {
   const pct = Math.round((feeSummary.paid / feeSummary.total) * 100);
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-teal-500/10 blur-3xl"
+        />
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600">
             <WalletIcon />
           </span>
@@ -36,15 +40,15 @@ export default function Fees() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Total fee</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-ink">{inr(feeSummary.total)}</p>
+          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-ink">{inr(feeSummary.total)}</p>
         </Card>
         <Card>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Amount paid</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-teal-600">{inr(feeSummary.paid)}</p>
+          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-teal-600">{inr(feeSummary.paid)}</p>
         </Card>
         <Card>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Remaining</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-amber-600">{inr(remaining)}</p>
+          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-amber-600">{inr(remaining)}</p>
           <p className="mt-1 text-xs text-slate-400">Due by {feeSummary.dueDate}</p>
         </Card>
       </div>
@@ -63,7 +67,7 @@ export default function Fees() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {feePayments.map((p) => (
-                <tr key={p.receipt}>
+                <tr key={p.receipt} className="transition-colors hover:bg-slate-50/70">
                   <td className="py-2.5 text-slate-500">{p.date}</td>
                   <td className="py-2.5 font-medium text-ink">{p.label}</td>
                   <td className="py-2.5 text-slate-500">{p.mode}</td>

@@ -74,8 +74,12 @@ export default function ParentProfile() {
   const displayName = profile?.name || user?.email?.split("@")[0] || "Parent";
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="bg-navy-950 text-white">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden bg-navy-950 text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
+        />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
           <div className="relative shrink-0">
             {form.photoURL ? (

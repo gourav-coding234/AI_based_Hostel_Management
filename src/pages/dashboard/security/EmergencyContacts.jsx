@@ -4,10 +4,10 @@ import { emergencyContacts } from "../../../data/securityMock";
 
 export default function SecurityEmergencyContacts() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">
             <ShieldIcon />
           </span>
           <div>
@@ -19,7 +19,10 @@ export default function SecurityEmergencyContacts() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         {emergencyContacts.map((c) => (
-          <div key={c.role} className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div
+            key={c.role}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 transition-shadow duration-200 hover:shadow-md"
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{c.role}</p>
             <p className="mt-1 font-display text-base font-semibold text-ink">{c.name}</p>
             <div className="mt-3 flex flex-col gap-1.5 text-sm text-slate-600">

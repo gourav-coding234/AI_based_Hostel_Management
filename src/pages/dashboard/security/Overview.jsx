@@ -11,7 +11,7 @@ export default function SecurityOverview() {
   const openIncidents = initialIncidents.filter((i) => i.status !== "Resolved").length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<QrIcon />} label="Students currently out" value={currentlyOut} sub="Live gate pass status" tone="amber" />
         <StatCard icon={<ScanIcon />} label="Passes to watch" value={expiringSoon} sub="Approved, not yet returned" tone="navy" />
@@ -40,7 +40,7 @@ export default function SecurityOverview() {
         />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/60 transition-shadow duration-200 hover:shadow-md sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-base font-semibold text-ink">Quick actions</h3>
@@ -50,19 +50,19 @@ export default function SecurityOverview() {
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Link
             to="/dashboard/security/gate-scan"
-            className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-teal-300 hover:text-teal-700"
+            className="group flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-all duration-150 hover:-translate-y-0.5 hover:border-teal-300 hover:text-teal-700 hover:shadow-sm"
           >
             Verify a gate pass <ArrowRightIcon />
           </Link>
           <Link
             to="/dashboard/security/visitors"
-            className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-teal-300 hover:text-teal-700"
+            className="group flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-all duration-150 hover:-translate-y-0.5 hover:border-teal-300 hover:text-teal-700 hover:shadow-sm"
           >
             Log a new visitor <ArrowRightIcon />
           </Link>
           <Link
             to="/dashboard/security/incidents"
-            className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-teal-300 hover:text-teal-700"
+            className="group flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-ink transition-all duration-150 hover:-translate-y-0.5 hover:border-teal-300 hover:text-teal-700 hover:shadow-sm"
           >
             Report an incident <ArrowRightIcon />
           </Link>
@@ -70,7 +70,7 @@ export default function SecurityOverview() {
       </div>
 
       {initialIncidents.some((i) => i.status !== "Resolved") && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm shadow-amber-100">
           There are open incidents that may need follow-up.{" "}
           <Link to="/dashboard/security/incidents" className="font-semibold underline">
             Review incidents

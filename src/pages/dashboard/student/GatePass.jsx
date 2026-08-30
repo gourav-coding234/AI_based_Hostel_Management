@@ -49,7 +49,7 @@ export default function GatePass() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Active pass">
           {activePass ? (
@@ -59,7 +59,7 @@ export default function GatePass() {
                 alt={`QR code for gate pass ${activePass.id}`}
                 width={180}
                 height={180}
-                className="rounded-xl border border-slate-200 p-2"
+                className="rounded-xl border border-slate-200 p-2 shadow-sm shadow-slate-200/60"
               />
               <div>
                 <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
@@ -134,7 +134,7 @@ export default function GatePass() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {passes.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} className="transition-colors hover:bg-slate-50/70">
                   <td className="py-2.5 text-slate-400">{p.id}</td>
                   <td className="py-2.5 font-medium text-ink">{p.type}</td>
                   <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>

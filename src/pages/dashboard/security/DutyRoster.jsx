@@ -13,10 +13,10 @@ export default function SecurityDutyRoster() {
   }, {});
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
             <CalendarClockIcon />
           </span>
           <div>
@@ -34,8 +34,8 @@ export default function SecurityDutyRoster() {
               return (
                 <div
                   key={i}
-                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
-                    isYou ? "border-teal-300 bg-teal-500/5" : "border-slate-100"
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition-colors ${
+                    isYou ? "border-teal-300 bg-teal-500/5" : "border-slate-100 hover:bg-slate-50/70"
                   }`}
                 >
                   <div>

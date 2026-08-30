@@ -25,7 +25,7 @@ export default function SecurityIncidentReports() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Report an incident">
         <p className="-mt-2 mb-4 text-sm text-slate-500">
           Visible to the warden and admin office so they can follow up.
@@ -65,7 +65,7 @@ export default function SecurityIncidentReports() {
       <Card title="Incident log">
         <ul className="flex flex-col gap-3">
           {incidents.map((i) => (
-            <li key={i.id} className="rounded-xl border border-slate-100 px-4 py-3">
+            <li key={i.id} className="rounded-xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/70">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-ink">

@@ -32,14 +32,22 @@ export default function Overview() {
   const activePass = initialGatePasses.find((p) => p.status === "Approved");
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="bg-navy-950 text-white">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card className="relative overflow-hidden bg-navy-950 text-white">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
+        />
+        <div className="relative flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <p className="text-sm text-slate-300">Welcome back,</p>
-            <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
-            <p className="mt-1.5 text-sm text-slate-300">
-              {myAllocation.room} · {myAllocation.bed} · {myAllocation.wing}, {myAllocation.floor}
+            <h2 className="font-display text-2xl font-semibold sm:text-3xl">{displayName}</h2>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-sm text-slate-300">
+              <span>{myAllocation.room}</span>
+              <span className="text-slate-500">·</span>
+              <span>{myAllocation.bed}</span>
+              <span className="text-slate-500">·</span>
+              <span>{myAllocation.wing}, {myAllocation.floor}</span>
             </p>
           </div>
           <div className="flex gap-2">
@@ -49,7 +57,7 @@ export default function Overview() {
               </Button>
             </Link>
             <Link to="/dashboard/student/gate-pass">
-              <Button className="bg-teal-500 hover:bg-teal-400">Request gate pass</Button>
+              <Button className="bg-teal-500 shadow-teal-900/30 hover:bg-teal-400">Request gate pass</Button>
             </Link>
           </div>
         </div>
@@ -135,8 +143,8 @@ export default function Overview() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Link to="/dashboard/student/mess" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+        <Link to="/dashboard/student/mess" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 transition-transform duration-200 group-hover:scale-105">
             <UtensilsIcon />
           </span>
           <div className="min-w-0">
@@ -144,8 +152,8 @@ export default function Overview() {
             <p className="truncate text-xs text-slate-400">Food, utensils or quality</p>
           </div>
         </Link>
-        <Link to="/dashboard/student/complaints" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600">
+        <Link to="/dashboard/student/complaints" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600 transition-transform duration-200 group-hover:scale-105">
             <BedIcon />
           </span>
           <div className="min-w-0">
@@ -153,8 +161,8 @@ export default function Overview() {
             <p className="truncate text-xs text-slate-400">Raise it as a complaint</p>
           </div>
         </Link>
-        <Link to="/dashboard/student/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-950/5 text-navy-900">
+        <Link to="/dashboard/student/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-950/5 text-navy-900 transition-transform duration-200 group-hover:scale-105">
             <WalletIcon />
           </span>
           <div className="min-w-0">
@@ -164,7 +172,7 @@ export default function Overview() {
         </Link>
       </div>
 
-      <Card>
+      <Card className="bg-slate-50/60">
         <span className="flex items-center gap-2 text-sm text-slate-400">
           <MegaphoneIcon />
           Warden and admin notices, fee reminders, and mess updates all surface here automatically.

@@ -30,7 +30,7 @@ export default function SecurityVisitorLog() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Check in a visitor">
         <form onSubmit={handleCheckIn} className="grid gap-4 sm:grid-cols-2">
           <Field label="Visitor name">
@@ -60,7 +60,10 @@ export default function SecurityVisitorLog() {
       <Card title="Today's visitors">
         <div className="flex flex-col gap-3">
           {visitors.map((v) => (
-            <div key={v.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              key={v.id}
+              className="flex flex-col gap-3 rounded-xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/70 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p className="text-sm font-semibold text-ink">{v.name}</p>
                 <p className="mt-0.5 text-xs text-slate-500">{v.purpose}</p>

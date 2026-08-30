@@ -1,12 +1,12 @@
 import { Card, Button } from "../../../components/dashboard/student/ui";
-import { ChartIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
+import { ChartIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import {
   reportTypes,
-  feeOverviewByBlock,
-  blocks,
-  allBlockComplaints,
-} from "../../../data/adminMock";
-import { studentDirectory } from "../../../data/wardenMock";
+  wings,
+  allComplaints,
+  leaveRequests,
+  wardenVisitors,
+} from "../../../data/wardenMock";
 
 // Builds a simple CSV string from an array of flat objects.
 function toCsv(rows) {
@@ -19,11 +19,22 @@ function toCsv(rows) {
   return lines.join("\n");
 }
 
+// Flatten room/bed occupancy into one row per room for the occupancy report.
+const occupancyRows = wings.flatMap((w) =>
+  w.rooms.map((r) => ({
+    wing: w.name,
+    room: r.room,
+    capacity: r.capacity,
+    occupied: r.beds.filter((b) => b.status === "occupied").length,
+    vacant: r.beds.filter((b) => b.status === "vacant").length,
+  }))
+);
+
 const reportData = {
-  "RPT-STU": studentDirectory,
-  "RPT-FEE": feeOverviewByBlock,
-  "RPT-OCC": blocks,
-  "RPT-CMP": allBlockComplaints,
+  "RPT-OCC": occupancyRows,
+  "RPT-CMP": allComplaints,
+  "RPT-LV": leaveRequests,
+  "RPT-VIS": wardenVisitors,
 };
 
 function download(id, name) {
@@ -47,8 +58,8 @@ export default function Reports() {
             <ChartIcon />
           </span>
           <div>
-            <p className="font-display text-base font-semibold text-ink">Reports & export</p>
-            <p className="text-sm text-slate-500">Download institute-wide data as CSV for offline review or sharing.</p>
+            <p className="font-display text-base font-semibold text-ink">Reports &amp; export</p>
+            <p className="text-sm text-slate-500">Download data for your wings as CSV for offline review or sharing.</p>
           </div>
         </div>
       </Card>

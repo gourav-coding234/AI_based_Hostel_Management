@@ -38,7 +38,7 @@ export default function Complaints() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card title="Raise a complaint">
           <form onSubmit={submitComplaint} className="flex flex-col gap-4">
@@ -74,8 +74,10 @@ export default function Complaints() {
                     type="button"
                     key={p}
                     onClick={() => setPriority(p)}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                      priority === p ? "bg-navy-950 text-white" : "border border-slate-200 text-slate-500"
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-95 ${
+                      priority === p
+                        ? "bg-navy-950 text-white shadow-sm"
+                        : "border border-slate-200 text-slate-500 hover:border-slate-300"
                     }`}
                   >
                     {p}

@@ -17,19 +17,19 @@ export default function SecurityInOutRegister() {
   }, [filter, search]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="In / Out register">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
+          <div className="flex gap-2 rounded-full border border-slate-200 bg-slate-50/60 p-1">
             {FILTERS.map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setFilter(f)}
-                className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 ${
                   filter === f
-                    ? "border-navy-950 bg-navy-950 text-white"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    ? "bg-navy-950 text-white shadow-sm"
+                    : "text-slate-500 hover:text-ink"
                 }`}
               >
                 {f}
@@ -40,7 +40,7 @@ export default function SecurityInOutRegister() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by student name…"
-            className="w-full max-w-xs rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-ink placeholder:text-slate-400 focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
+            className="w-full max-w-xs rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-ink placeholder:text-slate-400 shadow-sm shadow-slate-100 transition-colors focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
           />
         </div>
 
@@ -58,7 +58,7 @@ export default function SecurityInOutRegister() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((l) => (
-                <tr key={l.id}>
+                <tr key={l.id} className="transition-colors hover:bg-slate-50/70">
                   <td className="py-2.5 font-medium text-ink">{l.student}</td>
                   <td className="py-2.5 text-slate-500">{l.room}</td>
                   <td className="py-2.5 text-slate-400">{l.passId}</td>

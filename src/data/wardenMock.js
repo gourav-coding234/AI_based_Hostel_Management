@@ -189,3 +189,92 @@ export const wardenNotices = [
 
 export const noticeTargets = ["All Wings", "A Wing", "B Wing", "C Wing"];
 export const noticePriorities = ["General", "Urgent", "Event"];
+
+// ---- Visitor management ------------------------------------------------------
+export const wardenVisitors = [
+  { id: "V-515", name: "Ipsita Rani Das", wing: "C Wing", purpose: "Parent visit — Alok Mohanty, C-301", checkIn: "11 Aug 2026, 03:00 PM", checkOut: "", status: "On premises" },
+  { id: "V-512", name: "Rajendra Panda", wing: "B Wing", purpose: "Meeting son — Priyanshu Dash, B-204", checkIn: "10 Aug 2026, 05:30 PM", checkOut: "10 Aug 2026, 06:45 PM", status: "Checked out" },
+  { id: "V-509", name: "Suresh Kumar (courier)", wing: "B Wing", purpose: "Package delivery", checkIn: "10 Aug 2026, 11:10 AM", checkOut: "10 Aug 2026, 11:20 AM", status: "Checked out" },
+  { id: "V-503", name: "Bibhuti Bhusan Nayak", wing: "A Wing", purpose: "Meeting son — Rakesh Mallick, A-101", checkIn: "09 Aug 2026, 06:10 PM", checkOut: "09 Aug 2026, 07:00 PM", status: "Checked out" },
+];
+
+// ---- Gate pass management -----------------------------------------------------
+export const gatePassRequests = [
+  { id: "GP-1046", student: "Rakesh Mallick", wing: "A Wing", room: "A-101", type: "Outing", reason: "Family function", from: "12 Aug 2026, 10:00 AM", to: "12 Aug 2026, 08:00 PM", status: "Pending", tripState: "Not started" },
+  { id: "GP-1042", student: "Priyanshu Dash", wing: "B Wing", room: "B-204", type: "Home Visit", reason: "Rakhi festival at home", from: "15 Aug 2026, 08:00 AM", to: "18 Aug 2026, 08:00 PM", status: "Pending", tripState: "Not started" },
+  { id: "GP-1039", student: "Aman Sahoo", wing: "B Wing", room: "B-204", type: "Outing", reason: "Local market", from: "10 Aug 2026, 04:00 PM", to: "10 Aug 2026, 07:00 PM", status: "Approved", tripState: "Out" },
+  { id: "GP-1031", student: "Ritesh Nayak", wing: "B Wing", room: "B-204", type: "Outing", reason: "Bank work in town", from: "28 Jul 2026, 10:00 AM", to: "28 Jul 2026, 06:00 PM", status: "Completed", tripState: "Returned" },
+];
+
+// ---- Leave management ----------------------------------------------------------
+export const leaveRequests = [
+  { id: "LV-233", student: "Alok Mohanty", wing: "C Wing", room: "C-301", type: "Personal", reason: "Family emergency", from: "11 Aug 2026", to: "13 Aug 2026", status: "Pending", parentNotified: false },
+  { id: "LV-231", student: "Rashmi Behera", wing: "B Wing", room: "B-203", type: "Home Leave", reason: "Sister's wedding", from: "20 Aug 2026", to: "25 Aug 2026", status: "Pending", parentNotified: false },
+  { id: "LV-225", student: "Priya Mishra", wing: "B Wing", room: "B-202", type: "Home Leave", reason: "Festival at home", from: "14 Aug 2026", to: "16 Aug 2026", status: "Approved", parentNotified: true },
+  { id: "LV-219", student: "Debasish Rout", wing: "B Wing", room: "B-201", type: "Personal", reason: "Court document work", from: "02 Aug 2026", to: "03 Aug 2026", status: "Rejected", parentNotified: false },
+];
+
+// ---- Safety & emergency ---------------------------------------------------------
+export const sosAlerts = [
+  { id: "SOS-14", student: "Debasish Rout", wing: "B Wing", room: "B-201", time: "11 Aug 2026, 11:42 PM", status: "Resolved", note: "False alarm — accidental trigger, confirmed safe." },
+];
+
+export const incidentReports = [
+  { id: "INC-91", wing: "C Wing", category: "Disturbance", description: "Loud argument reported on 2nd floor corridor.", date: "09 Aug 2026", severity: "Medium", status: "Open" },
+  { id: "INC-88", wing: "A Wing", category: "Suspicious activity", description: "Unknown person loitering near A Wing gate around 11 PM.", date: "08 Aug 2026", severity: "Medium", status: "Resolved" },
+];
+
+export const emergencyContactsDirectory = [
+  { role: "Chief Warden (you)", name: "Rajesh Kumar Naik", phone: "+91 98612 00002", email: "r.naik@gcek.ac.in" },
+  { role: "Hostel Office", name: "Front Desk", phone: "+91 674 250 1122", email: "hostel.office@gcek.ac.in" },
+  { role: "Medical / Ambulance", name: "Campus Health Centre", phone: "108", email: "" },
+  { role: "Local Police Station", name: "Keonjhar Town PS", phone: "100", email: "" },
+];
+
+// ---- AI feedback analysis ---------------------------------------------------
+export const feedbackEntries = [
+  { id: "FB-77", student: "Priya Mishra", wing: "B Wing", category: "Mess food", comment: "Food quality has improved a lot this month, thank you!", sentiment: "Positive", date: "10 Aug 2026" },
+  { id: "FB-75", student: "Rakesh Mallick", wing: "A Wing", category: "Room maintenance", comment: "Window latch was fixed but it took a while to respond.", sentiment: "Neutral", date: "08 Aug 2026" },
+  { id: "FB-73", student: "Debasish Rout", wing: "B Wing", category: "Warden support", comment: "Warden was slow to respond to my gate pass request.", sentiment: "Negative", date: "06 Aug 2026" },
+  { id: "FB-72", student: "Rashmi Behera", wing: "B Wing", category: "Cleanliness", comment: "Corridor cleaning could be more frequent on weekends.", sentiment: "Neutral", date: "05 Aug 2026" },
+  { id: "FB-70", student: "Aman Sahoo", wing: "B Wing", category: "Mess food", comment: "Loved the special menu on Sunday, please keep it up.", sentiment: "Positive", date: "03 Aug 2026" },
+];
+
+// ---- AI hostel assistant & smart search --------------------------------------
+export const aiAssistantSuggestions = [
+  "How many beds are vacant in B Wing?",
+  "Find students with pending complaints",
+  "List overdue fee payments",
+  "Any open incidents this week?",
+];
+
+export const aiAssistantReplies = [
+  {
+    match: ["vacant", "available room", "empty bed"],
+    reply: "There are 18 vacant beds across the hostel right now — mostly in A Wing (single spare seats) and a few in C Wing. B Wing is at full occupancy.",
+  },
+  {
+    match: ["pending complaint", "open complaint"],
+    reply: "You have 2 open/in-progress complaints: a fan issue in B-204 (in progress) and a fused corridor light on B Wing 2nd floor (open, low priority).",
+  },
+  {
+    match: ["overdue", "unpaid", "due", "fee"],
+    reply: "3 students have overdue or partial fee payments this term — Priyanshu Dash (₹48,000 overdue) and Priya Mishra (₹68,000 overdue) need the most urgent follow-up.",
+  },
+  {
+    match: ["incident", "safety", "sos"],
+    reply: "One incident is currently open — a disturbance report in C Wing filed on 9 Aug, medium severity. No active SOS alerts right now.",
+  },
+  {
+    match: ["rule", "policy"],
+    reply: "Curfew is 10 PM on weekdays and 11 PM on weekends. Visitors are allowed 4–7 PM with ID verification, and any outing needs a gate pass.",
+  },
+];
+
+// ---- Reports ------------------------------------------------------------------
+export const reportTypes = [
+  { id: "RPT-OCC", name: "Occupancy report", description: "Room and bed occupancy across A, B & C Wings.", rows: wings.reduce((n, w) => n + w.rooms.length, 0) },
+  { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed in your wings with current status.", rows: allComplaints.length },
+  { id: "RPT-LV", name: "Leave report", description: "Student leave applications and approval status.", rows: leaveRequests.length },
+  { id: "RPT-VIS", name: "Visitor report", description: "Visitor check-ins and check-outs across your wings.", rows: wardenVisitors.length },
+];

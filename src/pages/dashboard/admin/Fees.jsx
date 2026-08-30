@@ -13,7 +13,7 @@ export default function Fees() {
   const totalStudents = feeOverviewByBlock.reduce((sum, f) => sum + f.students, 0);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<WalletIcon />} label="Total collected" value={inr(totalCollected)} sub={`of ${inr(totalDue)} due`} tone="amber" />
         <StatCard icon={<WalletIcon />} label="Collection rate" value={`${collectionPct}%`} sub={`Across ${totalStudents} students`} tone="teal" />

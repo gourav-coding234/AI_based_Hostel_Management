@@ -7,10 +7,10 @@ export default function Notices() {
   const [openId, setOpenId] = useState(notices[0]?.id ?? null);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
             <MegaphoneIcon />
           </span>
           <div>
@@ -24,7 +24,10 @@ export default function Notices() {
         {notices.map((n) => {
           const open = openId === n.id;
           return (
-            <div key={n.id} className="rounded-2xl border border-slate-200 bg-white">
+            <div
+              key={n.id}
+              className="rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/60 transition-shadow duration-200 hover:shadow-md"
+            >
               <button
                 type="button"
                 onClick={() => setOpenId(open ? null : n.id)}
