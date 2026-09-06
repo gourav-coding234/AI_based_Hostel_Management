@@ -1,32 +1,60 @@
 import { useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { ScanIcon, LogInIcon, LogOutIcon } from "../../../components/dashboard/security/icons";
-import { gatePassLog as initialPassLog } from "../../../data/securityMock";
+import { useCollection } from "../../../hooks/useCollection";
+import { updateDocument, addDocument } from "../../../firebase/firestore";
 
 export default function SecurityGateScan() {
-  const [passLog, setPassLog] = useState(initialPassLog);
+  const { profile, user } = useAuth();
+  const passesQuery = useCollection("gatePasses");
   const [query, setQuery] = useState("");
-  const [searched, setSearched] = useState(null); // the pass object once "scanned"
+  const [searched, setSearched] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [justLogged, setJustLogged] = useState("");
 
   function handleScan(e) {
     e.preventDefault();
-    const id = query.trim().toUpperCase();
+    const id = query.trim().toLowerCase();
     if (!id) return;
-    const match = passLog.find((p) => p.id.toUpperCase() === id);
+    const match = passesQuery.data.find((p) => p.id.toLowerCase() === id);
     setSearched(match ?? null);
     setNotFound(!match);
     setJustLogged("");
   }
 
-  function logDirection(direction) {
+  async function logDirection(direction) {
     if (!searched) return;
-    setPassLog((prev) =>
-      prev.map((p) => (p.id === searched.id ? { ...p, tripState: direction === "Out" ? "Out" : "Returned" } : p))
-    );
-    setSearched((s) => ({ ...s, tripState: direction === "Out" ? "Out" : "Returned" }));
-    setJustLogged(direction);
+    const nextState = direction === "Out" ? "Out" : "Returned";
+    const now = new Date();
+    try {
+      const passUpdate = { tripState: nextState };
+      // A pass that has been out and is now returned is done — this is the
+      // only place "Completed" ever gets set, so the status filter on the
+      // admin/warden GatePasses pages actually has something to match.
+      if (nextState === "Returned" && searched.status === "Approved") {
+        passUpdate.status = "Completed";
+      }
+      await updateDocument("gatePasses", searched.id, passUpdate);
+      await addDocument("gateLogs", {
+        studentId: searched.studentId,
+        studentName: searched.studentName,
+        room: searched.room,
+        passId: searched.id,
+        direction,
+        // `time` stays a human-readable display string; `timeSort` is a real
+        // sortable ISO timestamp — Firestore orderBy must use timeSort, never
+        // the locale string, or ordering silently breaks once entries span
+        // more than one month (locale month names don't sort correctly).
+        time: now.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }),
+        timeSort: now.toISOString(),
+        guard: profile?.name || user?.email || "Security",
+      });
+      setSearched((s) => ({ ...s, ...passUpdate }));
+      setJustLogged(direction);
+    } catch (err) {
+      console.error("Failed to log gate scan:", err);
+    }
   }
 
   return (
@@ -42,7 +70,7 @@ export default function SecurityGateScan() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g. GP-1042"
+                placeholder="Paste the pass ID"
                 className={inputCls}
               />
             </Field>
@@ -62,11 +90,11 @@ export default function SecurityGateScan() {
       )}
 
       {searched && (
-        <Card title={`${searched.id} — ${searched.type}`} action={<Pill tone={searched.status}>{searched.status}</Pill>}>
+        <Card title={`${searched.type} — ${searched.studentName}`} action={<Pill tone={searched.status}>{searched.status}</Pill>}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Student</p>
-              <p className="mt-1 text-sm text-ink">{searched.student} · {searched.room}</p>
+              <p className="mt-1 text-sm text-ink">{searched.studentName} · {searched.room || "—"}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reason</p>

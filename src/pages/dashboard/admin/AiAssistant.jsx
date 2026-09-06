@@ -1,70 +1,91 @@
 import { useState } from "react";
 import { Card, Button, inputCls } from "../../../components/dashboard/student/ui";
 import { SparkleIcon, ChatIcon, SendIcon, SearchIcon } from "../../../components/dashboard/admin/icons";
-import {
-  aiAssistantSuggestions,
-  aiAssistantReplies,
-  blocks,
-  allBlockComplaints,
-  feeDefaultersTop,
-} from "../../../data/adminMock";
+import { useCollections } from "../../../hooks/useCollection";
 
 // ---------------------------------------------------------------------------
-// UI-only demo: replies and search results are generated from local mock
-// data with simple keyword matching. Nothing here calls a real AI service —
-// it's a front-end stand-in so the "AI Hostel Assistant" and "Smart Search"
-// screens can be reviewed and iterated on before wiring a backend.
+// This is a keyword-matched Q&A over LIVE Firestore data (blocks, complaints,
+// fees) — not a real language model, and not canned demo replies. It only
+// ever reports numbers pulled from the real collections passed in as props.
 // ---------------------------------------------------------------------------
+
+const SUGGESTIONS = [
+  "How many beds are vacant in each block?",
+  "Find students with pending complaints",
+  "List unpaid hostel fees",
+];
 
 const FALLBACK_REPLY =
-  "I don't have live data for that yet in this preview, but once connected I'll be able to answer from real hostel records — try one of the suggested questions instead.";
+  "I can currently answer questions about bed vacancy, open complaints, and unpaid fees — try one of the suggested questions, or check the relevant dashboard page for anything else.";
 
-function craftReply(question) {
+function craftReply(question, { blocks, complaints, fees }) {
   const q = question.toLowerCase();
-  const found = aiAssistantReplies.find((r) => r.match.some((kw) => q.includes(kw)));
-  return found ? found.reply : FALLBACK_REPLY;
+
+  if (q.includes("vacant") || q.includes("available room") || q.includes("empty bed")) {
+    if (blocks.length === 0) return "No blocks have been added yet, so I don't have occupancy data to report.";
+    const totalVacant = blocks.reduce((sum, b) => sum + Math.max((b.totalBeds || 0) - (b.occupiedBeds || 0), 0), 0);
+    const byBlock = blocks.map((b) => `${Math.max((b.totalBeds || 0) - (b.occupiedBeds || 0), 0)} in ${b.name}`).join(", ");
+    return `Across all blocks there are ${totalVacant} vacant beds right now — ${byBlock}.`;
+  }
+  if (q.includes("pending complaint") || q.includes("open complaint")) {
+    const open = complaints.filter((c) => c.status !== "Resolved");
+    if (open.length === 0) return "There are no open complaints right now.";
+    const oldest = open[0];
+    return `There are ${open.length} open complaint${open.length === 1 ? "" : "s"} institute-wide, including "${oldest.title}" (${oldest.block || "—"}, filed ${oldest.date}).`;
+  }
+  if (q.includes("unpaid") || q.includes("due") || q.includes("fee")) {
+    const outstanding = fees.reduce((sum, f) => sum + Math.max((Number(f.total) || 0) - (Number(f.paid) || 0), 0), 0);
+    if (outstanding === 0) return "There are no outstanding fee balances recorded right now.";
+    const top = [...fees].sort((a, b) => (b.total - b.paid) - (a.total - a.paid))[0];
+    return `Total outstanding fees across the institute are ₹${outstanding.toLocaleString("en-IN")}. Top balance: ${top.studentName}, ₹${((top.total || 0) - (top.paid || 0)).toLocaleString("en-IN")} due.`;
+  }
+  return FALLBACK_REPLY;
 }
 
-function runSmartSearch(query) {
+function runSmartSearch(query, { blocks, complaints, fees }) {
   const q = query.toLowerCase();
 
   if (q.includes("vacant") || q.includes("available room")) {
     return {
       label: "Vacant rooms by block",
       rows: blocks.map((b) => ({
-        cols: [b.name, `${b.totalBeds - b.occupiedBeds} vacant beds`, `${b.totalBeds} total`],
+        cols: [b.name, `${Math.max((b.totalBeds || 0) - (b.occupiedBeds || 0), 0)} vacant beds`, `${b.totalBeds || 0} total`],
       })),
       headers: ["Block", "Vacant", "Capacity"],
     };
   }
   if (q.includes("complaint")) {
-    const pending = allBlockComplaints.filter((c) => c.status !== "Resolved");
+    const pending = complaints.filter((c) => c.status !== "Resolved");
     return {
       label: "Students with pending complaints",
-      rows: pending.map((c) => ({ cols: [c.student, c.block, c.title, c.status] })),
+      rows: pending.map((c) => ({ cols: [c.studentName, c.block || "—", c.title, c.status] })),
       headers: ["Student", "Block", "Complaint", "Status"],
     };
   }
   if (q.includes("fee") || q.includes("unpaid") || q.includes("due")) {
+    const defaulters = fees
+      .map((f) => ({ ...f, due: (Number(f.total) || 0) - (Number(f.paid) || 0) }))
+      .filter((f) => f.due > 0)
+      .sort((a, b) => b.due - a.due);
     return {
-      label: "Unpaid hostel fees (top defaulters)",
-      rows: feeDefaultersTop.map((f) => ({ cols: [f.name, f.block, `₹${f.due.toLocaleString("en-IN")}`, f.dueDate] })),
+      label: "Unpaid hostel fees",
+      rows: defaulters.map((f) => ({ cols: [f.studentName, f.block || "—", `₹${f.due.toLocaleString("en-IN")}`, f.dueDate || "—"] })),
       headers: ["Student", "Block", "Due", "Due date"],
     };
   }
   return null;
 }
 
-function AssistantPanel() {
+function AssistantPanel({ liveData }) {
   const [messages, setMessages] = useState([
-    { from: "ai", text: "Hi! I'm the hostel assistant. Ask me about occupancy, complaints, fees, or hostel rules." },
+    { from: "ai", text: "Hi! I'm the hostel assistant. Ask me about bed vacancy, open complaints, or unpaid fees — I answer from the live database." },
   ]);
   const [input, setInput] = useState("");
 
   function send(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const reply = craftReply(trimmed);
+    const reply = craftReply(trimmed, liveData);
     setMessages((m) => [...m, { from: "admin", text: trimmed }, { from: "ai", text: reply }]);
     setInput("");
   }
@@ -87,7 +108,7 @@ function AssistantPanel() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {aiAssistantSuggestions.map((s) => (
+          {SUGGESTIONS.map((s) => (
             <button
               key={s}
               type="button"
@@ -121,14 +142,14 @@ function AssistantPanel() {
   );
 }
 
-function SmartSearchPanel() {
+function SmartSearchPanel({ liveData }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState(null);
   const [searched, setSearched] = useState(false);
 
   function handleSearch(e) {
     e.preventDefault();
-    setResult(runSmartSearch(query));
+    setResult(runSmartSearch(query, liveData));
     setSearched(true);
   }
 
@@ -156,7 +177,7 @@ function SmartSearchPanel() {
             type="button"
             onClick={() => {
               setQuery(s);
-              setResult(runSmartSearch(s));
+              setResult(runSmartSearch(s, liveData));
               setSearched(true);
             }}
             className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-teal-300 hover:text-teal-700"
@@ -205,6 +226,11 @@ function SmartSearchPanel() {
 
 export default function AiAssistant() {
   const [tab, setTab] = useState("assistant");
+  const { data: liveData } = useCollections({
+    blocks: { name: "blocks" },
+    complaints: { name: "complaints" },
+    fees: { name: "fees" },
+  });
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -242,7 +268,7 @@ export default function AiAssistant() {
         </div>
       </Card>
 
-      {tab === "assistant" ? <AssistantPanel /> : <SmartSearchPanel />}
+      {tab === "assistant" ? <AssistantPanel liveData={liveData} /> : <SmartSearchPanel liveData={liveData} />}
     </div>
   );
 }

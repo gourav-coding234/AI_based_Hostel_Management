@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Card, Pill } from "../../../components/dashboard/student/ui";
+import { AsyncSection } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/student/icons";
-import { notices } from "../../../data/studentMock";
+import { useCollection } from "../../../hooks/useCollection";
 
 export default function Notices() {
-  const [openId, setOpenId] = useState(notices[0]?.id ?? null);
+  const noticesQuery = useCollection("notices", { orderByField: "date" });
+  const notices = noticesQuery.data;
+  const [openId, setOpenId] = useState(null);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -20,6 +23,14 @@ export default function Notices() {
         </div>
       </Card>
 
+      <AsyncSection
+        loading={noticesQuery.loading}
+        error={noticesQuery.error}
+        isEmpty={noticesQuery.isEmpty}
+        emptyTitle="No notices yet"
+        emptyDescription="Notices posted by the warden or admin office will show up here."
+        emptyIcon={<MegaphoneIcon />}
+      >
       <div className="flex flex-col gap-3">
         {notices.map((n) => {
           const open = openId === n.id;
@@ -61,6 +72,7 @@ export default function Notices() {
           );
         })}
       </div>
+      </AsyncSection>
     </div>
   );
 }

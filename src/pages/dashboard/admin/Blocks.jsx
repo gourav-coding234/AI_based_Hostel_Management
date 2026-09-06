@@ -1,32 +1,39 @@
 import { useState } from "react";
 import { Card, Button, Field, inputCls, ProgressBar, Pill } from "../../../components/dashboard/student/ui";
-import { BuildingIcon, PlusIcon, EditIcon } from "../../../components/dashboard/admin/icons";
-import { blocks as blocksSeed } from "../../../data/adminMock";
+import { EmptyState } from "../../../components/ui/DataState";
+import { BuildingIcon, PlusIcon } from "../../../components/dashboard/admin/icons";
+import { useCollection } from "../../../hooks/useCollection";
+import { addDocument } from "../../../firebase/firestore";
 
 const emptyDraft = { name: "", type: "Boys", warden: "", totalRooms: "", totalBeds: "" };
 
 export default function Blocks() {
-  const [blocks, setBlocks] = useState(blocksSeed);
+  const blocksQuery = useCollection("blocks", { orderByField: "name", orderByDirection: "asc" });
+  const blocks = blocksQuery.data;
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
+  const [saving, setSaving] = useState(false);
 
-  function addBlock(e) {
+  async function addBlock(e) {
     e.preventDefault();
     if (!draft.name.trim() || !draft.totalRooms || !draft.totalBeds) return;
-    setBlocks((list) => [
-      ...list,
-      {
-        id: `BLK-${list.length + 1}`,
+    setSaving(true);
+    try {
+      await addDocument("blocks", {
         name: draft.name,
         type: draft.type,
         warden: draft.warden || "Unassigned",
         totalRooms: Number(draft.totalRooms),
         totalBeds: Number(draft.totalBeds),
         occupiedBeds: 0,
-      },
-    ]);
-    setDraft(emptyDraft);
-    setShowForm(false);
+      });
+      setDraft(emptyDraft);
+      setShowForm(false);
+    } catch (err) {
+      console.error("Failed to add block:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -72,13 +79,18 @@ export default function Blocks() {
               <input type="number" min="0" className={inputCls} value={draft.totalBeds} onChange={(e) => setDraft((d) => ({ ...d, totalBeds: e.target.value }))} />
             </Field>
             <div className="flex items-end gap-2 sm:col-span-2">
-              <Button type="submit">Save block</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save block"}</Button>
               <Button type="button" variant="outline" onClick={() => { setShowForm(false); setDraft(emptyDraft); }}>Cancel</Button>
             </div>
           </form>
         </Card>
       )}
 
+      {blocksQuery.loading ? (
+        <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+      ) : blocksQuery.isEmpty ? (
+        <EmptyState icon={<BuildingIcon />} title="No blocks added yet" description="Add your first hostel block above, or bulk-import them from Data Import." />
+      ) : (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {blocks.map((b) => {
           const pct = b.totalBeds ? Math.round((b.occupiedBeds / b.totalBeds) * 100) : 0;
@@ -96,13 +108,11 @@ export default function Blocks() {
                 <ProgressBar value={b.occupiedBeds} max={b.totalBeds} tone={pct > 95 ? "rose" : "teal"} />
                 <p className="mt-1.5 text-xs text-slate-400">{b.occupiedBeds}/{b.totalBeds} beds occupied</p>
               </div>
-              <button type="button" className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:underline">
-                <EditIcon /> Edit details
-              </button>
             </Card>
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -1,13 +1,22 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, XIcon } from "../../../components/dashboard/admin/icons";
-import { allGatePasses, blocks } from "../../../data/adminMock";
+import { useCollections } from "../../../hooks/useCollection";
+import { updateDocument, logAudit } from "../../../firebase/firestore";
 
-const blockFilters = ["All Blocks", ...blocks.map((b) => b.name)];
 const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected", "Completed"];
 
 export default function GatePasses() {
-  const [passes, setPasses] = useState(allGatePasses);
+  const { profile, user } = useAuth();
+  const { data, loading } = useCollections({
+    passes: { name: "gatePasses", options: { orderByField: "from" } },
+    blocks: { name: "blocks" },
+  });
+  const passes = data.passes;
+  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
+
   const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
@@ -22,9 +31,64 @@ export default function GatePasses() {
   const pendingCount = passes.filter((p) => p.status === "Pending").length;
   const outCount = passes.filter((p) => p.tripState === "Out").length;
 
-  function decide(id, status) {
-    setPasses((list) => list.map((p) => (p.id === id ? { ...p, status } : p)));
+  async function decide(id, status) {
+    const pass = passes.find((p) => p.id === id);
+    try {
+      await updateDocument("gatePasses", id, { status });
+      logAudit({
+        actor: profile?.name || user?.email || "Admin",
+        action: `${status} gate pass`,
+        target: pass?.studentName || id,
+      }).catch(() => {});
+    } catch (err) {
+      console.error("Failed to update gate pass:", err);
+    }
   }
+
+  const columns = [
+    {
+      key: "studentName",
+      label: "Student",
+      sortable: true,
+      render: (p) => (
+        <>
+          <p className="font-medium text-ink">{p.studentName}</p>
+          <p className="text-xs text-slate-400">{p.block || "—"}, {p.room || "—"}</p>
+        </>
+      ),
+    },
+    {
+      key: "type",
+      label: "Type & reason",
+      render: (p) => (
+        <>
+          <p>{p.type}</p>
+          <p className="text-xs text-slate-400">{p.reason}</p>
+        </>
+      ),
+    },
+    { key: "from", label: "Window", sortable: true, render: (p) => `${p.from} → ${p.to}` },
+    { key: "tripState", label: "Trip" },
+    {
+      key: "status",
+      label: "Status / action",
+      render: (p) => (
+        <div className="flex items-center gap-2">
+          <Pill tone={p.status}>{p.status}</Pill>
+          {p.status === "Pending" && (
+            <>
+              <Button variant="outline" className="px-2.5 py-1 text-xs" onClick={() => decide(p.id, "Approved")}>
+                <CheckIcon />
+              </Button>
+              <Button variant="danger" className="px-2.5 py-1 text-xs" onClick={() => decide(p.id, "Rejected")}>
+                <XIcon />
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -56,37 +120,17 @@ export default function GatePasses() {
           </select>
         </div>
 
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No gate passes match these filters.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {filtered.map((p) => (
-              <li key={p.id} className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{p.student}</p>
-                    <span className="text-xs text-slate-400">· {p.block}, {p.room}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">{p.type} — {p.reason}</p>
-                  <p className="mt-1 text-xs text-slate-300">{p.from} → {p.to} · Trip: {p.tripState}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Pill tone={p.status}>{p.status}</Pill>
-                  {p.status === "Pending" && (
-                    <>
-                      <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => decide(p.id, "Approved")}>
-                        <CheckIcon /> Approve
-                      </Button>
-                      <Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => decide(p.id, "Rejected")}>
-                        <XIcon /> Reject
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          loading={loading}
+          searchKeys={["studentName", "type", "block", "room"]}
+          searchPlaceholder="Search gate passes…"
+          emptyTitle="No gate passes yet"
+          emptyDescription="Requests submitted by students will show up here."
+          emptyIcon={<QrIcon />}
+          pageSize={10}
+        />
       </Card>
     </div>
   );

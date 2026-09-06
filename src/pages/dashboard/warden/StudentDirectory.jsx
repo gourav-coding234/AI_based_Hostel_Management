@@ -1,23 +1,28 @@
 import { useMemo, useState } from "react";
-import { Card, EmptyState, inputCls } from "../../../components/dashboard/student/ui";
-import { UsersIcon, SearchIcon } from "../../../components/dashboard/warden/icons";
-import { studentDirectory } from "../../../data/wardenMock";
+import { Card, inputCls } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
+import { UsersIcon } from "../../../components/dashboard/warden/icons";
+import { useCollection } from "../../../hooks/useCollection";
+
+const COLUMNS = [
+  { key: "name", label: "Name", sortable: true },
+  { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
+  { key: "wing", label: "Wing", sortable: true, render: (r) => r.wing || "—" },
+  { key: "phone", label: "Phone", render: (r) => r.phone || "—" },
+  { key: "email", label: "Email", render: (r) => r.email || "—" },
+];
 
 export default function StudentDirectory() {
-  const [query, setQuery] = useState("");
+  const studentsQuery = useCollection("students", { orderByField: "name", orderByDirection: "asc" });
+  const studentDirectory = studentsQuery.data;
+
   const [wingFilter, setWingFilter] = useState("All");
+  const wings = ["All", ...Array.from(new Set(studentDirectory.map((s) => s.wing).filter(Boolean)))];
 
-  const wings = ["All", ...new Set(studentDirectory.map((s) => s.wing))];
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return studentDirectory.filter((s) => {
-      const matchesQuery =
-        !q || s.name.toLowerCase().includes(q) || s.room.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
-      const matchesWing = wingFilter === "All" || s.wing === wingFilter;
-      return matchesQuery && matchesWing;
-    });
-  }, [query, wingFilter]);
+  const scoped = useMemo(
+    () => (wingFilter === "All" ? studentDirectory : studentDirectory.filter((s) => s.wing === wingFilter)),
+    [studentDirectory, wingFilter]
+  );
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -29,61 +34,30 @@ export default function StudentDirectory() {
             </span>
             <div>
               <p className="font-display text-base font-semibold text-ink">Student directory</p>
-              <p className="text-sm text-slate-500">{studentDirectory.length} residents across the hostel</p>
+              <p className="text-sm text-slate-500">{studentDirectory.length} resident{studentDirectory.length === 1 ? "" : "s"} across the hostel</p>
             </div>
           </div>
-          <div className="flex flex-1 gap-2 sm:max-w-md">
-            <div className="relative flex-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <SearchIcon />
-              </span>
-              <input
-                className={`${inputCls} pl-9`}
-                placeholder="Search by name, room, or ID…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <select className={inputCls} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
-              {wings.map((w) => (
-                <option key={w} value={w}>{w}</option>
-              ))}
-            </select>
-          </div>
+          <select className={`${inputCls} sm:w-44`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
+            {wings.map((w) => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
         </div>
       </Card>
 
       <Card>
-        {filtered.length === 0 ? (
-          <EmptyState icon={<UsersIcon />} title="No students match your search" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead>
-                <tr className="text-xs uppercase tracking-wide text-slate-400">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Room</th>
-                  <th className="pb-2 font-medium">Wing</th>
-                  <th className="pb-2 font-medium">Year / Branch</th>
-                  <th className="pb-2 font-medium">Phone</th>
-                  <th className="pb-2 pr-0 font-medium">Parent phone</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((s) => (
-                  <tr key={s.id}>
-                    <td className="py-2.5 font-medium text-ink">{s.name}</td>
-                    <td className="py-2.5 text-slate-500">{s.room}</td>
-                    <td className="py-2.5 text-slate-500">{s.wing}</td>
-                    <td className="py-2.5 text-slate-500">{s.year} · {s.branch}</td>
-                    <td className="py-2.5 text-slate-500">{s.phone}</td>
-                    <td className="py-2.5 pr-0 text-slate-500">{s.parentPhone}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={COLUMNS}
+          rows={scoped}
+          loading={studentsQuery.loading}
+          error={studentsQuery.error}
+          searchKeys={["name", "room", "id", "email"]}
+          searchPlaceholder="Search by name, room, or ID…"
+          emptyTitle="No students yet"
+          emptyDescription="Student accounts and room allocations will show up here."
+          emptyIcon={<UsersIcon />}
+          pageSize={12}
+        />
       </Card>
     </div>
   );

@@ -1,12 +1,19 @@
 import { useMemo, useState } from "react";
-import { Card, Pill, Button, EmptyState } from "../../../components/dashboard/student/ui";
+import { useAuth } from "../../../context/AuthContext";
+import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { WrenchIcon } from "../../../components/dashboard/warden/icons";
-import { allComplaints, complaintCategories, staffList } from "../../../data/wardenMock";
+import { useCollection } from "../../../hooks/useCollection";
+import { updateDocument, logAudit } from "../../../firebase/firestore";
 
 const statusFilters = ["All", "Open", "In Progress", "Resolved"];
+const COMPLAINT_CATEGORIES = ["Room", "Wing", "Food", "Other"];
+const STAFF_LIST = ["Electrician", "Plumber", "Carpenter", "Mess Staff", "Housekeeping"];
 
 export default function WardenComplaints() {
-  const [complaints, setComplaints] = useState(allComplaints);
+  const { profile, user } = useAuth();
+  const complaintsQuery = useCollection("complaints", { orderByField: "date" });
+  const complaints = complaintsQuery.data;
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -18,19 +25,80 @@ export default function WardenComplaints() {
     );
   }, [complaints, categoryFilter, statusFilter]);
 
-  function assignStaff(id, staff) {
-    setComplaints((list) =>
-      list.map((c) => (c.id === id ? { ...c, assignedTo: staff, status: c.status === "Open" ? "In Progress" : c.status } : c))
-    );
+  async function assignStaff(id, staff) {
+    const c = complaints.find((x) => x.id === id);
+    try {
+      await updateDocument("complaints", id, { assignedTo: staff, status: c?.status === "Open" ? "In Progress" : c?.status });
+    } catch (err) {
+      console.error("Failed to assign staff:", err);
+    }
   }
 
-  function setStatus(id, status) {
-    setComplaints((list) => list.map((c) => (c.id === id ? { ...c, status } : c)));
+  async function setStatus(id, status) {
+    const c = complaints.find((x) => x.id === id);
+    try {
+      await updateDocument("complaints", id, { status });
+      if (status === "Resolved") {
+        logAudit({
+          actor: profile?.name || user?.email || "Warden",
+          action: "Resolved complaint",
+          target: c ? `${c.studentName || "Student"} — ${c.category || "complaint"}` : id,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("Failed to update complaint:", err);
+    }
   }
 
   const open = complaints.filter((c) => c.status === "Open").length;
   const inProgress = complaints.filter((c) => c.status === "In Progress").length;
   const resolved = complaints.filter((c) => c.status === "Resolved").length;
+
+  const columns = [
+    {
+      key: "title",
+      label: "Complaint",
+      sortable: true,
+      render: (c) => (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-ink">{c.title}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{c.category}</span>
+            <Pill tone={c.priority}>{c.priority}</Pill>
+          </div>
+          <p className="text-xs text-slate-500">{c.description}</p>
+        </>
+      ),
+    },
+    { key: "studentName", label: "Student", sortable: true, render: (c) => (<>{c.studentName}<p className="text-xs text-slate-400">{c.room || "—"} · {c.date}</p></>) },
+    {
+      key: "status",
+      label: "Status / action",
+      render: (c) => (
+        <div className="flex flex-col items-start gap-2">
+          <Pill tone={c.status}>{c.status}</Pill>
+          {c.status !== "Resolved" && (
+            <div className="flex flex-wrap gap-2">
+              <select
+                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 focus:border-teal-400 focus:outline-none"
+                value={c.assignedTo || ""}
+                onChange={(e) => assignStaff(c.id, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <option value="">Assign staff…</option>
+                {STAFF_LIST.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <Button className="px-3 py-1 text-xs" onClick={() => setStatus(c.id, "Resolved")}>
+                Mark resolved
+              </Button>
+            </div>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -59,7 +127,7 @@ export default function WardenComplaints() {
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
               <option value="All">All categories</option>
-              {complaintCategories.map((c) => (
+              {COMPLAINT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -80,45 +148,17 @@ export default function WardenComplaints() {
           </div>
         }
       >
-        {filtered.length === 0 ? (
-          <EmptyState icon={<WrenchIcon />} title="No complaints match this filter" />
-        ) : (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {filtered.map((c) => (
-              <li key={c.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{c.title}</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{c.category}</span>
-                    <Pill tone={c.priority}>{c.priority}</Pill>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">{c.description}</p>
-                  <p className="mt-1 text-xs text-slate-300">{c.student} · {c.room} · {c.id} · {c.date}</p>
-                </div>
-                <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                  <Pill tone={c.status}>{c.status}</Pill>
-                  {c.status !== "Resolved" && (
-                    <div className="flex flex-wrap gap-2">
-                      <select
-                        className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 focus:border-teal-400 focus:outline-none"
-                        value={c.assignedTo}
-                        onChange={(e) => assignStaff(c.id, e.target.value)}
-                      >
-                        <option value="">Assign staff…</option>
-                        {staffList.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                      <Button className="px-3 py-1 text-xs" onClick={() => setStatus(c.id, "Resolved")}>
-                        Mark resolved
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          loading={complaintsQuery.loading}
+          searchKeys={["title", "studentName", "category", "room"]}
+          searchPlaceholder="Search complaints…"
+          emptyTitle="No complaints filed yet"
+          emptyDescription="Complaints filed by students will show up here."
+          emptyIcon={<WrenchIcon />}
+          pageSize={10}
+        />
       </Card>
     </div>
   );

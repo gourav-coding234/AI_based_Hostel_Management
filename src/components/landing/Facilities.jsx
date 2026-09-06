@@ -53,28 +53,21 @@ const FACILITIES = [
 
 export default function Facilities() {
   return (
-    <section id="facilities" className="bg-white py-20">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">
-          What's on campus
-        </span>
-        <h2 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">
-          Facilities built for hostel life
-        </h2>
+    <section id="facilities" className="section on-white">
+      <div className="section-inner">
+        <span className="section-label">What's on campus</span>
+        <h2 className="section-title">Facilities built for hostel life</h2>
 
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="facility-grid">
           {FACILITIES.map((f) => (
-            <div
-              key={f.title}
-              className="rounded-2xl border border-slate-200 p-6 transition-colors hover:border-navy-800/40 hover:shadow-soft"
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-navy-950 text-white">
+            <div key={f.title} className="facility-card">
+              <span className="facility-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   {f.icon}
                 </svg>
               </span>
-              <h3 className="mt-4 font-display text-base font-semibold text-ink">{f.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{f.desc}</p>
+              <h3 className="facility-title">{f.title}</h3>
+              <p className="facility-desc">{f.desc}</p>
             </div>
           ))}
         </div>

@@ -57,10 +57,20 @@ service cloud.firestore {
       // their linked child's profile via the /students/{studentId} document
       // below, never the full account list.
       allow read: if signedIn() && (request.auth.uid == userId || isAdmin() || isWarden() || isSecurity());
-      // Only the admin tooling creates/edits/removes accounts. `linkedStudentId`
-      // in particular must never be settable by the parent themselves — if it
-      // were, a parent could simply relink their own account to any student.
-      allow write: if isAdmin();
+      // Admin tooling creates/removes accounts outright. Updates are also
+      // allowed for the signed-in user editing their OWN profile, but only
+      // for the specific self-service fields every role's "Edit profile"
+      // page actually exposes — role, email, hostelResidence and
+      // linkedStudentId can never be touched this way, so a student/parent
+      // can't self-escalate or relink to a different student.
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (signedIn() && request.auth.uid == userId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           "name", "dob", "phone", "bloodGroup", "address",
+           "emergencyContactName", "emergencyContactPhone", "bio",
+           "photoURL", "gateAssigned", "shift", "updatedAt"
+         ]));
     }
 
     match /students/{studentId} {
@@ -116,6 +126,82 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if signedIn();
       allow update, delete: if false;
+    }
+
+    match /blocks/{blockId} {
+      // Hostel block/wing config (capacity, assigned warden) — staff-managed.
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      // Renaming a block, changing its total bed count, or reassigning its
+      // warden stays Admin-only. But allotting/vacating a bed is a Warden
+      // action (RoomAllotment.jsx) that must keep occupiedBeds in sync, so
+      // Warden gets a narrow exception for that one field only.
+      allow update: if isAdmin() ||
+        (isWarden() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["occupiedBeds"]));
+    }
+
+    match /leaveRequests/{leaveId} {
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if isStaff() || isSecurity();
+      allow write: if isStaff() || isSecurity();
+    }
+
+    match /sosAlerts/{alertId} {
+      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow create: if signedIn();
+      allow update: if isStaff() || isSecurity();
+      allow delete: if isAdmin();
+    }
+
+    match /emergencyContacts/{contactId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if signedIn();
+      allow update, delete: if isStaff();
+    }
+
+    match /dutyRoster/{rosterId} {
+      allow read: if isStaff() || isSecurity();
+      allow write: if isStaff();
+    }
+
+    match /gateLogs/{logId} {
+      allow read: if isStaff() || isSecurity();
+      allow create: if isSecurity() || isStaff();
+      allow update, delete: if isAdmin();
+    }
+
+    match /messMenu/{menuId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /messReports/{reportId} {
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update, delete: if isStaff();
+    }
+
+    match /inventoryRequests/{requestId} {
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update, delete: if isStaff();
+    }
+
+    match /roomRequests/{requestId} {
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow update, delete: if isStaff();
     }
   }
 }

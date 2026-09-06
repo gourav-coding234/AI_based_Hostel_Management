@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { createUserAccount, friendlyCreateAccountError } from "../../../firebase/adminUsers";
-import { getCollection, deleteUserProfile } from "../../../firebase/firestore";
+import { getCollection, deleteUserProfile, logAudit } from "../../../firebase/firestore";
 import { parseUsersCsv, CSV_TEMPLATE } from "../../../utils/csv";
 import { ROLE_LIST } from "../../../roles";
 import { Card, Button, Field, inputCls, Pill, EmptyState } from "../../../components/dashboard/student/ui";
@@ -24,6 +25,7 @@ function initials(name, email) {
 }
 
 export default function ManageUsers() {
+  const { profile, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
@@ -68,6 +70,11 @@ export default function ManageUsers() {
       setFormSuccess(`Account created for ${form.name} (${form.role}).`);
       setForm(EMPTY_FORM);
       loadUsers();
+      logAudit({
+        actor: profile?.name || currentUser?.email || "Admin",
+        action: "Created account",
+        target: `${form.name} (${form.role})`,
+      }).catch(() => {});
     } catch (err) {
       setFormError(friendlyCreateAccountError(err));
     } finally {
@@ -103,6 +110,13 @@ export default function ManageUsers() {
     setBulkResults({ created, failed });
     setBulkRunning(false);
     loadUsers();
+    if (created.length > 0) {
+      logAudit({
+        actor: profile?.name || currentUser?.email || "Admin",
+        action: "Bulk-created accounts",
+        target: `${created.length} account${created.length === 1 ? "" : "s"} via CSV`,
+      }).catch(() => {});
+    }
   }
 
   function downloadTemplate() {
@@ -126,9 +140,15 @@ export default function ManageUsers() {
   async function handleDelete(uid) {
     setDeleteError("");
     setDeletingId(uid);
+    const target = users.find((u) => u.id === uid);
     try {
       await deleteUserProfile(uid);
       setUsers((list) => list.filter((u) => u.id !== uid));
+      logAudit({
+        actor: profile?.name || currentUser?.email || "Admin",
+        action: "Removed account",
+        target: target ? `${target.name} (${target.role})` : uid,
+      }).catch(() => {});
     } catch (err) {
       console.error("Failed to remove account:", err);
       setDeleteError("Couldn't remove this account. Please try again.");

@@ -38,30 +38,23 @@ export default function Gallery() {
   const [active, setActive] = useState(null);
 
   return (
-    <section id="gallery" className="bg-slate-50 py-20">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-red-600">
-          Around the hostel
-        </span>
-        <h2 className="mt-2 font-display text-3xl font-semibold text-ink sm:text-4xl">Gallery</h2>
-        <p className="mt-2 max-w-xl text-sm text-slate-500">
+    <section id="gallery" className="section on-paper">
+      <div className="section-inner">
+        <span className="section-label">Around the hostel</span>
+        <h2 className="section-title">Gallery</h2>
+        <p className="section-note" style={{ marginTop: 8 }}>
           Photos are on the way — for now, here's a preview of what each block covers.
         </p>
 
-        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="gallery-grid">
           {GALLERY_IMAGES.map((img) => (
-            <button
-              key={img.id}
-              type="button"
-              onClick={() => setActive(img)}
-              className="group flex aspect-[4/3] flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-slate-200 bg-navy-950 transition-transform duration-300 group-hover:scale-105 hover:border-navy-800"
-            >
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-white transition-colors group-hover:bg-white/15">
+            <button key={img.id} type="button" onClick={() => setActive(img)} className="gallery-tile">
+              <span className="gallery-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                   {img.icon}
                 </svg>
               </span>
-              <span className="px-3 text-center text-xs font-medium text-slate-300">{img.alt}</span>
+              <span className="gallery-caption">{img.alt}</span>
             </button>
           ))}
         </div>
@@ -69,27 +62,22 @@ export default function Gallery() {
 
       {active && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-navy-950/90 p-6"
+          className="lightbox"
           onClick={() => setActive(null)}
           role="dialog"
           aria-modal="true"
           aria-label={active.alt}
         >
-          <div className="flex max-h-[80vh] w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white p-10 shadow-soft">
-            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-950 text-white">
+          <div className="lightbox-panel">
+            <span className="lightbox-icon">
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                 {active.icon}
               </svg>
             </span>
-            <p className="text-center font-display text-lg font-semibold text-ink">{active.alt}</p>
-            <p className="text-center text-sm text-slate-500">Photo coming soon.</p>
+            <p className="lightbox-title">{active.alt}</p>
+            <p className="lightbox-desc">Photo coming soon.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setActive(null)}
-            className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-            aria-label="Close"
-          >
+          <button type="button" onClick={() => setActive(null)} className="lightbox-close" aria-label="Close">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
             </svg>

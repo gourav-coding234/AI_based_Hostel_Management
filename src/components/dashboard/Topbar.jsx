@@ -1,62 +1,53 @@
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import SearchBar from "./SearchBar";
+import NotificationMenu from "./NotificationMenu";
+import UserMenu from "./UserMenu";
 
-export default function Topbar({ title, onMenuClick }) {
-  const { profile, user, logout } = useAuth();
-  const navigate = useNavigate();
+const MENU_ICON = (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />
+  </svg>
+);
 
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
+const SUN_ICON = (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <circle cx="10" cy="10" r="3.4" />
+    <path d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7" strokeLinecap="round" />
+  </svg>
+);
 
-  const displayName = profile?.name ?? user?.email ?? "User";
-  const initials = displayName
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+const MOON_ICON = (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <path d="M16.5 12.3A6.8 6.8 0 0 1 7.7 3.5 6.8 6.8 0 1 0 16.5 12.3Z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export default function Topbar({ title, onMenuClick, theme, onToggleTheme }) {
+  const { profile } = useAuth();
+  const role = profile?.role;
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-8">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onMenuClick}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-ink lg:hidden"
-          aria-label="Open menu"
-        >
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />
-          </svg>
+    <header className="topbar">
+      <div className="topbar-left">
+        <button type="button" onClick={onMenuClick} className="menu-btn" aria-label="Open menu">
+          {MENU_ICON}
         </button>
-        <h1 className="font-display text-lg font-semibold text-ink">{title}</h1>
+        <h1 className="topbar-title">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-4">
-        {profile?.role && (
-          <span className="hidden rounded-full bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-700 sm:inline-block">
-            {profile.role}
-          </span>
-        )}
-        <div className="flex items-center gap-2.5">
-          {profile?.photoURL ? (
-            <img src={profile.photoURL} alt="" className="h-8 w-8 rounded-full object-cover" />
-          ) : (
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-950 text-xs font-semibold text-white">
-              {initials}
-            </span>
-          )}
-          <span className="hidden text-sm font-medium text-ink sm:inline">{displayName}</span>
-        </div>
+      <div className="topbar-right">
+        {role && <SearchBar role={role} />}
         <button
           type="button"
-          onClick={handleLogout}
-          className="rounded-full border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+          className="icon-btn"
+          onClick={onToggleTheme}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
-          Log out
+          {theme === "dark" ? SUN_ICON : MOON_ICON}
         </button>
+        {role && <NotificationMenu role={role} />}
+        <UserMenu />
       </div>
     </header>
   );

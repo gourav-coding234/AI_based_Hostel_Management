@@ -1,17 +1,11 @@
 import { Card, Button } from "../../../components/dashboard/student/ui";
+import { EmptyState } from "../../../components/ui/DataState";
 import { ChartIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
-import {
-  reportTypes,
-  feeOverviewByBlock,
-  blocks,
-  allBlockComplaints,
-} from "../../../data/adminMock";
-import { studentDirectory } from "../../../data/wardenMock";
+import { useCollections } from "../../../hooks/useCollection";
 
-// Builds a simple CSV string from an array of flat objects.
 function toCsv(rows) {
   if (!rows.length) return "";
-  const headers = Object.keys(rows[0]);
+  const headers = Object.keys(rows[0]).filter((h) => h !== "createdAt" && h !== "updatedAt");
   const lines = [headers.join(",")];
   rows.forEach((row) => {
     lines.push(headers.map((h) => `"${String(row[h] ?? "").replace(/"/g, '""')}"`).join(","));
@@ -19,15 +13,7 @@ function toCsv(rows) {
   return lines.join("\n");
 }
 
-const reportData = {
-  "RPT-STU": studentDirectory,
-  "RPT-FEE": feeOverviewByBlock,
-  "RPT-OCC": blocks,
-  "RPT-CMP": allBlockComplaints,
-};
-
-function download(id, name) {
-  const rows = reportData[id] ?? [];
+function download(rows, name) {
   const csv = toCsv(rows);
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -39,6 +25,20 @@ function download(id, name) {
 }
 
 export default function Reports() {
+  const { data, loading } = useCollections({
+    students: { name: "students" },
+    fees: { name: "fees" },
+    blocks: { name: "blocks" },
+    complaints: { name: "complaints" },
+  });
+
+  const reports = [
+    { id: "RPT-STU", name: "Student directory", description: "Full list of residents with room, block and contact details.", rows: data.students },
+    { id: "RPT-FEE", name: "Fee collection summary", description: "Per-student dues, collections and outstanding balances.", rows: data.fees },
+    { id: "RPT-OCC", name: "Occupancy report", description: "Room and bed occupancy across every block.", rows: data.blocks },
+    { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed institute-wide with current status.", rows: data.complaints },
+  ];
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
@@ -54,21 +54,27 @@ export default function Reports() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {reportTypes.map((r) => (
+        {reports.map((r) => (
           <Card key={r.id}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-display text-sm font-semibold text-ink">{r.name}</p>
                 <p className="mt-1 text-sm text-slate-500">{r.description}</p>
-                <p className="mt-2 text-xs text-slate-400">{r.rows} row{r.rows === 1 ? "" : "s"}</p>
+                <p className="mt-2 text-xs text-slate-400">
+                  {loading ? "Loading…" : `${r.rows.length} row${r.rows.length === 1 ? "" : "s"}`}
+                </p>
               </div>
             </div>
-            <Button variant="outline" className="mt-4" onClick={() => download(r.id, r.name)}>
+            <Button variant="outline" className="mt-4" disabled={loading || r.rows.length === 0} onClick={() => download(r.rows, r.name)}>
               <DownloadIcon /> Download CSV
             </Button>
           </Card>
         ))}
       </div>
+
+      {!loading && data.students.length === 0 && data.fees.length === 0 && data.blocks.length === 0 && data.complaints.length === 0 && (
+        <EmptyState icon={<ChartIcon />} title="No data to export yet" description="Once records exist in the database, they'll be downloadable here." />
+      )}
     </div>
   );
 }

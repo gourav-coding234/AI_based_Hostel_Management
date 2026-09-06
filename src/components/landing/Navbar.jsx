@@ -15,58 +15,47 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50">
+    <header className="navbar">
       {/* Utility masthead — matches the sign-in page's official-portal strip */}
-      <div className="hidden items-center justify-between border-b border-navy-800 bg-navy-950 px-6 py-2 text-[11px] text-slate-300 sm:flex">
+      <div className="masthead">
         <span>Government College of Engineering, Keonjhar — Official Portal</span>
-        <span className="flex items-center gap-4">
+        <span className="masthead-links">
           <span>AICTE Approved</span>
-          <span className="h-3 w-px bg-white/15" aria-hidden="true" />
+          <span className="masthead-sep" aria-hidden="true" />
           <span>BPUT Affiliated</span>
-          <span className="h-3 w-px bg-white/15" aria-hidden="true" />
+          <span className="masthead-sep" aria-hidden="true" />
           <span>NAAC Accredited</span>
         </span>
       </div>
 
-      <div className="border-b border-navy-800 bg-navy-950/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
-          <a href="#home" className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm">
-              <img src={collegeLogo} alt="GCE Keonjhar crest" className="h-full w-full object-contain" />
+      <div className="navbar-main">
+        <div className="navbar-inner">
+          <a href="#home" className="brand">
+            <span className="brand-crest">
+              <img src={collegeLogo} alt="GCE Keonjhar crest" />
             </span>
-            <span className="leading-tight">
-              <span className="block font-display text-base font-semibold text-white">
-                GCE Keonjhar
-              </span>
-              <span className="block text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                Smart Hostel Portal
-              </span>
+            <span>
+              <span className="brand-title">GCE Keonjhar</span>
+              <span className="brand-sub">Smart Hostel Portal</span>
             </span>
           </a>
 
-          <nav className="hidden items-center gap-8 md:flex">
+          <nav className="nav-links">
             {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-slate-300 transition-colors hover:text-white"
-              >
+              <a key={link.href} href={link.href} className="nav-link">
                 {link.label}
               </a>
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="hidden rounded-full bg-white px-5 py-2 text-sm font-semibold text-navy-950 transition-colors hover:bg-slate-100 sm:inline-block"
-            >
+          <div className="navbar-actions">
+            <Link to="/login" className="btn btn-white navbar-login">
               Login
             </Link>
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 text-white md:hidden"
+              className="menu-toggle"
               aria-label="Toggle menu"
               aria-expanded={open}
             >
@@ -82,22 +71,19 @@ export default function Navbar() {
         </div>
 
         {open && (
-          <div className="border-t border-white/10 bg-navy-950 px-5 pb-5 pt-2 md:hidden">
-            <nav className="flex flex-col gap-1">
+          <div className="mobile-nav">
+            <nav>
               {NAV_LINKS.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="rounded-lg px-2 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white"
+                  className="mobile-nav-link"
                 >
                   {link.label}
                 </a>
               ))}
-              <Link
-                to="/login"
-                className="mt-2 rounded-full bg-white px-5 py-2.5 text-center text-sm font-semibold text-navy-950"
-              >
+              <Link to="/login" className="btn btn-white btn-block" style={{ marginTop: 8 }}>
                 Login
               </Link>
             </nav>

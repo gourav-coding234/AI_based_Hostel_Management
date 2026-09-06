@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
 import { Card, Pill, ProgressBar } from "../../../components/dashboard/student/ui";
-import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon } from "../../../components/dashboard/parent/icons";
+import { EmptyState } from "../../../components/ui/DataState";
+import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon, MegaphoneIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { notices } from "../../../data/studentMock";
-import { demoTotalFee, demoFeePayments, demoAttendance, demoGatePasses, demoRoomRecord } from "../../../data/parentDemoFallback";
+import { useCollection } from "../../../hooks/useCollection";
 
 function initials(name) {
   const source = (name || "?").trim();
@@ -21,27 +20,22 @@ export default function ParentOverview() {
   const linked = useLinkedStudent();
   const { studentUser, studentRecord, linkedStudentId } = linked;
 
-  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "date" });
+  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from" });
+  const notices = useCollection("notices", { orderByField: "date", limitCount: 3 });
 
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  // Real data always wins. Sample data only fills in a section that's
-  // genuinely empty so far — never overrides anything real.
-  const usingSampleFees = !studentRecord?.totalFee && fees.items.length === 0;
-  const usingSampleAttendance = attendance.items.length === 0;
-  const usingSampleGatePasses = gatePasses.items.length === 0;
-  const usingSampleRoom = !studentRecord?.room;
+  // Only real data, straight from Firestore. No sample/demo fallback.
+  const feeRecords = fees.items;
+  const totalFee = feeRecords.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
+  const attendanceLog = attendance.items;
+  const passList = gatePasses.items;
+  const room = studentRecord;
 
-  const feePayments = fees.items.length ? fees.items : usingSampleFees ? demoFeePayments : fees.items;
-  const totalFee = studentRecord?.totalFee || (usingSampleFees ? demoTotalFee : 0);
-  const attendanceLog = attendance.items.length ? attendance.items : usingSampleAttendance ? demoAttendance : attendance.items;
-  const passList = gatePasses.items.length ? gatePasses.items : usingSampleGatePasses ? demoGatePasses : gatePasses.items;
-  const room = studentRecord?.room ? studentRecord : usingSampleRoom ? demoRoomRecord : studentRecord;
-
-  const paid = feePayments.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  const paid = feeRecords.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const feeRemaining = Math.max(totalFee - paid, 0);
   const presentCount = attendanceLog.filter((a) => a.status === "Present").length;
   const attendancePct = attendanceLog.length ? Math.round((presentCount / attendanceLog.length) * 100) : null;
@@ -104,7 +98,7 @@ export default function ParentOverview() {
         </Link>
       </div>
 
-      <Card title="Fee status" action={usingSampleFees && totalFee ? <SampleDataBadge /> : null}>
+      <Card title="Fee status">
         {totalFee ? (
           <>
             <div className="mb-2 flex items-center justify-between text-sm">
@@ -123,17 +117,23 @@ export default function ParentOverview() {
           View all <ArrowRightIcon />
         </Link>
       }>
-        <ul className="flex flex-col divide-y divide-slate-100">
-          {notices.slice(0, 3).map((n) => (
-            <li key={n.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
-              <div>
-                <p className="text-sm font-medium text-ink">{n.title}</p>
-                <p className="mt-0.5 text-xs text-slate-400">{n.postedBy} · {n.date}</p>
-              </div>
-              <Pill tone={n.priority}>{n.priority}</Pill>
-            </li>
-          ))}
-        </ul>
+        {notices.loading ? (
+          <p className="py-6 text-center text-sm text-slate-400">Loading notices…</p>
+        ) : notices.isEmpty ? (
+          <EmptyState icon={<MegaphoneIcon />} title="No notices yet" description="Notices posted by the warden or admin office will show up here." />
+        ) : (
+          <ul className="flex flex-col divide-y divide-slate-100">
+            {notices.data.map((n) => (
+              <li key={n.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium text-ink">{n.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">{n.postedBy} · {n.date}</p>
+                </div>
+                <Pill tone={n.priority}>{n.priority}</Pill>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );

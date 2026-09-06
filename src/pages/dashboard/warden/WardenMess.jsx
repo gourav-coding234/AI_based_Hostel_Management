@@ -1,33 +1,48 @@
 import { useState } from "react";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
+import { EmptyState } from "../../../components/ui/DataState";
 import { UtensilsIcon } from "../../../components/dashboard/warden/icons";
-import { weekMenu, messReports as initialReports } from "../../../data/wardenMock";
+import { useCollection } from "../../../hooks/useCollection";
+import { updateDocument } from "../../../firebase/firestore";
 
-const days = Object.keys(weekMenu);
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const EMPTY_MEAL = { breakfast: "", lunch: "", dinner: "" };
 
 export default function WardenMess() {
-  const [menu, setMenu] = useState(weekMenu);
-  const [activeDay, setActiveDay] = useState(days[0]);
-  const [reports, setReports] = useState(initialReports);
+  const menuQuery = useCollection("messMenu");
+  const reportsQuery = useCollection("messReports", { orderByField: "date" });
+  const menuByDay = Object.fromEntries(menuQuery.data.map((d) => [d.id, d]));
+
+  const [activeDay, setActiveDay] = useState(DAYS[0]);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(weekMenu[days[0]]);
+  const [draft, setDraft] = useState(EMPTY_MEAL);
+  const [saving, setSaving] = useState(false);
+
+  const currentMeal = menuByDay[activeDay] || EMPTY_MEAL;
 
   function startEdit() {
-    setDraft(menu[activeDay]);
+    setDraft({ breakfast: currentMeal.breakfast || "", lunch: currentMeal.lunch || "", dinner: currentMeal.dinner || "" });
     setEditing(true);
   }
 
-  function saveEdit() {
-    setMenu((m) => ({ ...m, [activeDay]: draft }));
-    setEditing(false);
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      await updateDocument("messMenu", activeDay, draft);
+      setEditing(false);
+    } catch (err) {
+      console.error("Failed to save menu:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function resolveReport(id) {
-    setReports((list) => list.map((r) => (r.id === id ? { ...r, status: "Resolved" } : r)));
-  }
-
-  function updateReportStatus(id, status) {
-    setReports((list) => list.map((r) => (r.id === id ? { ...r, status } : r)));
+  async function updateReportStatus(id, status) {
+    try {
+      await updateDocument("messReports", id, { status });
+    } catch (err) {
+      console.error("Failed to update mess report:", err);
+    }
   }
 
   return (
@@ -38,7 +53,7 @@ export default function WardenMess() {
           editing ? (
             <div className="flex gap-2">
               <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button className="px-3 py-1.5 text-xs" onClick={saveEdit}>Save</Button>
+              <Button className="px-3 py-1.5 text-xs" onClick={saveEdit} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
             </div>
           ) : (
             <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={startEdit}>Edit {activeDay}</Button>
@@ -46,7 +61,7 @@ export default function WardenMess() {
         }
       >
         <div className="mb-4 flex flex-wrap gap-2">
-          {days.map((d) => (
+          {DAYS.map((d) => (
             <button
               key={d}
               type="button"
@@ -84,12 +99,14 @@ export default function WardenMess() {
               />
             </Field>
           </div>
+        ) : !menuByDay[activeDay] ? (
+          <EmptyState icon={<UtensilsIcon />} title={`No menu set for ${activeDay}`} description="Click Edit to add one." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
-              ["Breakfast", menu[activeDay].breakfast],
-              ["Lunch", menu[activeDay].lunch],
-              ["Dinner", menu[activeDay].dinner],
+              ["Breakfast", currentMeal.breakfast],
+              ["Lunch", currentMeal.lunch],
+              ["Dinner", currentMeal.dinner],
             ].map(([meal, items]) => (
               <div key={meal} className="rounded-xl border border-slate-200 p-4">
                 <div className="mb-2 flex items-center gap-2">
@@ -98,7 +115,7 @@ export default function WardenMess() {
                   </span>
                   <p className="text-sm font-semibold text-ink">{meal}</p>
                 </div>
-                <p className="text-sm text-slate-500">{items}</p>
+                <p className="text-sm text-slate-500">{items || "Not listed"}</p>
               </div>
             ))}
           </div>
@@ -106,32 +123,38 @@ export default function WardenMess() {
       </Card>
 
       <Card title="Mess reports from students">
-        <ul className="flex flex-col divide-y divide-slate-100">
-          {reports.map((r) => (
-            <li key={r.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-ink">{r.type}</p>
-                  <Pill tone={r.status}>{r.status}</Pill>
+        {reportsQuery.loading ? (
+          <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
+        ) : reportsQuery.isEmpty ? (
+          <EmptyState title="No mess reports yet" description="Reports students submit will show up here." />
+        ) : (
+          <ul className="flex flex-col divide-y divide-slate-100">
+            {reportsQuery.data.map((r) => (
+              <li key={r.id} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-ink">{r.type}</p>
+                    <Pill tone={r.status}>{r.status}</Pill>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500">{r.description}</p>
+                  <p className="mt-1 text-xs text-slate-300">{r.studentName} · {r.date}</p>
                 </div>
-                <p className="mt-0.5 text-xs text-slate-500">{r.description}</p>
-                <p className="mt-1 text-xs text-slate-300">{r.by} · {r.id} · {r.date}</p>
-              </div>
-              {r.status !== "Resolved" && (
-                <div className="flex shrink-0 gap-2">
-                  {r.status === "Open" && (
-                    <Button variant="outline" className="px-3 py-1 text-xs" onClick={() => updateReportStatus(r.id, "In Progress")}>
-                      Mark in progress
+                {r.status !== "Resolved" && (
+                  <div className="flex shrink-0 gap-2">
+                    {r.status === "Open" && (
+                      <Button variant="outline" className="px-3 py-1 text-xs" onClick={() => updateReportStatus(r.id, "In Progress")}>
+                        Mark in progress
+                      </Button>
+                    )}
+                    <Button className="px-3 py-1 text-xs" onClick={() => updateReportStatus(r.id, "Resolved")}>
+                      Mark resolved
                     </Button>
-                  )}
-                  <Button className="px-3 py-1 text-xs" onClick={() => resolveReport(r.id)}>
-                    Mark resolved
-                  </Button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );

@@ -1,10 +1,8 @@
 import { Card, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { demoGatePasses } from "../../../data/parentDemoFallback";
 
 export default function ParentGatePass() {
   const linked = useLinkedStudent();
@@ -14,19 +12,11 @@ export default function ParentGatePass() {
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  const usingSample = gatePasses.items.length === 0;
-  const passList = usingSample ? demoGatePasses : gatePasses.items;
+  const passList = gatePasses.items;
   const activePass = passList.find((p) => p.status === "Approved");
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      {usingSample && (
-        <div className="flex items-center gap-2">
-          <SampleDataBadge />
-          <p className="text-xs text-slate-400">No real gate passes yet — showing an example of what this will look like.</p>
-        </div>
-      )}
-
       <Card title="Current status">
         {activePass ? (
           <div className="flex flex-col items-center gap-3 py-2 text-center">

@@ -1,10 +1,8 @@
-import { Card, ProgressBar, EmptyState } from "../../../components/dashboard/student/ui";
+import { Card, ProgressBar, EmptyState, Pill } from "../../../components/dashboard/student/ui";
 import { WalletIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { demoTotalFee, demoFeePayments } from "../../../data/parentDemoFallback";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -12,28 +10,24 @@ function inr(n) {
 
 export default function ParentFees() {
   const linked = useLinkedStudent();
-  const { studentUser, studentRecord, linkedStudentId } = linked;
-  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "date" });
+  const { studentUser, linkedStudentId } = linked;
+  // Fee records are one document per billing period, with `total`/`paid`
+  // set directly on each doc — matching the admin/warden Fees pages and
+  // the CSV import schema, not a separate list of payment line-items.
+  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
 
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  const usingSample = !studentRecord?.totalFee && fees.items.length === 0;
-  const payments = fees.items.length ? fees.items : usingSample ? demoFeePayments : fees.items;
-  const totalFee = studentRecord?.totalFee || (usingSample ? demoTotalFee : 0);
-  const paid = payments.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  const records = fees.items;
+  const totalFee = records.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
+  const paid = records.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const remaining = Math.max(totalFee - paid, 0);
   const pct = totalFee ? Math.round((paid / totalFee) * 100) : 0;
+  const nextDue = records.find((f) => (Number(f.total) || 0) > (Number(f.paid) || 0));
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      {usingSample && (
-        <div className="flex items-center gap-2">
-          <SampleDataBadge />
-          <p className="text-xs text-slate-400">The fees office hasn't posted real records yet — showing an example of what this will look like.</p>
-        </div>
-      )}
-
       <Card>
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-600">
@@ -74,33 +68,34 @@ export default function ParentFees() {
           <Card>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Remaining</p>
             <p className="mt-2 font-display text-2xl font-semibold text-amber-600">{inr(remaining)}</p>
+            {nextDue?.dueDate && <p className="mt-1 text-xs text-slate-400">Due by {nextDue.dueDate}</p>}
           </Card>
         </div>
       )}
 
-      <Card title="Payment history">
-        {payments.length === 0 ? (
-          <EmptyState icon={<WalletIcon />} title="No payments recorded yet" description="Payments your child's fees office logs will show up here." />
+      <Card title="Fee records">
+        {records.length === 0 ? (
+          <EmptyState icon={<WalletIcon />} title="No fee records yet" description="Fee periods your child's fees office posts will show up here." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-slate-400">
-                  <th className="pb-2 font-medium">Date</th>
-                  <th className="pb-2 font-medium">Description</th>
-                  <th className="pb-2 font-medium">Mode</th>
-                  <th className="pb-2 font-medium">Receipt</th>
-                  <th className="pb-2 pr-0 text-right font-medium">Amount</th>
+                  <th className="pb-2 font-medium">Due date</th>
+                  <th className="pb-2 font-medium">Total</th>
+                  <th className="pb-2 font-medium">Paid</th>
+                  <th className="pb-2 font-medium">Remaining</th>
+                  <th className="pb-2 pr-0 text-right font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.map((p) => (
-                  <tr key={p.id}>
-                    <td className="py-2.5 text-slate-500">{p.date}</td>
-                    <td className="py-2.5 font-medium text-ink">{p.label}</td>
-                    <td className="py-2.5 text-slate-500">{p.mode}</td>
-                    <td className="py-2.5 text-slate-400">{p.receipt}</td>
-                    <td className="py-2.5 pr-0 text-right font-semibold text-ink">{inr(p.amount)}</td>
+                {records.map((f) => (
+                  <tr key={f.id}>
+                    <td className="py-2.5 text-slate-500">{f.dueDate || "—"}</td>
+                    <td className="py-2.5 font-medium text-ink">{inr(f.total)}</td>
+                    <td className="py-2.5 text-teal-700">{inr(f.paid)}</td>
+                    <td className="py-2.5 text-amber-700">{inr(Math.max((Number(f.total) || 0) - (Number(f.paid) || 0), 0))}</td>
+                    <td className="py-2.5 pr-0 text-right"><Pill tone={f.status}>{f.status || "Pending"}</Pill></td>
                   </tr>
                 ))}
               </tbody>

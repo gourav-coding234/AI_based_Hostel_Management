@@ -131,3 +131,11 @@ export const EyeIcon = (p) => (
     <circle cx="10" cy="10" r="2.3" />
   </svg>
 );
+
+export const UploadIcon = (p) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <path d="M10 13V4" strokeLinecap="round" />
+    <path d="M6 8l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M4 14v2a2 2 0 002 2h8a2 2 0 002-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);

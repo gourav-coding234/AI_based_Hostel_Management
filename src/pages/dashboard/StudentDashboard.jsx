@@ -1,17 +1,5 @@
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import {
-  HomeIcon,
-  BedIcon,
-  WalletIcon,
-  UtensilsIcon,
-  CheckSquareIcon,
-  QrIcon,
-  WrenchIcon,
-  MegaphoneIcon,
-  UserIcon,
-} from "../../components/dashboard/student/icons";
-
 import Overview from "./student/Overview";
 import RoomBed from "./student/RoomBed";
 import Fees from "./student/Fees";
@@ -21,22 +9,13 @@ import GatePass from "./student/GatePass";
 import Complaints from "./student/Complaints";
 import Notices from "./student/Notices";
 import Profile from "./student/Profile";
-
-const navItems = [
-  { label: "Overview", to: "/dashboard/student", end: true, icon: <HomeIcon /> },
-  { label: "My Profile", to: "/dashboard/student/profile", icon: <UserIcon /> },
-  { label: "Room & Bed", to: "/dashboard/student/rooms", icon: <BedIcon /> },
-  { label: "Fees", to: "/dashboard/student/fees", icon: <WalletIcon /> },
-  { label: "Mess", to: "/dashboard/student/mess", icon: <UtensilsIcon /> },
-  { label: "Attendance", to: "/dashboard/student/attendance", icon: <CheckSquareIcon /> },
-  { label: "Gate Pass", to: "/dashboard/student/gate-pass", icon: <QrIcon /> },
-  { label: "Complaints", to: "/dashboard/student/complaints", icon: <WrenchIcon /> },
-  { label: "Notices", to: "/dashboard/student/notices", icon: <MegaphoneIcon /> },
-];
+import Inventory from "./student/Inventory";
+import Feedback from "./student/Feedback";
+import Leave from "./student/Leave";
 
 export default function StudentDashboard() {
   return (
-    <DashboardLayout title="Student Dashboard" navItems={navItems}>
+    <DashboardLayout title="Student Dashboard">
       <Routes>
         <Route index element={<Overview />} />
         <Route path="profile" element={<Profile />} />
@@ -45,8 +24,11 @@ export default function StudentDashboard() {
         <Route path="mess" element={<Mess />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="gate-pass" element={<GatePass />} />
+        <Route path="inventory" element={<Inventory />} />
         <Route path="complaints" element={<Complaints />} />
         <Route path="notices" element={<Notices />} />
+        <Route path="feedback" element={<Feedback />} />
+        <Route path="leave" element={<Leave />} />
       </Routes>
     </DashboardLayout>
   );

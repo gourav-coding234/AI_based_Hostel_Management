@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
-import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
+import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
+import { Card, Pill, Field, inputCls } from "../../../components/dashboard/student/ui";
+import { EmptyState } from "../../../components/ui/DataState";
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/student/icons";
-import { attendanceLog, attendanceLogRange } from "../../../data/studentMock";
+import { useStudentCollection } from "../../../hooks/useStudentCollection";
 
 const MODES = [
   { id: "day", label: "Day-wise" },
@@ -17,9 +19,6 @@ const STATUS_COLORS = {
 };
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-
-// date -> record, for O(1) lookups
-const logByDate = new Map(attendanceLog.map((r) => [r.date, r]));
 
 function toISO(d) {
   return d.toISOString().slice(0, 10);
@@ -43,35 +42,49 @@ function segmentsFrom(counts) {
   ];
 }
 
-const allMonths = (() => {
-  const set = new Set(attendanceLog.map((r) => r.date.slice(0, 7)));
-  return Array.from(set).sort().reverse();
-})();
-
 function monthLabel(ym) {
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
 export default function Attendance() {
+  const { user } = useAuth();
+  const attendanceQuery = useStudentCollection("attendance", user?.uid || "", { orderByField: "date", orderByDirection: "asc" });
+  const attendanceLog = attendanceQuery.items;
+
+  const logByDate = useMemo(() => new Map(attendanceLog.map((r) => [r.date, r])), [attendanceLog]);
+  const allMonths = useMemo(() => {
+    const set = new Set(attendanceLog.map((r) => r.date.slice(0, 7)));
+    return Array.from(set).sort().reverse();
+  }, [attendanceLog]);
+
+  const rangeBounds = useMemo(() => {
+    if (attendanceLog.length === 0) {
+      const today = toISO(new Date());
+      return { start: today, end: today };
+    }
+    return { start: attendanceLog[0].date, end: attendanceLog[attendanceLog.length - 1].date };
+  }, [attendanceLog]);
+
   const [mode, setMode] = useState("day");
+  const [calendarMonth, setCalendarMonth] = useState(allMonths[0] || toISO(new Date()).slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(rangeBounds.end);
+  const [pickedMonth, setPickedMonth] = useState(allMonths[0] || toISO(new Date()).slice(0, 7));
+  const [rangeFrom, setRangeFrom] = useState(rangeBounds.start);
+  const [rangeTo, setRangeTo] = useState(rangeBounds.end);
 
-  // ---- Day-wise state: a visible month + selected day within it ----------
-  const [calendarMonth, setCalendarMonth] = useState(allMonths[0]);
-  const [selectedDate, setSelectedDate] = useState(attendanceLogRange.end);
+  // Once real data arrives, snap the defaults to it (they start out as "today").
+  useEffect(() => {
+    if (attendanceLog.length === 0) return;
+    setCalendarMonth(allMonths[0]);
+    setSelectedDate(rangeBounds.end);
+    setPickedMonth(allMonths[0]);
+    setRangeFrom(rangeBounds.start);
+    setRangeTo(rangeBounds.end);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceLog.length]);
 
-  // ---- Month-wise state ----------------------------------------------------
-  const [pickedMonth, setPickedMonth] = useState(allMonths[0]);
-
-  // ---- Range state -----------------------------------------------------
-  const [rangeFrom, setRangeFrom] = useState(() => {
-    const end = new Date(attendanceLogRange.end);
-    end.setDate(end.getDate() - 29);
-    return toISO(end);
-  });
-  const [rangeTo, setRangeTo] = useState(attendanceLogRange.end);
-
-  const overall = useMemo(() => summarize(attendanceLog), []);
+  const overall = useMemo(() => summarize(attendanceLog), [attendanceLog]);
 
   const calendarDays = useMemo(() => {
     const [y, m] = calendarMonth.split("-").map(Number);
@@ -84,19 +97,41 @@ export default function Attendance() {
       cells.push({ day, iso, record: logByDate.get(iso) });
     }
     return cells;
-  }, [calendarMonth]);
+  }, [calendarMonth, logByDate]);
 
   const selectedRecord = logByDate.get(selectedDate);
-  const monthSummary = useMemo(() => summarize(attendanceLog.filter((r) => r.date.slice(0, 7) === pickedMonth)), [pickedMonth]);
+  const monthSummary = useMemo(() => summarize(attendanceLog.filter((r) => r.date.slice(0, 7) === pickedMonth)), [attendanceLog, pickedMonth]);
   const rangeSummary = useMemo(
     () => summarize(attendanceLog.filter((r) => r.date >= rangeFrom && r.date <= rangeTo)),
-    [rangeFrom, rangeTo]
+    [attendanceLog, rangeFrom, rangeTo]
   );
 
   function shiftCalendarMonth(delta) {
     const idx = allMonths.indexOf(calendarMonth);
-    const nextIdx = idx - delta; // allMonths is newest-first
+    const nextIdx = idx - delta;
     if (nextIdx >= 0 && nextIdx < allMonths.length) setCalendarMonth(allMonths[nextIdx]);
+  }
+
+  if (attendanceQuery.loading) {
+    return (
+      <div className="flex flex-col gap-6 animate-fade-in">
+        <Card><p className="py-10 text-center text-sm text-slate-400">Loading attendance…</p></Card>
+      </div>
+    );
+  }
+
+  if (attendanceLog.length === 0) {
+    return (
+      <div className="flex flex-col gap-6 animate-fade-in">
+        <Card>
+          <EmptyState
+            icon={<CheckSquareIcon />}
+            title="No attendance records yet"
+            description="Attendance the warden logs for you will show up here."
+          />
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -110,7 +145,7 @@ export default function Attendance() {
             <div>
               <p className="font-display text-lg font-semibold text-ink">My attendance</p>
               <p className="text-sm text-slate-500">
-                {overall.pct}% present overall · {attendanceLogRange.start} to {attendanceLogRange.end}
+                {overall.pct}% present overall · {rangeBounds.start} to {rangeBounds.end}
               </p>
             </div>
           </div>
@@ -222,7 +257,7 @@ export default function Attendance() {
               <input
                 type="date"
                 value={rangeFrom}
-                min={attendanceLogRange.start}
+                min={rangeBounds.start}
                 max={rangeTo}
                 onChange={(e) => setRangeFrom(e.target.value)}
                 className={inputCls}
@@ -233,7 +268,7 @@ export default function Attendance() {
                 type="date"
                 value={rangeTo}
                 min={rangeFrom}
-                max={attendanceLogRange.end}
+                max={rangeBounds.end}
                 onChange={(e) => setRangeTo(e.target.value)}
                 className={inputCls}
               />

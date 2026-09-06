@@ -1,16 +1,26 @@
 import { useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
-import { MegaphoneIcon, EditIcon, TrashIcon } from "../../../components/dashboard/warden/icons";
-import { wardenNotices, noticeTargets, noticePriorities } from "../../../data/wardenMock";
+import DataTable from "../../../components/ui/DataTable";
+import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
+import { MegaphoneIcon } from "../../../components/dashboard/warden/icons";
+import { useCollection } from "../../../hooks/useCollection";
+import { addDocument, updateDocument, deleteDocument } from "../../../firebase/firestore";
 
-let nextId = 95;
+const NOTICE_TARGETS = ["All Wings", "A Wing", "B Wing", "C Wing"];
+const NOTICE_PRIORITIES = ["General", "Urgent", "Event"];
 
-const emptyDraft = { title: "", body: "", target: noticeTargets[0], priority: noticePriorities[0] };
+const emptyDraft = { title: "", body: "", target: NOTICE_TARGETS[0], priority: NOTICE_PRIORITIES[0] };
 
 export default function WardenNotices() {
-  const [notices, setNotices] = useState(wardenNotices);
+  const { user, profile } = useAuth();
+  const noticesQuery = useCollection("notices", { orderByField: "date" });
+  const notices = noticesQuery.data;
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(emptyDraft);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   function startCreate() {
     setEditingId("new");
@@ -27,27 +37,63 @@ export default function WardenNotices() {
     setDraft(emptyDraft);
   }
 
-  function saveDraft(e) {
+  async function saveDraft(e) {
     e.preventDefault();
     if (!draft.title.trim() || !draft.body.trim()) return;
-
-    if (editingId === "new") {
-      setNotices((list) => [
-        { id: `NTC-${nextId++}`, date: "Today", ...draft },
-        ...list,
-      ]);
-    } else {
-      setNotices((list) => list.map((n) => (n.id === editingId ? { ...n, ...draft } : n)));
+    setSaving(true);
+    try {
+      if (editingId === "new") {
+        await addDocument(
+          "notices",
+          { ...draft, date: new Date().toISOString().slice(0, 10), postedBy: profile?.name || user?.email },
+          user?.uid
+        );
+      } else {
+        await updateDocument("notices", editingId, draft);
+      }
+      cancelEdit();
+    } catch (err) {
+      console.error("Failed to save notice:", err);
+    } finally {
+      setSaving(false);
     }
-    cancelEdit();
   }
 
-  function deleteNotice(id) {
-    setNotices((list) => list.filter((n) => n.id !== id));
-    if (editingId === id) cancelEdit();
+  async function confirmDelete() {
+    if (!deletingId) return;
+    setDeleteBusy(true);
+    try {
+      await deleteDocument("notices", deletingId);
+      if (editingId === deletingId) cancelEdit();
+    } catch (err) {
+      console.error("Failed to delete notice:", err);
+    } finally {
+      setDeleteBusy(false);
+      setDeletingId(null);
+    }
   }
 
   const isEditingForm = editingId !== null;
+  const noticeBeingDeleted = notices.find((n) => n.id === deletingId);
+
+  const columns = [
+    {
+      key: "title",
+      label: "Notice",
+      sortable: true,
+      render: (n) => (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-ink">{n.title}</span>
+            <Pill tone={n.priority}>{n.priority}</Pill>
+          </div>
+          <p className="text-xs text-slate-500">{n.body}</p>
+        </>
+      ),
+    },
+    { key: "target", label: "Target", sortable: true },
+    { key: "date", label: "Date", sortable: true },
+  ];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -88,21 +134,21 @@ export default function WardenNotices() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Target">
                 <select className={inputCls} value={draft.target} onChange={(e) => setDraft((d) => ({ ...d, target: e.target.value }))}>
-                  {noticeTargets.map((t) => (
+                  {NOTICE_TARGETS.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </Field>
               <Field label="Priority">
                 <select className={inputCls} value={draft.priority} onChange={(e) => setDraft((d) => ({ ...d, priority: e.target.value }))}>
-                  {noticePriorities.map((p) => (
+                  {NOTICE_PRIORITIES.map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
                 </select>
               </Field>
             </div>
             <div className="flex gap-2">
-              <Button type="submit">{editingId === "new" ? "Publish notice" : "Save changes"}</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving…" : editingId === "new" ? "Publish notice" : "Save changes"}</Button>
               <Button type="button" variant="outline" onClick={cancelEdit}>Cancel</Button>
             </div>
           </form>
@@ -110,29 +156,34 @@ export default function WardenNotices() {
       )}
 
       <Card title="Published notices">
-        <ul className="flex flex-col divide-y divide-slate-100">
-          {notices.map((n) => (
-            <li key={n.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-ink">{n.title}</p>
-                  <Pill tone={n.priority}>{n.priority}</Pill>
-                </div>
-                <p className="mt-0.5 text-xs text-slate-500">{n.body}</p>
-                <p className="mt-1 text-xs text-slate-300">{n.target} · {n.date}</p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => startEdit(n)}>
-                  <EditIcon /> Edit
-                </Button>
-                <Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => deleteNotice(n.id)}>
-                  <TrashIcon /> Delete
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          columns={columns}
+          rows={notices}
+          loading={noticesQuery.loading}
+          searchKeys={["title", "target", "body"]}
+          searchPlaceholder="Search notices…"
+          emptyTitle="No notices published yet"
+          emptyDescription="Notices you publish will appear on every student's dashboard."
+          emptyIcon={<MegaphoneIcon />}
+          pageSize={10}
+          rowActions={(n) => [
+            { label: "Edit", onClick: () => startEdit(n) },
+            { label: "Delete", onClick: () => setDeletingId(n.id), danger: true },
+          ]}
+        />
       </Card>
+
+      {deletingId && (
+        <ConfirmDialog
+          title="Delete this notice?"
+          description={noticeBeingDeleted ? `"${noticeBeingDeleted.title}" will be removed for everyone immediately.` : undefined}
+          confirmLabel="Delete"
+          tone="danger"
+          busy={deleteBusy}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeletingId(null)}
+        />
+      )}
     </div>
   );
 }

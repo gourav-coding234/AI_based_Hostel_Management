@@ -1,24 +1,45 @@
 import { useMemo, useState } from "react";
 import { Card, Pill, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { EyeIcon, UsersIcon, QrIcon } from "../../../components/dashboard/warden/icons";
-import { wardenVisitors, wings } from "../../../data/wardenMock";
+import { useCollection } from "../../../hooks/useCollection";
 
-const wingFilters = ["All Wings", ...wings.map((w) => w.name)];
 const statusFilters = ["All Statuses", "On premises", "Checked out"];
 
 export default function Visitors() {
+  const visitorsQuery = useCollection("visitors", { orderByField: "inTimeSort" });
+  const visitors = visitorsQuery.data.map((v) => ({ ...v, status: v.outTime ? "Checked out" : "On premises" }));
+  const wingFilters = ["All Wings", ...Array.from(new Set(visitors.map((v) => v.wing || v.block).filter(Boolean)))];
+
   const [wingFilter, setWingFilter] = useState("All Wings");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
-    return wardenVisitors.filter((v) => {
-      const wingOk = wingFilter === "All Wings" || v.wing === wingFilter;
+    return visitors.filter((v) => {
+      const wingOk = wingFilter === "All Wings" || (v.wing || v.block) === wingFilter;
       const statusOk = statusFilter === "All Statuses" || v.status === statusFilter;
       return wingOk && statusOk;
     });
-  }, [wingFilter, statusFilter]);
+  }, [visitors, wingFilter, statusFilter]);
 
-  const onPremises = wardenVisitors.filter((v) => v.status === "On premises").length;
+  const onPremises = visitors.filter((v) => v.status === "On premises").length;
+
+  const columns = [
+    {
+      key: "visitorName",
+      label: "Visitor",
+      sortable: true,
+      render: (v) => (
+        <>
+          <p className="font-medium text-ink">{v.visitorName}</p>
+          <p className="text-xs text-slate-400">{v.wing || v.block || "—"}</p>
+        </>
+      ),
+    },
+    { key: "purpose", label: "Purpose" },
+    { key: "inTime", label: "In / Out", sortable: true, render: (v) => `${v.inTime}${v.outTime ? ` → ${v.outTime}` : ""}` },
+    { key: "status", label: "Status", render: (v) => <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill> },
+  ];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -29,15 +50,15 @@ export default function Visitors() {
           </span>
           <div>
             <p className="font-display text-base font-semibold text-ink">Visitor management</p>
-            <p className="text-sm text-slate-500">Visitor registrations, QR passes, and entry/exit history across your wings.</p>
+            <p className="text-sm text-slate-500">Visitor registrations and entry/exit history across your wings.</p>
           </div>
         </div>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<UsersIcon />} label="On premises now" value={onPremises} sub="Across all wings" tone={onPremises > 0 ? "amber" : "teal"} />
-        <StatCard icon={<EyeIcon />} label="Logged recently" value={wardenVisitors.length} sub="Visitor check-ins recorded" tone="navy" />
-        <StatCard icon={<QrIcon />} label="QR passes issued" value={wardenVisitors.length} sub="One per registered visitor" tone="teal" />
+        <StatCard icon={<EyeIcon />} label="Logged total" value={visitors.length} sub="Visitor check-ins recorded" tone="navy" />
+        <StatCard icon={<QrIcon />} label="QR passes issued" value={visitors.length} sub="One per registered visitor" tone="teal" />
       </div>
 
       <Card title="Visitor log">
@@ -50,27 +71,17 @@ export default function Visitors() {
           </select>
         </div>
 
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No visitors match these filters.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {filtered.map((v) => (
-              <li key={v.id} className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{v.name}</p>
-                    <span className="text-xs text-slate-400">· {v.wing}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">{v.purpose}</p>
-                  <p className="mt-1 text-xs text-slate-300">
-                    In: {v.checkIn}{v.checkOut ? ` · Out: ${v.checkOut}` : ""}
-                  </p>
-                </div>
-                <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          loading={visitorsQuery.loading}
+          searchKeys={["visitorName", "purpose", "wing", "block"]}
+          searchPlaceholder="Search visitors…"
+          emptyTitle="No visitors logged yet"
+          emptyDescription="Visitor check-ins logged by security will show up here."
+          emptyIcon={<EyeIcon />}
+          pageSize={10}
+        />
       </Card>
     </div>
   );

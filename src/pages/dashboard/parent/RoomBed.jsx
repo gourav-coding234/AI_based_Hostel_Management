@@ -1,9 +1,8 @@
 import { Card, Pill } from "../../../components/dashboard/student/ui";
 import { BedIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
+import { EmptyState } from "../../../components/ui/DataState";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
-import { demoRoomRecord } from "../../../data/parentDemoFallback";
 
 export default function ParentRoomBed() {
   const linked = useLinkedStudent();
@@ -12,18 +11,18 @@ export default function ParentRoomBed() {
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
-  const usingSample = !studentRecord?.room;
-  const room = usingSample ? demoRoomRecord : studentRecord;
+  const room = studentRecord;
+
+  if (!room?.room) {
+    return (
+      <div className="flex flex-col gap-6 animate-fade-in">
+        <EmptyState icon={<BedIcon />} title="Room not yet allotted" description="Your child's room and bed will appear here once the warden allots one." />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      {usingSample && (
-        <div className="flex items-center gap-2">
-          <SampleDataBadge />
-          <p className="text-xs text-slate-400">Room allotment hasn't happened yet — showing an example of what this will look like.</p>
-        </div>
-      )}
-
       <Card title="Room allocation">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">

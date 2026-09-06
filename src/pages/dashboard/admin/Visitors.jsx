@@ -1,24 +1,49 @@
 import { useMemo, useState } from "react";
 import { Card, Pill, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { EyeIcon, UsersIcon, QrIcon } from "../../../components/dashboard/admin/icons";
-import { allVisitors, blocks } from "../../../data/adminMock";
+import { useCollections } from "../../../hooks/useCollection";
 
-const blockFilters = ["All Blocks", ...blocks.map((b) => b.name)];
 const statusFilters = ["All Statuses", "On premises", "Checked out"];
 
+const columns = [
+  {
+    key: "visitorName",
+    label: "Visitor",
+    sortable: true,
+    render: (v) => (
+      <>
+        <p className="font-medium text-ink">{v.visitorName}</p>
+        <p className="text-xs text-slate-400">{v.block || "—"}</p>
+      </>
+    ),
+  },
+  { key: "purpose", label: "Purpose" },
+  { key: "idProof", label: "ID proof", render: (v) => v.idProof || "—" },
+  { key: "inTime", label: "In / Out", sortable: true, render: (v) => `${v.inTime}${v.outTime ? ` → ${v.outTime}` : ""}` },
+  { key: "status", label: "Status", render: (v) => <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill> },
+];
+
 export default function Visitors() {
+  const { data, loading } = useCollections({
+    visitors: { name: "visitors", options: { orderByField: "inTimeSort" } },
+    blocks: { name: "blocks" },
+  });
+  const visitors = data.visitors.map((v) => ({ ...v, status: v.outTime ? "Checked out" : "On premises" }));
+  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
+
   const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
-    return allVisitors.filter((v) => {
+    return visitors.filter((v) => {
       const blockOk = blockFilter === "All Blocks" || v.block === blockFilter;
       const statusOk = statusFilter === "All Statuses" || v.status === statusFilter;
       return blockOk && statusOk;
     });
-  }, [blockFilter, statusFilter]);
+  }, [visitors, blockFilter, statusFilter]);
 
-  const onPremises = allVisitors.filter((v) => v.status === "On premises").length;
+  const onPremises = visitors.filter((v) => v.status === "On premises").length;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -36,8 +61,8 @@ export default function Visitors() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<UsersIcon />} label="On premises now" value={onPremises} sub="Across all blocks" tone={onPremises > 0 ? "amber" : "teal"} />
-        <StatCard icon={<EyeIcon />} label="Logged today" value={allVisitors.length} sub="Visitor check-ins recorded" tone="navy" />
-        <StatCard icon={<QrIcon />} label="QR passes issued" value={allVisitors.length} sub="One per registered visitor" tone="teal" />
+        <StatCard icon={<EyeIcon />} label="Logged total" value={visitors.length} sub="Visitor check-ins recorded" tone="navy" />
+        <StatCard icon={<QrIcon />} label="QR passes issued" value={visitors.length} sub="One per registered visitor" tone="teal" />
       </div>
 
       <Card title="Visitor log">
@@ -50,27 +75,17 @@ export default function Visitors() {
           </select>
         </div>
 
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No visitors match these filters.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {filtered.map((v) => (
-              <li key={v.id} className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{v.name}</p>
-                    <span className="text-xs text-slate-400">· {v.block}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">{v.purpose}</p>
-                  <p className="mt-1 text-xs text-slate-300">
-                    {v.idProof} · In: {v.checkIn}{v.checkOut ? ` · Out: ${v.checkOut}` : ""}
-                  </p>
-                </div>
-                <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          loading={loading}
+          searchKeys={["visitorName", "purpose", "block"]}
+          searchPlaceholder="Search visitors…"
+          emptyTitle="No visitors logged yet"
+          emptyDescription="Visitor check-ins logged by security will show up here."
+          emptyIcon={<EyeIcon />}
+          pageSize={10}
+        />
       </Card>
     </div>
   );

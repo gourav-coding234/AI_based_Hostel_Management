@@ -1,17 +1,5 @@
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import {
-  HomeIcon,
-  ScanIcon,
-  ListIcon,
-  UserPlusIcon,
-  SirenIcon,
-  CalendarClockIcon,
-  ShieldIcon,
-  MegaphoneIcon,
-  UserIcon,
-} from "../../components/dashboard/security/icons";
-
 import Overview from "./security/Overview";
 import GateScan from "./security/GateScan";
 import InOutRegister from "./security/InOutRegister";
@@ -22,21 +10,9 @@ import EmergencyContacts from "./security/EmergencyContacts";
 import Notices from "./security/Notices";
 import Profile from "./security/Profile";
 
-const navItems = [
-  { label: "Overview", to: "/dashboard/security", end: true, icon: <HomeIcon /> },
-  { label: "My Profile", to: "/dashboard/security/profile", icon: <UserIcon /> },
-  { label: "Gate Scan", to: "/dashboard/security/gate-scan", icon: <ScanIcon /> },
-  { label: "In / Out Register", to: "/dashboard/security/in-out", icon: <ListIcon /> },
-  { label: "Visitor Log", to: "/dashboard/security/visitors", icon: <UserPlusIcon /> },
-  { label: "Incident Reports", to: "/dashboard/security/incidents", icon: <SirenIcon /> },
-  { label: "Duty Roster", to: "/dashboard/security/duty-roster", icon: <CalendarClockIcon /> },
-  { label: "Emergency Contacts", to: "/dashboard/security/emergency", icon: <ShieldIcon /> },
-  { label: "Notices", to: "/dashboard/security/notices", icon: <MegaphoneIcon /> },
-];
-
 export default function SecurityDashboard() {
   return (
-    <DashboardLayout title="Security Dashboard" navItems={navItems}>
+    <DashboardLayout title="Security Dashboard">
       <Routes>
         <Route index element={<Overview />} />
         <Route path="profile" element={<Profile />} />

@@ -3,10 +3,9 @@ import { Card, Pill, Field, inputCls } from "../../../components/dashboard/stude
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import SampleDataBadge from "../../../components/dashboard/parent/SampleDataBadge";
+import { EmptyState } from "../../../components/ui/DataState";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { demoAttendance } from "../../../data/parentDemoFallback";
 
 const MODES = [
   { id: "day", label: "Day-wise" },
@@ -56,8 +55,7 @@ export default function ParentAttendance() {
   const linked = useLinkedStudent();
   const { studentUser, linkedStudentId } = linked;
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date", orderByDirection: "asc" });
-  const usingSample = !attendance.loading && attendance.items.length === 0;
-  const log = usingSample ? demoAttendance : attendance.items;
+  const log = attendance.items;
 
   const logByDate = useMemo(() => new Map(log.map((r) => [r.date, r])), [log]);
   const allMonths = useMemo(() => {
@@ -136,7 +134,6 @@ export default function ParentAttendance() {
             <div>
               <div className="flex items-center gap-2">
                 <p className="font-display text-lg font-semibold text-ink">{studentUser?.name || "Your child"}'s attendance</p>
-                {usingSample && <SampleDataBadge />}
               </div>
               <p className="text-sm text-slate-500">
                 {log.length === 0 ? "No records yet" : `${overall.pct}% present overall · ${rangeBounds.start} to ${rangeBounds.end}`}
@@ -164,6 +161,10 @@ export default function ParentAttendance() {
 
       {attendance.loading && (
         <p className="py-8 text-center text-sm text-slate-400">Loading attendance…</p>
+      )}
+
+      {!attendance.loading && log.length === 0 && (
+        <EmptyState title="No attendance records yet" description="Attendance the warden logs for your child will show up here." />
       )}
 
       {log.length > 0 && mode === "day" && (

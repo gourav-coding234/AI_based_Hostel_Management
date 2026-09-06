@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { CalendarClockIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
-import { leaveRequests, wings } from "../../../data/wardenMock";
+import { useCollection } from "../../../hooks/useCollection";
+import { updateDocument } from "../../../firebase/firestore";
 
-const wingFilters = ["All Wings", ...wings.map((w) => w.name)];
 const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected"];
 
 export default function Leave() {
-  const [requests, setRequests] = useState(leaveRequests);
+  const requestsQuery = useCollection("leaveRequests", { orderByField: "from" });
+  const requests = requestsQuery.data;
+  const wingFilters = ["All Wings", ...Array.from(new Set(requests.map((r) => r.wing).filter(Boolean)))];
+
   const [wingFilter, setWingFilter] = useState("All Wings");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
@@ -22,11 +26,52 @@ export default function Leave() {
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
 
-  function decide(id, status) {
-    setRequests((list) =>
-      list.map((r) => (r.id === id ? { ...r, status, parentNotified: status === "Approved" ? true : r.parentNotified } : r))
-    );
+  async function decide(id, status) {
+    try {
+      await updateDocument("leaveRequests", id, { status, parentNotified: status === "Approved" });
+    } catch (err) {
+      console.error("Failed to update leave request:", err);
+    }
   }
+
+  const columns = [
+    {
+      key: "studentName",
+      label: "Student",
+      sortable: true,
+      render: (r) => (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-ink">{r.studentName}</span>
+            <Pill tone="General">{r.type}</Pill>
+          </div>
+          <p className="text-xs text-slate-400">{r.wing || "—"}, {r.room || "—"}</p>
+        </>
+      ),
+    },
+    { key: "reason", label: "Reason" },
+    { key: "from", label: "Window", sortable: true, render: (r) => `${r.from} → ${r.to}` },
+    { key: "parentNotified", label: "Parent", render: (r) => (r.parentNotified ? "Notified" : "Not notified") },
+    {
+      key: "status",
+      label: "Status / action",
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <Pill tone={r.status}>{r.status}</Pill>
+          {r.status === "Pending" && (
+            <>
+              <Button variant="outline" className="px-2.5 py-1 text-xs" onClick={() => decide(r.id, "Approved")}>
+                <CheckIcon />
+              </Button>
+              <Button variant="danger" className="px-2.5 py-1 text-xs" onClick={() => decide(r.id, "Rejected")}>
+                <XIcon />
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -58,40 +103,17 @@ export default function Leave() {
           </select>
         </div>
 
-        {filtered.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No leave requests match these filters.</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {filtered.map((r) => (
-              <li key={r.id} className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink">{r.student}</p>
-                    <span className="text-xs text-slate-400">· {r.wing}, {r.room}</span>
-                    <Pill tone="General">{r.type}</Pill>
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">{r.reason}</p>
-                  <p className="mt-1 text-xs text-slate-300">
-                    {r.from} → {r.to} · Parent {r.parentNotified ? "notified" : "not notified"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Pill tone={r.status}>{r.status}</Pill>
-                  {r.status === "Pending" && (
-                    <>
-                      <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => decide(r.id, "Approved")}>
-                        <CheckIcon /> Approve
-                      </Button>
-                      <Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => decide(r.id, "Rejected")}>
-                        <XIcon /> Reject
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          loading={requestsQuery.loading}
+          searchKeys={["studentName", "reason", "wing", "room"]}
+          searchPlaceholder="Search leave requests…"
+          emptyTitle="No leave requests yet"
+          emptyDescription="Leave applications submitted by students will show up here."
+          emptyIcon={<CalendarClockIcon />}
+          pageSize={10}
+        />
       </Card>
     </div>
   );

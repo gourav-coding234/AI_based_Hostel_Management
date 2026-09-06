@@ -1,40 +1,59 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { WrenchIcon } from "../../../components/dashboard/student/icons";
-import { initialComplaints, complaintCategories } from "../../../data/studentMock";
+import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { addDocument } from "../../../firebase/firestore";
 
-let nextId = 240;
+const COMPLAINT_CATEGORIES = ["Room", "Wing", "Food", "Other"];
 
 export default function Complaints() {
-  const [complaints, setComplaints] = useState(initialComplaints);
+  const { user, profile } = useAuth();
+  const studentId = user?.uid || "";
+  const complaintsQuery = useStudentCollection("complaints", studentId, { orderByField: "date" });
+  const complaints = complaintsQuery.items;
+
   const [filter, setFilter] = useState("All");
-  const [category, setCategory] = useState(complaintCategories[0]);
+  const [category, setCategory] = useState(COMPLAINT_CATEGORIES[0]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const filtered = useMemo(
     () => (filter === "All" ? complaints : complaints.filter((c) => c.category === filter)),
     [complaints, filter]
   );
 
-  function submitComplaint(e) {
+  async function submitComplaint(e) {
     e.preventDefault();
     if (!title.trim() || !description.trim()) return;
-    setComplaints((list) => [
-      {
-        id: `CMP-${nextId++}`,
-        category,
-        title,
-        description,
-        status: "Open",
-        date: "Today",
-        priority,
-      },
-      ...list,
-    ]);
-    setTitle("");
-    setDescription("");
+    setSubmitting(true);
+    setError("");
+    try {
+      await addDocument(
+        "complaints",
+        {
+          studentId,
+          studentName: profile?.name || user?.email,
+          category,
+          title,
+          description,
+          status: "Open",
+          date: new Date().toISOString().slice(0, 10),
+          priority,
+        },
+        studentId
+      );
+      setTitle("");
+      setDescription("");
+    } catch (err) {
+      console.error("Failed to submit complaint:", err);
+      setError("Couldn't submit your complaint. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -44,7 +63,7 @@ export default function Complaints() {
           <form onSubmit={submitComplaint} className="flex flex-col gap-4">
             <Field label="Category">
               <select className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)}>
-                {complaintCategories.map((c) => (
+                {COMPLAINT_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {c === "Room" ? "My room" : c === "Wing" ? "My wing" : c === "Food" ? "Mess / food" : "Other"}
                   </option>
@@ -85,8 +104,9 @@ export default function Complaints() {
                 ))}
               </div>
             </Field>
-            <Button type="submit" className="self-start">
-              Submit complaint
+            {error && <p className="text-sm text-rose-600">{error}</p>}
+            <Button type="submit" disabled={submitting} className="self-start">
+              {submitting ? "Submitting…" : "Submit complaint"}
             </Button>
           </form>
         </Card>
@@ -100,13 +120,15 @@ export default function Complaints() {
               onChange={(e) => setFilter(e.target.value)}
             >
               <option value="All">All categories</option>
-              {complaintCategories.map((c) => (
+              {COMPLAINT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
           }
         >
-          {filtered.length === 0 ? (
+          {complaintsQuery.loading ? (
+            <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+          ) : filtered.length === 0 ? (
             <EmptyState icon={<WrenchIcon />} title="No complaints here" description="Nothing filed in this category yet." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
