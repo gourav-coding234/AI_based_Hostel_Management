@@ -1,39 +1,43 @@
-// TODO: wire to Firestore public notices — the `notices` collection currently
-// requires an authenticated read (see firestore.rules). Either add a public
-// rule for a `visibility: "public"` subset, or serve this via a Cloud
-// Function, then swap this static array for a getCollection("notices", {...}) call.
-const SAMPLE_NOTICES = [
-  {
-    id: "n1",
-    title: "Hostel re-registration for the new semester opens Monday",
-    date: "12 Aug 2026",
-    tag: "Admin",
-    isNew: true,
-  },
-  {
-    id: "n2",
-    title: "Mess menu revised — new weekly schedule posted on the board",
-    date: "10 Aug 2026",
-    tag: "Mess",
-    isNew: true,
-  },
-  {
-    id: "n3",
-    title: "Fire safety drill scheduled for all blocks this Saturday, 10 AM",
-    date: "08 Aug 2026",
-    tag: "Safety",
-    isNew: false,
-  },
-  {
-    id: "n4",
-    title: "Gate pass requests must be submitted 24 hours in advance",
-    date: "05 Aug 2026",
-    tag: "Security",
-    isNew: false,
-  },
-];
+import { useCollection } from "../../hooks/useCollection";
+
+// Reads the real `notices` collection, restricted to documents an admin has
+// flagged with `isPublic: true`. That subset is readable without signing in
+// (see the `notices` rule in firestore.rules), which is what lets this
+// section work on the public landing page.
+//
+// Nothing here is fabricated: an empty or unreachable collection renders an
+// honest empty/error state rather than sample rows.
+
+const PRIORITY_TAG = {
+  Urgent: "Urgent",
+  Event: "Event",
+  General: "Notice",
+};
+
+/** Notices posted within the last 14 days get the "New" flag. */
+const NEW_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function isRecent(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return Date.now() - d.getTime() < NEW_WINDOW_MS;
+}
 
 export default function NoticeBoard() {
+  const { data, loading, error } = useCollection("notices", {
+    where: [["isPublic", "==", true]],
+    orderByField: "date",
+    orderByDirection: "desc",
+    limitCount: 5,
+  });
+
   return (
     <section id="notices" className="section on-paper">
       <div className="section-inner">
@@ -48,18 +52,39 @@ export default function NoticeBoard() {
           </p>
         </div>
 
-        <div className="notice-list">
-          {SAMPLE_NOTICES.map((notice) => (
-            <a key={notice.id} href="#notices" className="notice-item">
-              <time className="notice-date">{notice.date}</time>
-              <span className="notice-title">
-                {notice.title}
-                {notice.isNew && <span className="badge-new">New</span>}
-              </span>
-              <span className="notice-tag">{notice.tag}</span>
-            </a>
-          ))}
-        </div>
+        {loading && <p className="notice-state">Loading notices…</p>}
+
+        {!loading && error && (
+          <p className="notice-state">
+            Notices are unavailable right now. Please check the hostel notice board or contact the
+            office.
+          </p>
+        )}
+
+        {!loading && !error && data.length === 0 && (
+          <p className="notice-state">
+            No public notices have been posted yet. Sign in to view notices for your block.
+          </p>
+        )}
+
+        {!loading && !error && data.length > 0 && (
+          <div className="notice-list">
+            {data.map((notice) => (
+              <article key={notice.id} className="notice-item">
+                <time className="notice-date" dateTime={notice.date}>
+                  {formatDate(notice.date)}
+                </time>
+                <span className="notice-title">
+                  {notice.title}
+                  {isRecent(notice.date) && <span className="badge-new">New</span>}
+                </span>
+                <span className="notice-tag">
+                  {PRIORITY_TAG[notice.priority] || notice.target || "Notice"}
+                </span>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

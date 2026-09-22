@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill } from "../../../components/dashboard/student/ui";
 import { AsyncSection } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/student/icons";
 import { useCollection } from "../../../hooks/useCollection";
+import { noticeAppliesTo } from "../../../utils/notices";
 
 export default function Notices() {
+  const { profile } = useAuth();
   const noticesQuery = useCollection("notices", { orderByField: "date" });
-  const notices = noticesQuery.data;
+  const notices = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence));
   const [openId, setOpenId] = useState(null);
 
   return (
@@ -26,7 +29,7 @@ export default function Notices() {
       <AsyncSection
         loading={noticesQuery.loading}
         error={noticesQuery.error}
-        isEmpty={noticesQuery.isEmpty}
+        isEmpty={notices.length === 0}
         emptyTitle="No notices yet"
         emptyDescription="Notices posted by the warden or admin office will show up here."
         emptyIcon={<MegaphoneIcon />}

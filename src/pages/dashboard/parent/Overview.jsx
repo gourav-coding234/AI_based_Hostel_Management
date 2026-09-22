@@ -6,6 +6,7 @@ import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStud
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
+import { noticeAppliesTo } from "../../../utils/notices";
 
 function initials(name) {
   const source = (name || "?").trim();
@@ -23,7 +24,9 @@ export default function ParentOverview() {
   const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from" });
-  const notices = useCollection("notices", { orderByField: "date", limitCount: 3 });
+  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 12 });
+  const filteredNoticeData = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, studentUser?.hostelResidence)).slice(0, 3);
+  const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
 
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;

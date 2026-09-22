@@ -1,0 +1,13 @@
+# Normalise line endings so the repo behaves identically on Windows,
+# macOS and Linux. Without this, Windows checkouts can introduce CRLF
+# into source files and break diffs/tooling.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

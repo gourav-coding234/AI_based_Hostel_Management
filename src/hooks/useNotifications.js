@@ -39,6 +39,9 @@ const ROLE_WATCH = {
  * least one entry. Nothing here is fabricated — an empty database means an
  * empty (not fake) notification list.
  */
+// Shared stable reference for roles with nothing to watch.
+const EMPTY_WATCH = [];
+
 const NOTICES_PATH = {
   [ROLES.ADMIN]: "/dashboard/admin/notices",
   [ROLES.WARDEN]: "/dashboard/warden/notices",
@@ -48,11 +51,21 @@ const NOTICES_PATH = {
 };
 
 export function useNotifications(role) {
-  const watch = ROLE_WATCH[role] || [];
-  const spec = { notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } } };
-  watch.forEach((w) => {
-    spec[w.key] = { name: w.name };
-  });
+  // ROLE_WATCH is a module-level constant, so the array identity is stable
+  // per role — but the `|| []` fallback would allocate a fresh array on
+  // every render and retrigger the memo below. Pinning it to one shared
+  // empty array keeps the dependency stable.
+  const watch = ROLE_WATCH[role] || EMPTY_WATCH;
+
+  const spec = useMemo(() => {
+    const next = {
+      notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
+    };
+    watch.forEach((w) => {
+      next[w.key] = { name: w.name };
+    });
+    return next;
+  }, [watch]);
 
   const { data, loading } = useCollections(spec);
 
@@ -77,7 +90,7 @@ export function useNotifications(role) {
       .filter(Boolean);
 
     return [...pendingItems, ...noticeItems];
-  }, [data, watch]);
+  }, [data, watch, role]);
 
   return { items, loading };
 }

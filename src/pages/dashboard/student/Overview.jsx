@@ -18,6 +18,7 @@ import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
 import { addDocument } from "../../../firebase/firestore";
+import { noticeAppliesTo } from "../../../utils/notices";
 
 export default function Overview() {
   const { profile, user } = useAuth();
@@ -33,7 +34,13 @@ export default function Overview() {
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
   const complaints = useStudentCollection("complaints", studentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", studentId, { orderByField: "from" });
-  const notices = useCollection("notices", { orderByField: "date", limitCount: 3 });
+  // Fetch a bit more than we display — filtering by wing happens client-side
+  // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
+  // silently drop relevant notices behind irrelevant ones targeted at a
+  // different wing.
+  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 12 });
+  const filteredNoticeData = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence)).slice(0, 3);
+  const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
 
   const myAllocation = profile?.room
     ? profile

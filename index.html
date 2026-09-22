@@ -2,14 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- viewport-fit=cover lets the layout extend under notches/rounded
+         corners; the CSS then pads content back with env(safe-area-inset-*).
+         Zoom is deliberately NOT disabled — blocking it fails accessibility. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1b2c" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <title>GCEKJR Hostel Portal | AI-Based Smart Hostel Management</title>
+    <meta
+      name="description"
+      content="Official smart hostel management portal for Government College of Engineering, Keonjhar. Role-based dashboards for students, parents, wardens, security and administrators."
+    />
+    <meta name="author" content="Government College of Engineering, Keonjhar" />
+
+    <!-- Open Graph / link previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GCEKJR Hostel Portal" />
+    <meta
+      property="og:description"
+      content="Role-based smart hostel management for students, parents, wardens, security and administrators."
+    />
+    <meta property="og:image" content="/apple-touch-icon.png" />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GCEKJR Hostel Portal | AI-Based Smart Hostel Management</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Hostel Portal" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="font-family: system-ui, sans-serif; padding: 40px; text-align: center">
+        <h1>JavaScript is required</h1>
+        <p>
+          The GCE Keonjhar Hostel Portal needs JavaScript enabled. Please turn it on in your
+          browser settings and reload this page.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

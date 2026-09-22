@@ -14,8 +14,16 @@ export default function Brochure() {
             </p>
           </div>
 
-          {/* TODO: replace with the real brochure PDF at /public/brochure.pdf */}
-          <a href="/brochure.pdf" download className="btn btn-white">
+          {/* Served from public/brochure.pdf. `download` names the saved
+              file; target/rel let it open in a new tab on browsers that
+              preview PDFs inline rather than downloading. */}
+          <a
+            href="/brochure.pdf"
+            download="GCE-Keonjhar-Hostel-Brochure.pdf"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-white"
+          >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M10 3v10m0 0-4-4m4 4 4-4M4 16.5h12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

@@ -165,6 +165,31 @@ export const IMPORT_SCHEMAS = {
       { key: "date", label: "Date", required: false, type: "date" },
     ],
   },
+  studentRegister: {
+    dedupeKeys: ["regNo"],
+    label: "Student register (academic)",
+    collection: "studentRegister",
+    description:
+      "The institute-wide academic roster — registration number, branch and year for every " +
+      "enrolled student, independent of hostel residency or portal login. Import the full " +
+      "college register here first; use Manage Users separately, only for students who need " +
+      "an actual portal login.",
+    columns: [
+      { key: "regNo", label: "Registration No", required: true, type: "string" },
+      { key: "name", label: "Name", required: true, type: "string" },
+      { key: "gender", label: "Gender", required: true, type: "enum", enumValues: ["Male", "Female"] },
+      { key: "branch", label: "Branch", required: true, type: "string" },
+      { key: "branchCode", label: "Branch code", required: false, type: "string" },
+      {
+        key: "year", label: "Year", required: true, type: "enum",
+        enumValues: ["1st Year", "2nd Year", "3rd Year", "4th Year"],
+      },
+      { key: "batch", label: "Batch", required: false, type: "string" },
+      { key: "admissionYear", label: "Admission year", required: false, type: "number" },
+      { key: "email", label: "Email", required: false, type: "email" },
+      { key: "phone", label: "Phone", required: false, type: "string" },
+    ],
+  },
   dutyRoster: {
     dedupeKeys: ["guardName", "date", "gate"],
     label: "Security duty roster",

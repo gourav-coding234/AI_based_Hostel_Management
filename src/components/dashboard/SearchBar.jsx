@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { flatNavForRole } from "../../config/navigation";
+import { useDismissableMenu } from "../../hooks/useDismissableMenu";
 
 const SEARCH_ICON = (
   <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
@@ -16,22 +17,13 @@ const SEARCH_ICON = (
  */
 export default function SearchBar({ role }) {
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [open, setOpen, ref] = useDismissableMenu();
   const navigate = useNavigate();
   const items = flatNavForRole(role);
 
   const results = query.trim()
     ? items.filter((i) => i.label.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 6)
     : [];
-
-  useEffect(() => {
-    function onClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
 
   function go(to) {
     setQuery("");
@@ -49,11 +41,18 @@ export default function SearchBar({ role }) {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") e.currentTarget.blur();
+        }}
         placeholder="Search pages…"
         className="topbar-search-input"
+        role="combobox"
+        aria-expanded={open && results.length > 0}
+        aria-controls="topbar-search-results"
+        aria-autocomplete="list"
       />
       {open && results.length > 0 && (
-        <div className="dropdown-panel search-panel">
+        <div className="dropdown-panel search-panel" role="listbox" id="topbar-search-results">
           <ul className="notification-list">
             {results.map((r) => (
               <li key={r.to}>

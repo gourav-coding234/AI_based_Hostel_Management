@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 // Small, shared UI primitives for the dashboard sections.
 // Pure presentational components — no data fetching, no auth logic.
 
@@ -82,13 +83,16 @@ export function Field({ label, children }) {
 
 export const inputCls = "input";
 
-export function Button({ children, variant = "primary", className = "", ...props }) {
+export const Button = forwardRef(function Button(
+  { children, variant = "primary", className = "", ...props },
+  ref
+) {
   return (
-    <button type="button" className={`btn btn-${variant} ${className}`} {...props}>
+    <button ref={ref} type="button" className={`btn btn-${variant} ${className}`} {...props}>
       {children}
     </button>
   );
-}
+});
 
 export function EmptyState({ icon, title, description }) {
   return (

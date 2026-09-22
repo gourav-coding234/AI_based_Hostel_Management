@@ -43,3 +43,28 @@ export const CSV_TEMPLATE =
   "name,email,password,role,hostelResidence,linkedStudentId\n" +
   "Anita Sahoo,anita.sahoo@example.com,ChangeMe123,Student,Block C,\n" +
   "Ravi Kumar,ravi.kumar@example.com,ChangeMe123,Parent,,s27\n";
+
+/**
+ * Triggers a browser "Save As" for text content (used for CSV exports and
+ * the bulk-upload template).
+ *
+ * Two things that look redundant here are mobile-Safari workarounds:
+ *  - The link must be attached to the DOM before `.click()` — some WebKit
+ *    versions ignore the click on a detached anchor.
+ *  - The object URL must not be revoked synchronously. `.click()` returns
+ *    before the browser has necessarily started the download, so revoking
+ *    on the same tick can leave the download reading a dead URL. A short
+ *    delay lets it start first.
+ */
+export function downloadTextFile(content, filename, mimeType = "text/csv") {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8;` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

@@ -4,6 +4,7 @@ import AdminOverview from "./admin/Overview";
 import DataImport from "./admin/DataImport";
 import ManageUsers from "./admin/ManageUsers";
 import Wardens from "./admin/Wardens";
+import StudentRegister from "./admin/StudentRegister";
 import Complaints from "./admin/Complaints";
 import Fees from "./admin/Fees";
 import Notices from "./admin/Notices";
@@ -26,6 +27,7 @@ export default function AdminDashboard() {
         <Route path="users" element={<ManageUsers />} />
         <Route path="data-import" element={<DataImport />} />
         <Route path="wardens" element={<Wardens />} />
+        <Route path="student-register" element={<StudentRegister />} />
         <Route path="blocks" element={<Blocks />} />
         <Route path="visitors" element={<Visitors />} />
         <Route path="gate-passes" element={<GatePasses />} />

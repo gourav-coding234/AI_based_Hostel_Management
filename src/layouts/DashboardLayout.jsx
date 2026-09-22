@@ -41,6 +41,36 @@ export default function DashboardLayout({ title, children }) {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  // While the drawer is open, lock the page behind it and let Escape close
+  // it. Without the lock, scrolling on a phone moves the page under the
+  // overlay instead of the menu, which reads as a broken screen.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    document.body.classList.add("has-drawer-open");
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.classList.remove("has-drawer-open");
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  // A desktop resize while the drawer is open would otherwise leave the
+  // body scroll-locked with no visible overlay to dismiss.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    function onChange(e) {
+      if (e.matches) setMenuOpen(false);
+    }
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   const activeItem = role ? findActiveItem(role, location.pathname) : null;
   const pageTitle = activeItem?.label || title;
 

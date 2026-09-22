@@ -62,6 +62,7 @@ export const NAVIGATION = {
       items: [
         { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
         { label: "Wardens", to: "/dashboard/admin/wardens", icon: <UsersIcon /> },
+        { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
         { label: "Blocks & Rooms", to: "/dashboard/admin/blocks", icon: <BuildingIcon /> },
       ],
     },

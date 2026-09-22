@@ -2,6 +2,7 @@ import { Card, Button } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { ChartIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { downloadTextFile } from "../../../utils/csv";
 
 function toCsv(rows) {
   if (!rows.length) return "";
@@ -14,14 +15,7 @@ function toCsv(rows) {
 }
 
 function download(rows, name) {
-  const csv = toCsv(rows);
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${name.toLowerCase().replace(/\s+/g, "-")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadTextFile(toCsv(rows), `${name.toLowerCase().replace(/\s+/g, "-")}.csv`);
 }
 
 export default function Reports() {

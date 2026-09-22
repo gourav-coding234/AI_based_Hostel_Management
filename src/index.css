@@ -527,6 +527,7 @@ img {
    ======================================================================= */
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   background: var(--paper);
 }
@@ -936,6 +937,9 @@ img {
   right: 0;
   z-index: 50;
   min-width: 260px;
+  /* Clamped so a 260px panel can never force the page to scroll
+     sideways on a narrow phone, even if its anchor sits near the edge. */
+  max-width: calc(100vw - 24px);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1167,6 +1171,21 @@ img {
   --border: #263042;
   --border-strong: #34405a;
   --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.45);
+
+  /* Pastel status backgrounds (pills, stat-card icons, metric tags, role
+     badge). The light-mode versions are near-white — correct on a white
+     page, but a stray light patch on a dark one — so they become
+     translucent tints instead. The matching -600 tokens are deliberately
+     NOT redefined here: they also serve as solid fills elsewhere (the
+     active sidebar link, delete buttons, notification dots), where
+     lightening them would turn an intentional solid accent into a pale
+     pastel button. Where a -600 token is used as *text* on one of these
+     pastel backgrounds, a brighter dark-mode-only colour is set directly
+     on that class below instead, so solid fills stay untouched. */
+  --red-100: rgba(224, 87, 74, 0.16);
+  --green-100: rgba(63, 125, 85, 0.18);
+  --amber-100: rgba(164, 116, 11, 0.18);
+  --gold-100: rgba(168, 121, 31, 0.2);
 }
 [data-theme="dark"] .sidebar {
   background: #0a1119;
@@ -1184,6 +1203,50 @@ img {
 [data-theme="dark"] .topbar-search-input {
   background: var(--paper);
   border-color: var(--border);
+  color: var(--ink);
+}
+
+/* Text colour on the pastel status chips above (pills, stat-card icons,
+   metric tags, role badge, form error, delete-danger link text). Kept
+   separate from the shared -600 tokens — see the comment on the dark
+   :root block — because those tokens double as solid button/accent fills
+   elsewhere, which must stay saturated rather than lighten. Each colour
+   below is chosen to clear WCAG AA (4.5:1) against the dark surface;
+   the light-mode values were as low as 2.75:1 against it. */
+[data-theme="dark"] .pill-red,
+[data-theme="dark"] .stat-icon.tone-rose,
+[data-theme="dark"] .metric-tag.tone-rose,
+[data-theme="dark"] .form-error {
+  color: #f4a29c;
+}
+[data-theme="dark"] .form-error {
+  /* .form-error's border is a literal hex, not a token (see .form-error
+     above), so it needs its own override rather than following -100/-600. */
+  border-color: rgba(224, 87, 74, 0.4);
+}
+/* .progress-fill.tone-rose is deliberately left alone: it's a solid
+   decorative bar fill, the same category as the active sidebar link and
+   delete buttons, not pastel-chip text — a saturated red reads fine there
+   against the dark surface and has no text-contrast requirement. */
+[data-theme="dark"] .pill-green,
+[data-theme="dark"] .stat-icon.tone-teal,
+[data-theme="dark"] .metric-tag.tone-teal {
+  color: #8fd6ab;
+}
+[data-theme="dark"] .pill-amber,
+[data-theme="dark"] .stat-icon.tone-amber,
+[data-theme="dark"] .metric-tag.tone-amber {
+  color: #f3c15c;
+}
+[data-theme="dark"] .role-badge {
+  color: #e8c273;
+}
+[data-theme="dark"] .pill-gray {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+[data-theme="dark"] .pill-navy {
+  background: rgba(255, 255, 255, 0.08);
   color: var(--ink);
 }
 
@@ -1929,9 +1992,10 @@ img {
    ======================================================================= */
 .auth-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--surface);
 }
 
 .auth-body {
@@ -2186,4 +2250,518 @@ img {
 }
 .help-box a:hover {
   text-decoration: underline;
+}
+
+
+/* =======================================================================
+   Setup-required / error-boundary screens
+   These render outside the normal app shell (no sidebar, no auth), so they
+   carry their own self-contained layout.
+   ======================================================================= */
+.setup-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 20px
+    calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+}
+
+.setup-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.setup-badge {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--gold-100);
+  color: var(--gold-600);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.setup-badge.is-error {
+  background: var(--red-100);
+  color: var(--red-600);
+}
+
+.setup-title {
+  font-family: var(--font-head);
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.setup-lead {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.setup-steps {
+  margin: 20px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.setup-steps strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.setup-steps a {
+  color: var(--navy-700);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.setup-card code {
+  padding: 1.5px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", "SF Mono", monospace;
+  font-size: 0.88em;
+  color: var(--ink);
+  /* Long env-var names must not push the card sideways on a phone. */
+  overflow-wrap: anywhere;
+}
+
+.setup-missing {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--red-500);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.setup-missing-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.setup-missing ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.setup-actions {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.setup-details {
+  margin-top: 20px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.setup-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+  /* Comfortable tap target on touch screens. */
+  padding: 8px 0;
+}
+.setup-details pre {
+  margin-top: 8px;
+  padding: 12px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", "SF Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.setup-foot {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+
+/* =======================================================================
+   Mobile hardening
+   Fixes that only show up on a real handset: iOS zoom-on-focus, notch
+   safe areas, background scroll behind the drawer, and accidental
+   horizontal overflow from wide tables or long unbroken strings.
+   ======================================================================= */
+
+/* --- Horizontal overflow guard -----------------------------------------
+   A single wide element (table, pre, long URL) is enough to make the whole
+   page pan sideways on a phone. Clamping at the root means an overflowing
+   child scrolls inside its own container instead of moving the layout. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Stops iOS rescaling text when the device is rotated to landscape. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* --- Safe-area insets ---------------------------------------------------
+   With viewport-fit=cover the page paints under the notch and the home
+   indicator, so fixed/sticky chrome has to pad itself back into view. */
+.topbar {
+  padding-top: calc(13px + env(safe-area-inset-top, 0px));
+  padding-left: calc(22px + env(safe-area-inset-left, 0px));
+  padding-right: calc(22px + env(safe-area-inset-right, 0px));
+}
+
+.sidebar {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.dashboard-content {
+  padding-left: calc(22px + env(safe-area-inset-left, 0px));
+  padding-right: calc(22px + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  .dashboard-content {
+    padding-left: calc(32px + env(safe-area-inset-left, 0px));
+    padding-right: calc(32px + env(safe-area-inset-right, 0px));
+  }
+}
+
+/* --- Scroll lock --------------------------------------------------------
+   Set on <body> while the mobile drawer is open so the page underneath
+   doesn't scroll away behind the overlay. */
+body.has-drawer-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* --- Touch ergonomics --------------------------------------------------- */
+@media (hover: none) and (pointer: coarse) {
+  /* iOS Safari zooms the viewport whenever a focused input renders below
+     16px. Every form in the app uses .input, so raising it here removes
+     the zoom-and-stay-zoomed behaviour across all of them. */
+  .input,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* WCAG-recommended minimum touch target. The icon buttons in the topbar
+     were 34px, which is a genuine mis-tap risk on a phone. */
+  .menu-btn,
+  .icon-btn,
+  .sidebar-logout-btn,
+  .menu-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .sidebar-link,
+  .mobile-nav-link,
+  .role-btn {
+    min-height: 44px;
+  }
+
+  /* Hover styles stick after a tap on touch devices — suppress them so
+     rows don't stay highlighted after being pressed. */
+  .sidebar-link:hover,
+  .nav-link:hover {
+    background: inherit;
+  }
+}
+
+/* Removes the grey flash iOS paints over tapped elements. */
+a,
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --- Scrollable regions ------------------------------------------------- */
+/* Wide tables live in .overflow-x-auto wrappers; give them momentum
+   scrolling and make it visually obvious they scroll. */
+.overflow-x-auto,
+.table-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* --- Long-word wrapping -------------------------------------------------
+   Emails, room codes and IDs are the usual culprits for blowing out a
+   narrow card. */
+.topbar-title,
+.sidebar-user-email,
+.sidebar-user-name {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar-right {
+    gap: 6px;
+  }
+  .topbar-title {
+    font-size: 15px;
+    /* Keep the title on one line so the action icons never wrap below. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dashboard-content {
+    padding-top: 16px;
+  }
+}
+
+/* --- Print --------------------------------------------------------------
+   Wardens and admins print reports and gate passes; without this the
+   sidebar and topbar waste the first page. */
+@media print {
+  .sidebar,
+  .sidebar-overlay,
+  .topbar,
+  .menu-btn,
+  .navbar,
+  .masthead {
+    display: none !important;
+  }
+  .app-shell,
+  .dashboard-content {
+    display: block;
+    padding: 0;
+    background: #fff;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
+
+/* =======================================================================
+   Dark theme — utility remapping layer
+   -----------------------------------------------------------------------
+   The dashboard pages were written with fixed light-mode Tailwind colours
+   (bg-white, text-slate-*, text-ink, ...) before the theme toggle existed,
+   so in dark mode they stayed white-on-white and were unreadable.
+
+   Rather than rewriting ~700 class usages across 68 files — a large,
+   regression-prone diff — the handful of neutral utilities actually in use
+   are remapped here to the same CSS custom properties the rest of the
+   stylesheet already themes. One definition per utility, and any page that
+   uses them inherits correct dark styling automatically.
+
+   Utilities that sit on an already-dark surface (text-white, ring-white/10,
+   border-white/20, bg-white/5, bg-navy-950) are intentionally untouched.
+   ======================================================================= */
+
+/* --- Surfaces ----------------------------------------------------------- */
+[data-theme="dark"] .bg-white {
+  background-color: var(--surface);
+}
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .bg-slate-50\/60 {
+  background-color: var(--paper);
+}
+[data-theme="dark"] .bg-slate-100 {
+  background-color: #1f2a3b;
+}
+[data-theme="dark"] .bg-navy-950\/5 {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* --- Text --------------------------------------------------------------- */
+[data-theme="dark"] .text-ink,
+[data-theme="dark"] .text-navy-950,
+[data-theme="dark"] .text-navy-900,
+[data-theme="dark"] .text-navy-800 {
+  color: var(--ink);
+}
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-500 {
+  color: var(--text-muted);
+}
+[data-theme="dark"] .text-slate-400,
+[data-theme="dark"] .text-slate-300 {
+  color: var(--text-faint);
+}
+[data-theme="dark"] .text-slate-200,
+[data-theme="dark"] .text-slate-100 {
+  color: var(--ink);
+}
+[data-theme="dark"] .placeholder\:text-slate-400::placeholder {
+  color: var(--text-faint);
+}
+
+/* --- Borders and dividers ------------------------------------------------ */
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-200\/80,
+[data-theme="dark"] .border-slate-100 {
+  border-color: var(--border);
+}
+[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+[data-theme="dark"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+/* --- Shadows -------------------------------------------------------------
+   Light-grey shadows are invisible on a dark page and leave cards looking
+   flat, so they're swapped for genuine depth. */
+[data-theme="dark"] .shadow-slate-200\/60,
+[data-theme="dark"] .shadow-slate-100 {
+  --tw-shadow-color: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Interactive states --------------------------------------------------- */
+[data-theme="dark"] .hover\:text-ink:hover {
+  color: var(--ink);
+}
+[data-theme="dark"] .hover\:bg-slate-50:hover,
+[data-theme="dark"] .hover\:bg-slate-50\/70:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .hover\:border-slate-200:hover,
+[data-theme="dark"] .hover\:border-slate-300:hover {
+  border-color: var(--border-strong);
+}
+
+/* --- Accent chips ---------------------------------------------------------
+   These pair a pale tinted background with dark tinted text. Both halves
+   are inverted together so the pairing keeps its contrast. */
+[data-theme="dark"] .bg-teal-50 {
+  background-color: rgba(45, 212, 191, 0.14);
+}
+[data-theme="dark"] .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.14);
+}
+[data-theme="dark"] .bg-amber-50 {
+  background-color: rgba(251, 191, 36, 0.14);
+}
+[data-theme="dark"] .text-teal-700,
+[data-theme="dark"] .text-teal-800,
+[data-theme="dark"] .text-teal-600 {
+  color: #5eead4;
+}
+[data-theme="dark"] .text-rose-700,
+[data-theme="dark"] .text-rose-600 {
+  color: #fda4af;
+}
+[data-theme="dark"] .text-amber-800,
+[data-theme="dark"] .text-amber-700,
+[data-theme="dark"] .text-amber-600 {
+  color: #fcd34d;
+}
+[data-theme="dark"] .border-teal-300,
+[data-theme="dark"] .border-teal-200 {
+  border-color: rgba(45, 212, 191, 0.4);
+}
+[data-theme="dark"] .border-rose-200 {
+  border-color: rgba(244, 63, 94, 0.4);
+}
+[data-theme="dark"] .border-amber-200 {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+[data-theme="dark"] .hover\:text-teal-700:hover,
+[data-theme="dark"] .hover\:text-teal-800:hover {
+  color: #99f6e4;
+}
+[data-theme="dark"] .hover\:bg-rose-50:hover {
+  background-color: rgba(244, 63, 94, 0.18);
+}
+
+/* --- Landing page --------------------------------------------------------
+   The public site is a themed surface too, so the one hardcoded wrapper
+   and the 404 page follow the tokens rather than pinning themselves white. */
+[data-theme="dark"] .min-h-screen.bg-white {
+  background-color: var(--paper);
+}
+
+/* --- Form controls --------------------------------------------------------
+   Native controls default to a light UA appearance; this tells the browser
+   to render their built-in chrome (dropdown arrows, date pickers,
+   scrollbars, autofill) in the matching scheme. */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--surface);
+  border-color: var(--border);
+  color: var(--ink);
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-faint);
+}
+
+
+/* Route-level lazy-loading fallback (see App.jsx). */
+.route-fallback {
+  min-height: 60vh;
+  min-height: 60dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.route-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--navy-700);
+  border-radius: 50%;
+  animation: route-spin 0.7s linear infinite;
+}
+@keyframes route-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty / loading / error line on the public notice board. */
+.notice-state {
+  padding: 22px 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
 }

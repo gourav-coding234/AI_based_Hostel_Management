@@ -69,7 +69,7 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
            "name", "dob", "phone", "bloodGroup", "address",
            "emergencyContactName", "emergencyContactPhone", "bio",
-           "photoURL", "gateAssigned", "shift", "updatedAt"
+           "photoURL", "gateAssigned", "shift", "relationToStudent", "updatedAt"
          ]));
     }
 
@@ -117,8 +117,15 @@ service cloud.firestore {
     }
 
     match /notices/{noticeId} {
-      // Notices are institution-wide, not per-student — no scoping needed.
-      allow read: if signedIn();
+      // Notices are institution-wide, not per-student — no scoping needed
+      // for signed-in users.
+      //
+      // Notices explicitly flagged `isPublic: true` are additionally
+      // readable by anyone, signed in or not: that is what powers the
+      // notice board on the public landing page. The flag is set by staff
+      // through the admin "Show on the public website" checkbox, so an
+      // internal notice is never exposed unless someone opts it in.
+      allow read: if signedIn() || resource.data.isPublic == true;
       allow write: if isStaff();
     }
 
@@ -126,6 +133,17 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if signedIn();
       allow update, delete: if false;
+    }
+
+    match /studentRegister/{regId} {
+      // Institute-wide academic roster (registration no, branch, year) —
+      // separate from hostel residency and portal login. Any signed-in
+      // role can look a student up by registration number; only staff
+      // can bulk-import or edit it. Deliberately keyed by registration
+      // number, not Auth UID, since a register entry can exist for a
+      // student long before — or entirely without — a portal account.
+      allow read: if signedIn();
+      allow write: if isStaff();
     }
 
     match /blocks/{blockId} {

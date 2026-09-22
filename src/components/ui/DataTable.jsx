@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LoadingState, ErrorState, EmptyState } from "./DataState";
 
 const CHEVRON_UP_DOWN = (
@@ -17,30 +17,88 @@ const DOTS_ICON = (
 
 function RowActionsMenu({ actions }) {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+
+  // The table scrolls horizontally inside .overflow-x-auto, and an
+  // absolutely-positioned menu is clipped by that container — on a phone
+  // the menu was cut off entirely. Positioning it fixed, against the
+  // viewport, takes it out of the clipping context.
+  const place = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const MENU_W = 160;
+    const MENU_H = 8 + actions.length * 30;
+
+    // Flip above / clamp inside the viewport so the menu is never
+    // off-screen for rows near an edge.
+    const openUp = r.bottom + MENU_H > window.innerHeight && r.top > MENU_H;
+    const top = openUp ? r.top - MENU_H - 4 : r.bottom + 4;
+    const left = Math.min(Math.max(8, r.right - MENU_W), window.innerWidth - MENU_W - 8);
+
+    setCoords({ top, left });
+  }, [actions.length]);
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const close = () => setOpen(false);
+    function onKeyDown(e) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    // Any scroll (page or table) would detach a fixed menu from its row,
+    // so dismiss instead of trying to track it.
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   if (!actions || actions.length === 0) return null;
+
   return (
-    <div className="relative inline-block text-left" onClick={(e) => e.stopPropagation()}>
+    <div className="inline-block text-left" onClick={(e) => e.stopPropagation()}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-ink"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-ink"
         aria-label="Row actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {DOTS_ICON}
       </button>
+
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-md shadow-slate-200/60">
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", top: coords.top, left: coords.left, width: 160 }}
+            className="z-50 rounded-lg border border-slate-200 bg-white py-1 shadow-md shadow-slate-200/60"
+          >
             {actions.map((a) => (
               <button
                 key={a.label}
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setOpen(false);
                   a.onClick();
                 }}
-                className={`block w-full px-3 py-1.5 text-left text-xs font-medium ${
+                className={`block w-full px-3 py-2 text-left text-xs font-medium ${
                   a.danger ? "text-rose-600 hover:bg-rose-50" : "text-slate-600 hover:bg-slate-50"
                 }`}
               >

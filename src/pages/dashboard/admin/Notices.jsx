@@ -10,7 +10,16 @@ import { addDocument, updateDocument, deleteDocument } from "../../../firebase/f
 const NOTICE_TARGETS = ["All Hostels", "A Wing", "B Wing", "C Wing"];
 const NOTICE_PRIORITIES = ["General", "Urgent", "Event"];
 
-const emptyDraft = { title: "", body: "", target: NOTICE_TARGETS[0], priority: NOTICE_PRIORITIES[0] };
+const emptyDraft = {
+  title: "",
+  body: "",
+  target: NOTICE_TARGETS[0],
+  priority: NOTICE_PRIORITIES[0],
+  // Only notices explicitly marked public are readable without signing in
+  // (see the `notices` rule in firestore.rules) and shown on the landing
+  // page. Defaults to off so nothing is published externally by accident.
+  isPublic: false,
+};
 
 export default function Notices() {
   const { user, profile } = useAuth();
@@ -29,7 +38,13 @@ export default function Notices() {
 
   function startEdit(n) {
     setEditingId(n.id);
-    setDraft({ title: n.title, body: n.body, target: n.target, priority: n.priority });
+    setDraft({
+      title: n.title,
+      body: n.body,
+      target: n.target,
+      priority: n.priority,
+      isPublic: Boolean(n.isPublic),
+    });
   }
 
   function cancelEdit() {
@@ -93,6 +108,17 @@ export default function Notices() {
       ),
     },
     { key: "target", label: "Target", sortable: true },
+    {
+      key: "isPublic",
+      label: "Website",
+      sortable: true,
+      render: (n) =>
+        n.isPublic ? (
+          <span className="text-xs font-medium text-teal-600">Public</span>
+        ) : (
+          <span className="text-xs text-slate-400">Internal</span>
+        ),
+    },
     { key: "date", label: "Date", sortable: true },
   ];
 
@@ -148,6 +174,23 @@ export default function Notices() {
                 </select>
               </Field>
             </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3.5">
+              <input
+                type="checkbox"
+                checked={draft.isPublic}
+                onChange={(e) => setDraft((d) => ({ ...d, isPublic: e.target.checked }))}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-teal-600"
+              />
+              <span>
+                <span className="block text-sm font-medium text-ink">Show on the public website</span>
+                <span className="block text-xs text-slate-500">
+                  Also lists this notice on the landing-page notice board, visible to anyone without
+                  signing in. Leave off for internal-only notices.
+                </span>
+              </span>
+            </label>
+
             <div className="flex gap-2">
               <Button type="submit" disabled={saving}>{saving ? "Saving…" : editingId === "new" ? "Publish notice" : "Save changes"}</Button>
               <Button type="button" variant="outline" onClick={cancelEdit}>Cancel</Button>

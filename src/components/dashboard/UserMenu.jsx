@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useDismissableMenu } from "../../hooks/useDismissableMenu";
 
 const CHEVRON = (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -18,20 +18,20 @@ const PROFILE_PATH_BY_ROLE = {
 
 export default function UserMenu() {
   const { profile, user, role, logout } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [open, setOpen, ref] = useDismissableMenu();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    function onClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
-
-  const displayName = profile?.name ?? user?.email ?? "User";
-  const initials = displayName.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  // Guarded the same way as Sidebar's initials: an empty/whitespace name
+  // must not produce a blank avatar badge.
+  const displayName = profile?.name?.trim() || user?.email || "User";
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "U";
   const profilePath = PROFILE_PATH_BY_ROLE[role];
 
   async function handleLogout() {
@@ -41,7 +41,13 @@ export default function UserMenu() {
 
   return (
     <div className="topbar-menu" ref={ref}>
-      <button type="button" className="user-chip user-chip-btn" onClick={() => setOpen((o) => !o)}>
+      <button
+        type="button"
+        className="user-chip user-chip-btn"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
         {profile?.photoURL ? (
           <img src={profile.photoURL} alt="" className="user-avatar" />
         ) : (
@@ -52,7 +58,7 @@ export default function UserMenu() {
       </button>
 
       {open && (
-        <div className="dropdown-panel user-panel">
+        <div className="dropdown-panel user-panel" role="menu" aria-label="Account menu">
           <div className="user-panel-header">
             <p className="user-panel-name">{displayName}</p>
             <p className="user-panel-email">{user?.email}</p>

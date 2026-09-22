@@ -3,7 +3,10 @@
 // No demo/sample rows are ever injected here — an invalid or empty file
 // simply produces an empty/erroring result for the UI to report.
 
-import * as XLSX from "xlsx";
+// `xlsx` is ~330 kB — a third of the admin bundle — and is only needed when
+// someone actually uploads a spreadsheet. Importing it dynamically inside
+// parseDataFile keeps it out of the initial dashboard download; CSV uploads
+// never fetch it at all.
 
 /** Minimal RFC4180-ish CSV line splitter (handles quoted commas). */
 function parseCsvText(text) {
@@ -70,6 +73,7 @@ export async function parseDataFile(file) {
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "array" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];

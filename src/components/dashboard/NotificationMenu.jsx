@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "../../hooks/useNotifications";
+import { useDismissableMenu } from "../../hooks/useDismissableMenu";
 
 const BELL_ICON = (
   <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7">
@@ -11,17 +11,8 @@ const BELL_ICON = (
 
 export default function NotificationMenu({ role }) {
   const { items, loading } = useNotifications(role);
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [open, setOpen, ref] = useDismissableMenu();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    function onClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
 
   return (
     <div className="topbar-menu" ref={ref}>
@@ -30,13 +21,15 @@ export default function NotificationMenu({ role }) {
         className="icon-btn"
         onClick={() => setOpen((o) => !o)}
         aria-label="Notifications"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {BELL_ICON}
         {items.length > 0 && <span className="icon-btn-dot" />}
       </button>
 
       {open && (
-        <div className="dropdown-panel notification-panel">
+        <div className="dropdown-panel notification-panel" role="menu" aria-label="Notifications">
           <p className="dropdown-panel-title">Notifications</p>
           {loading ? (
             <p className="dropdown-empty">Loading…</p>

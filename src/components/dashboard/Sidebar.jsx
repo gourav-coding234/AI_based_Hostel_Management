@@ -13,13 +13,15 @@ export default function Sidebar({ role, open, onClose, collapsed, onToggleCollap
   const navigate = useNavigate();
   const groups = NAVIGATION[role] || [];
 
-  const displayName = profile?.name ?? user?.email ?? "User";
-  const initials = displayName
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const displayName = profile?.name?.trim() || user?.email || "User";
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "U";
 
   async function handleLogout() {
     await logout();
@@ -30,7 +32,10 @@ export default function Sidebar({ role, open, onClose, collapsed, onToggleCollap
     <>
       {open && <div className="sidebar-overlay" onClick={onClose} aria-hidden="true" />}
 
-      <aside className={`sidebar ${open ? "is-open" : ""} ${collapsed ? "is-collapsed" : ""}`}>
+      <aside
+        className={`sidebar ${open ? "is-open" : ""} ${collapsed ? "is-collapsed" : ""}`}
+        aria-label="Main navigation"
+      >
         <div className="sidebar-brand">
           <span className="sidebar-brand-mark">G</span>
           {!collapsed && (

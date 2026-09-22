@@ -26,7 +26,7 @@ export default function WardenOverview() {
   const displayName = profile?.name || user?.email?.split("@")[0] || "Warden";
   const myWing = profile?.block;
 
-  const { data, loading } = useCollections({
+  const { data } = useCollections({
     blocks: { name: "blocks" },
     complaints: { name: "complaints", options: { orderByField: "date" } },
     fees: { name: "fees" },

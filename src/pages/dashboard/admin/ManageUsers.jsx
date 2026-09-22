@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { createUserAccount, friendlyCreateAccountError } from "../../../firebase/adminUsers";
 import { getCollection, deleteUserProfile, logAudit } from "../../../firebase/firestore";
-import { parseUsersCsv, CSV_TEMPLATE } from "../../../utils/csv";
+import { parseUsersCsv, CSV_TEMPLATE, downloadTextFile } from "../../../utils/csv";
 import { ROLE_LIST } from "../../../roles";
 import { Card, Button, Field, inputCls, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { DownloadIcon, SearchIcon, TrashIcon, UsersIcon } from "../../../components/dashboard/admin/icons";
@@ -120,13 +120,7 @@ export default function ManageUsers() {
   }
 
   function downloadTemplate() {
-    const blob = new Blob([CSV_TEMPLATE], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bulk-users-template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(CSV_TEMPLATE, "bulk-users-template.csv");
   }
 
   function handleFileUpload(e) {
