@@ -49,8 +49,18 @@ function monthLabel(ym) {
 
 export default function Attendance() {
   const { user } = useAuth();
-  const attendanceQuery = useStudentCollection("attendance", user?.uid || "", { orderByField: "date", orderByDirection: "asc" });
-  const attendanceLog = attendanceQuery.items;
+  const studentId = user?.uid || "";
+  // useStudentCollection already scopes this query to `where("studentId","==",studentId)`,
+  // and Firestore rules only allow a student to read attendance where
+  // studentId == request.auth.uid. This extra filter is a defense-in-depth
+  // guard: it guarantees that even if a returned document were ever missing
+  // that constraint, a record belonging to any other student is dropped
+  // before it can reach the UI.
+  const attendanceQuery = useStudentCollection("attendance", studentId, { orderByField: "date", orderByDirection: "asc" });
+  const attendanceLog = useMemo(
+    () => attendanceQuery.items.filter((r) => r.studentId === studentId),
+    [attendanceQuery.items, studentId]
+  );
 
   const logByDate = useMemo(() => new Map(attendanceLog.map((r) => [r.date, r])), [attendanceLog]);
   const allMonths = useMemo(() => {
@@ -143,7 +153,7 @@ export default function Attendance() {
               <CheckSquareIcon />
             </span>
             <div>
-              <p className="font-display text-lg font-semibold text-ink">My attendance</p>
+              <p className="font-display text-lg font-semibold text-ink">My Attendance</p>
               <p className="text-sm text-slate-500">
                 {overall.pct}% present overall · {rangeBounds.start} to {rangeBounds.end}
               </p>

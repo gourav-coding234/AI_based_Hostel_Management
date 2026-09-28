@@ -11,7 +11,7 @@ import { UserIcon } from "./icons";
  *   if (status) return status;
  *   // ...render real content using linked.studentUser / linked.studentRecord
  */
-export default function LinkedStudentStatus({ loading, notLinked, error }) {
+export default function LinkedStudentStatus({ loading, notLinked, notFound, error }) {
   if (loading) {
     return <p className="py-10 text-center text-sm text-slate-400">Loading your child's info…</p>;
   }
@@ -20,9 +20,12 @@ export default function LinkedStudentStatus({ loading, notLinked, error }) {
       <EmptyState
         icon={<UserIcon />}
         title="Your account isn't linked to a student yet"
-        description="Contact the hostel office — they'll link your account to your child's student record."
+        description="Contact the hostel office. They'll link your account to your child's student record."
       />
     );
+  }
+  if (notFound) {
+    return <EmptyState icon={<UserIcon />} title="Linked student record not found" description={error} />;
   }
   if (error) {
     return <EmptyState icon={<UserIcon />} title="Couldn't load your child's info" description={error} />;

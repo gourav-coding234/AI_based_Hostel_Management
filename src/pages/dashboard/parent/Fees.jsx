@@ -1,12 +1,10 @@
 import { Card, ProgressBar, EmptyState, Pill } from "../../../components/dashboard/student/ui";
+import { ErrorState, LoadingState } from "../../../components/ui/DataState";
 import { WalletIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-
-function inr(n) {
-  return `₹${(n || 0).toLocaleString("en-IN")}`;
-}
+import { inr, feeRow, feeTone, summarizeChildFees } from "./parentData";
 
 export default function ParentFees() {
   const linked = useLinkedStudent();
@@ -19,12 +17,14 @@ export default function ParentFees() {
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
+  if (fees.loading) return <LoadingState label="Loading fees…" />;
+  if (fees.error) return <ErrorState message={fees.error} />;
+
+  // View-only: figures and status are derived here from the fee records
+  // (status via the shared computeFeeStatus), never written back.
   const records = fees.items;
-  const totalFee = records.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
-  const paid = records.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
-  const remaining = Math.max(totalFee - paid, 0);
+  const { total: totalFee, paid, pending: remaining, nextDue, status: overallStatus } = summarizeChildFees(records);
   const pct = totalFee ? Math.round((paid / totalFee) * 100) : 0;
-  const nextDue = records.find((f) => (Number(f.total) || 0) > (Number(f.paid) || 0));
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -36,7 +36,10 @@ export default function ParentFees() {
           <div className="flex-1">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-sm text-slate-500">{studentUser?.name || "Your child"}'s hostel & mess fee</p>
-              <p className="font-display text-lg font-semibold text-ink">{totalFee ? inr(totalFee) : "—"}</p>
+              <div className="flex items-center gap-3">
+                {overallStatus && <Pill tone={feeTone(overallStatus)}>{overallStatus}</Pill>}
+                <p className="font-display text-lg font-semibold text-ink">{totalFee ? inr(totalFee) : "—"}</p>
+              </div>
             </div>
             {totalFee ? (
               <>
@@ -45,7 +48,7 @@ export default function ParentFees() {
                 </div>
                 <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-500">
                   <span>{pct}% paid</span>
-                  <span>{inr(paid)} paid · {inr(remaining)} remaining</span>
+                  <span>{inr(paid)} paid · {inr(remaining)} pending</span>
                 </div>
               </>
             ) : (
@@ -66,9 +69,9 @@ export default function ParentFees() {
             <p className="mt-2 font-display text-2xl font-semibold text-teal-600">{inr(paid)}</p>
           </Card>
           <Card>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Remaining</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending</p>
             <p className="mt-2 font-display text-2xl font-semibold text-amber-600">{inr(remaining)}</p>
-            {nextDue?.dueDate && <p className="mt-1 text-xs text-slate-400">Due by {nextDue.dueDate}</p>}
+            {nextDue && <p className="mt-1 text-xs text-slate-400">Next due {nextDue}</p>}
           </Card>
         </div>
       )}
@@ -84,24 +87,30 @@ export default function ParentFees() {
                   <th className="pb-2 font-medium">Due date</th>
                   <th className="pb-2 font-medium">Total</th>
                   <th className="pb-2 font-medium">Paid</th>
-                  <th className="pb-2 font-medium">Remaining</th>
+                  <th className="pb-2 font-medium">Pending</th>
                   <th className="pb-2 pr-0 text-right font-medium">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {records.map((f) => (
-                  <tr key={f.id}>
-                    <td className="py-2.5 text-slate-500">{f.dueDate || "—"}</td>
-                    <td className="py-2.5 font-medium text-ink">{inr(f.total)}</td>
-                    <td className="py-2.5 text-teal-700">{inr(f.paid)}</td>
-                    <td className="py-2.5 text-amber-700">{inr(Math.max((Number(f.total) || 0) - (Number(f.paid) || 0), 0))}</td>
-                    <td className="py-2.5 pr-0 text-right"><Pill tone={f.status}>{f.status || "Pending"}</Pill></td>
-                  </tr>
-                ))}
+                {records.map((f) => {
+                  const row = feeRow(f);
+                  return (
+                    <tr key={f.id}>
+                      <td className="py-2.5 text-slate-500">{f.dueDate || "—"}</td>
+                      <td className="py-2.5 font-medium text-ink">{inr(row.total)}</td>
+                      <td className="py-2.5 text-teal-700">{inr(row.paid)}</td>
+                      <td className="py-2.5 text-amber-700">{inr(row.pending)}</td>
+                      <td className="py-2.5 pr-0 text-right"><Pill tone={feeTone(row.status)}>{row.status}</Pill></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
+        <p className="mt-4 text-xs text-slate-400">
+          Fees are recorded by the hostel office. This view is read-only; please clear any balance at the hostel office.
+        </p>
       </Card>
     </div>
   );

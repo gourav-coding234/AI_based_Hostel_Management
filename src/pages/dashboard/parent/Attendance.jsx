@@ -3,7 +3,8 @@ import { Card, Pill, Field, inputCls } from "../../../components/dashboard/stude
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import { EmptyState } from "../../../components/ui/DataState";
+import { EmptyState, ErrorState } from "../../../components/ui/DataState";
+import DataTable from "../../../components/ui/DataTable";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 
@@ -43,6 +44,12 @@ function segmentsFrom(counts) {
   ];
 }
 
+const RECORD_COLUMNS = [
+  { key: "date", label: "Date" },
+  { key: "status", label: "Status", render: (r) => <Pill tone={r.status}>{r.status}</Pill> },
+  { key: "markedByName", label: "Marked by", render: (r) => r.markedByName || "—" },
+];
+
 function monthLabel(ym) {
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -55,7 +62,9 @@ export default function ParentAttendance() {
   const linked = useLinkedStudent();
   const { studentUser, linkedStudentId } = linked;
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date", orderByDirection: "asc" });
-  const log = attendance.items;
+  // Records without a date can't be placed on a calendar, so they're skipped
+  // rather than crashing the month/range maths below.
+  const log = useMemo(() => attendance.items.filter((r) => r.date), [attendance.items]);
 
   const logByDate = useMemo(() => new Map(log.map((r) => [r.date, r])), [log]);
   const allMonths = useMemo(() => {
@@ -108,11 +117,10 @@ export default function ParentAttendance() {
   }, [calendarMonth, logByDate]);
 
   const selectedRecord = logByDate.get(selectedDate);
-  const monthSummary = useMemo(() => summarize(log.filter((r) => r.date.slice(0, 7) === pickedMonth)), [log, pickedMonth]);
-  const rangeSummary = useMemo(
-    () => summarize(log.filter((r) => r.date >= rangeFrom && r.date <= rangeTo)),
-    [log, rangeFrom, rangeTo]
-  );
+  const monthRecords = useMemo(() => log.filter((r) => r.date.slice(0, 7) === pickedMonth).slice().reverse(), [log, pickedMonth]);
+  const rangeRecords = useMemo(() => log.filter((r) => r.date >= rangeFrom && r.date <= rangeTo).slice().reverse(), [log, rangeFrom, rangeTo]);
+  const monthSummary = useMemo(() => summarize(monthRecords), [monthRecords]);
+  const rangeSummary = useMemo(() => summarize(rangeRecords), [rangeRecords]);
 
   function shiftCalendarMonth(delta) {
     const idx = allMonths.indexOf(calendarMonth);
@@ -163,7 +171,9 @@ export default function ParentAttendance() {
         <p className="py-8 text-center text-sm text-slate-400">Loading attendance…</p>
       )}
 
-      {!attendance.loading && log.length === 0 && (
+      {attendance.error && <ErrorState message={attendance.error} />}
+
+      {!attendance.loading && !attendance.error && log.length === 0 && (
         <EmptyState title="No attendance records yet" description="Attendance the warden logs for your child will show up here." />
       )}
 
@@ -220,7 +230,9 @@ export default function ParentAttendance() {
                   ? new Date(selectedDate).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
                   : "No date selected"}
               </p>
-              <p className="text-xs text-slate-400">Tap any date above to see that day's status</p>
+              <p className="text-xs text-slate-400">
+                {selectedRecord?.markedByName ? `Marked by ${selectedRecord.markedByName}` : "Tap any date above to see that day's status"}
+              </p>
             </div>
             {selectedRecord ? (
               <Pill tone={selectedRecord.status}>{selectedRecord.status}</Pill>
@@ -244,6 +256,14 @@ export default function ParentAttendance() {
           </div>
           <DonutChart segments={segmentsFrom(monthSummary.counts)} centerLabel={`${monthSummary.pct}%`} centerSub="present" />
           <p className="mt-5 text-xs text-slate-400">{monthSummary.total} day{monthSummary.total === 1 ? "" : "s"} recorded in {pickedMonth ? monthLabel(pickedMonth) : "—"}</p>
+          <div className="mt-5">
+            <DataTable
+              columns={RECORD_COLUMNS}
+              rows={monthRecords}
+              searchable={false}
+              emptyTitle="No records this month"
+            />
+          </div>
         </Card>
       )}
 
@@ -263,6 +283,9 @@ export default function ParentAttendance() {
             <>
               <DonutChart segments={segmentsFrom(rangeSummary.counts)} centerLabel={`${rangeSummary.pct}%`} centerSub="present" />
               <p className="mt-5 text-xs text-slate-400">{rangeSummary.total} day{rangeSummary.total === 1 ? "" : "s"} between {rangeFrom} and {rangeTo}</p>
+              <div className="mt-5">
+                <DataTable columns={RECORD_COLUMNS} rows={rangeRecords} searchable={false} emptyTitle="No records in this range" />
+              </div>
             </>
           )}
         </Card>

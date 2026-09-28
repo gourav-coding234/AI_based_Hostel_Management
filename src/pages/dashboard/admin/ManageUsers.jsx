@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { createUserAccount, friendlyCreateAccountError } from "../../../firebase/adminUsers";
-import { getCollection, deleteUserProfile, logAudit } from "../../../firebase/firestore";
+import { getCollection, deleteUserProfile, updateDocument, logAudit } from "../../../firebase/firestore";
 import { parseUsersCsv, CSV_TEMPLATE, downloadTextFile } from "../../../utils/csv";
 import { ROLE_LIST } from "../../../roles";
 import { Card, Button, Field, inputCls, Pill, EmptyState } from "../../../components/dashboard/student/ui";
+import DataTable from "../../../components/ui/DataTable";
 import { DownloadIcon, SearchIcon, TrashIcon, UsersIcon } from "../../../components/dashboard/admin/icons";
+import { useCollections } from "../../../hooks/useCollection";
+
+function tsToDate(ts) {
+  if (!ts) return null;
+  if (typeof ts.toDate === "function") return ts.toDate();
+  return new Date(ts);
+}
 
 const EMPTY_FORM = { name: "", email: "", password: "", role: "Student", hostelResidence: "", linkedStudentId: "" };
 
@@ -43,6 +51,16 @@ export default function ManageUsers() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState("");
+
+  // Blocks & students only — the "users" collection is already loaded above
+  // via loadUsers(), so warden rows are derived from that same list instead
+  // of opening a second listener on the same data.
+  const { data: refData } = useCollections({
+    blocks: { name: "blocks" },
+    students: { name: "students" },
+  });
+  const blocks = refData.blocks;
+  const [reassignError, setReassignError] = useState("");
 
   async function loadUsers() {
     setLoadingUsers(true);
@@ -178,6 +196,100 @@ export default function ManageUsers() {
   // doesn't correspond to an actual student.
   const studentUsers = useMemo(() => users.filter((u) => u.role === "Student"), [users]);
 
+  // Warden management — the same "users" list, just the Warden rows,
+  // enriched with block assignment + workload for reassignment.
+  const wardens = useMemo(() => users.filter((u) => u.role === "Warden"), [users]);
+  const blockOptions = useMemo(() => ["Unassigned", ...blocks.map((b) => b.name)], [blocks]);
+
+  const studentCountByBlock = useMemo(() => {
+    const counts = {};
+    refData.students.forEach((s) => {
+      const key = s.hostelResidence || s.block;
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [refData.students]);
+
+  async function reassignWarden(id, block) {
+    setReassignError("");
+    const warden = users.find((u) => u.id === id);
+    const previousBlockName = warden?.block;
+    try {
+      await updateDocument("users", id, { block });
+      setUsers((list) => list.map((u) => (u.id === id ? { ...u, block } : u)));
+
+      // The block documents' own `warden` field (a plain string shown on
+      // the Blocks page and Admin Overview's "Blocks at a glance" card) is
+      // a separate field from this warden's `users/{id}.block` — without
+      // syncing it here, those pages would keep showing the old warden's
+      // name after a reassignment. Clear it off the block being left (but
+      // only if this warden was actually the one recorded there) and set
+      // it on the block being taken on.
+      const wardenName = warden?.name?.trim() || warden?.email || "Unassigned";
+      const previousBlockDoc =
+        previousBlockName && previousBlockName !== "Unassigned"
+          ? blocks.find((b) => b.name === previousBlockName)
+          : null;
+      const nextBlockDoc = block && block !== "Unassigned" ? blocks.find((b) => b.name === block) : null;
+
+      if (previousBlockDoc && previousBlockDoc.id !== nextBlockDoc?.id && previousBlockDoc.warden === wardenName) {
+        await updateDocument("blocks", previousBlockDoc.id, { warden: "Unassigned" });
+      }
+      if (nextBlockDoc) {
+        await updateDocument("blocks", nextBlockDoc.id, { warden: wardenName });
+      }
+    } catch (err) {
+      console.error("Failed to reassign warden:", err);
+      setReassignError("Couldn't reassign this warden. Please try again.");
+    }
+  }
+
+  const wardenColumns = [
+    { key: "name", label: "Name", sortable: true },
+    {
+      key: "email",
+      label: "Contact",
+      render: (w) => (
+        <>
+          <p>{w.email}</p>
+          <p className="text-xs text-slate-400">{w.phone || "—"}</p>
+        </>
+      ),
+    },
+    {
+      key: "block",
+      label: "Assigned block",
+      render: (w) => (
+        <select
+          value={w.block || "Unassigned"}
+          onChange={(e) => reassignWarden(w.id, e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
+        >
+          {blockOptions.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+      ),
+    },
+    { key: "students", label: "Student workload", render: (w) => studentCountByBlock[w.block] || 0 },
+    {
+      key: "createdAt",
+      label: "Joined",
+      sortable: true,
+      render: (w) => {
+        const joined = tsToDate(w.createdAt);
+        return joined ? joined.toLocaleDateString("en-IN") : "—";
+      },
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (w) => <Pill tone={w.status === "Inactive" ? "Pending" : "Approved"}>{w.status || "Active"}</Pill>,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
@@ -191,9 +303,9 @@ export default function ManageUsers() {
               <UsersIcon />
             </span>
             <div>
-              <h2 className="font-display text-xl font-semibold">Manage users</h2>
+              <h2 className="font-display text-xl font-semibold">Manage users &amp; wardens</h2>
               <p className="mt-0.5 text-sm text-slate-300">
-                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"}
+                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"} · {wardens.length} warden{wardens.length === 1 ? "" : "s"} assigned across {blocks.length} block{blocks.length === 1 ? "" : "s"}
               </p>
             </div>
           </div>
@@ -360,7 +472,7 @@ export default function ManageUsers() {
       <Card>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="font-display text-base font-semibold text-ink">All accounts</h3>
+            <h3 className="font-display text-base font-semibold text-ink">All users</h3>
             <p className="text-xs text-slate-400">{filteredUsers.length} of {users.length} shown</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -456,6 +568,40 @@ export default function ManageUsers() {
               );
             })}
           </ul>
+        )}
+      </Card>
+
+      {/* Warden management — same underlying accounts, filtered to Warden
+          role, with block reassignment and workload for oversight. */}
+      <Card title="Warden management" subtitle="Assign wardens to blocks and see their current workload.">
+        {reassignError && <p className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{reassignError}</p>}
+        <DataTable
+          columns={wardenColumns}
+          rows={wardens}
+          loading={loadingUsers}
+          searchKeys={["name", "email", "block"]}
+          searchPlaceholder="Search wardens…"
+          emptyTitle="No wardens added yet"
+          emptyDescription="Create a Warden account above to see it here."
+          emptyIcon={<UsersIcon />}
+          pageSize={12}
+        />
+      </Card>
+
+      <Card title="Block coverage">
+        {blocks.length === 0 ? (
+          <EmptyState title="No blocks yet" description="Add blocks on the Blocks page or via Data Import." />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {blocks.map((b) => (
+              <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-sm font-semibold text-ink">{b.name}</p>
+                <p className="text-xs text-slate-400">{b.type} hostel</p>
+                <p className="mt-3 text-sm text-slate-600">Warden: <span className="font-medium text-ink">{b.warden || "Unassigned"}</span></p>
+                <p className="text-xs text-slate-400">{b.occupiedBeds || 0}/{b.totalBeds || 0} beds occupied</p>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
     </div>

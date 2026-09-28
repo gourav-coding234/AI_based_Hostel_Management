@@ -19,6 +19,19 @@ import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
 import { addDocument } from "../../../firebase/firestore";
 import { noticeAppliesTo } from "../../../utils/notices";
+import { computeFeeStatus } from "../../../utils/fees";
+
+function inr(n) {
+  return `₹${(n || 0).toLocaleString("en-IN")}`;
+}
+
+// Same QR encoding + provider used on the full Gate Pass page, kept in sync
+// here so a student sees the identical code either place. It's built purely
+// from the Firestore-backed `activePass` fields (no local/session state), so
+// it comes back exactly the same after a refresh — there's nothing to lose.
+function qrUrl(data) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=6&data=${encodeURIComponent(data)}`;
+}
 
 export default function Overview() {
   const { profile, user } = useAuth();
@@ -42,20 +55,41 @@ export default function Overview() {
   const filteredNoticeData = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence)).slice(0, 3);
   const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
 
-  const myAllocation = profile?.room
-    ? profile
+  // Room/bed allotment lives on the student's own `students/{uid}` document
+  // (written by the warden's Room Allotment page), never on the `users`
+  // profile doc — reading from `studentRecord` here instead of `profile` is
+  // what makes this card reflect the student's actual, current allotment.
+  const myAllocation = studentRecord?.room
+    ? studentRecord
     : { status: "Waiting", room: "—", bed: "—", wing: "Not allotted", floor: "" };
+  const roomStatus = studentRecord?.room ? "Allotted" : "Waiting";
 
   const feeTotal = fees.items.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const feePaid = fees.items.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const feeRemaining = Math.max(feeTotal - feePaid, 0);
-  const nextDueFee = fees.items.find((f) => (Number(f.total) || 0) > (Number(f.paid) || 0));
-
-  const weekAvgAttendance = attendance.items.length
-    ? Math.round((attendance.items.filter((a) => a.status === "Present").length / attendance.items.length) * 100)
+  // Fees are fetched ordered by dueDate (newest first, to match the other
+  // fee screens' default sort) — sort ascending here just for picking the
+  // *next* (soonest upcoming) unpaid record, so this doesn't accidentally
+  // surface the furthest-out unpaid due date instead of the nearest one.
+  const nextDueFee = [...fees.items]
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")))
+    .find((f) => (Number(f.total) || 0) > (Number(f.paid) || 0));
+  // Single source of truth for fee status (Paid/Overdue/Partial/Pending),
+  // matching how the Admin/Warden Fees pages compute it — instead of
+  // guessing from remaining amount alone.
+  const feeStatus = feeTotal
+    ? computeFeeStatus({ total: feeTotal, paid: feePaid, dueDate: nextDueFee?.dueDate })
     : null;
 
+  const presentCount = attendance.items.filter((a) => a.status === "Present").length;
+  const absentCount = attendance.items.filter((a) => a.status === "Absent").length;
+  const attendancePct = attendance.items.length ? Math.round((presentCount / attendance.items.length) * 100) : null;
+  // Attendance is fetched newest-date-first, so the first item is the most
+  // recent recorded day.
+  const latestAttendanceStatus = attendance.items[0]?.status || null;
+
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
+  const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
   const activePass = gatePasses.items.find((p) => p.status === "Approved");
 
   const [sosSending, setSosSending] = useState(false);
@@ -169,29 +203,37 @@ export default function Overview() {
         <StatCard
           icon={<BedIcon />}
           label="Room & bed status"
-          value={myAllocation.status}
-          sub={`${myAllocation.room} · ${myAllocation.bed}`}
+          value={roomStatus}
+          sub={roomStatus === "Allotted" ? `${myAllocation.room} · ${myAllocation.bed}` : "Awaiting allotment"}
           tone="teal"
         />
         <StatCard
           icon={<WalletIcon />}
           label="Fees remaining"
           value={`₹${feeRemaining.toLocaleString("en-IN")}`}
-          sub={feeTotal ? (nextDueFee?.dueDate ? `Due ${nextDueFee.dueDate}` : "") : "No fee record yet"}
-          tone="amber"
+          sub={
+            feeTotal
+              ? `${feeStatus} · ${inr(feePaid)} of ${inr(feeTotal)} paid${nextDueFee?.dueDate ? ` · Due ${nextDueFee.dueDate}` : ""}`
+              : "No fee record yet"
+          }
+          tone={feeRemaining > 0 ? "amber" : "teal"}
         />
         <StatCard
           icon={<CheckSquareIcon />}
-          label="Attendance this week"
-          value={weekAvgAttendance === null ? "—" : `${weekAvgAttendance}%`}
-          sub={attendance.items.length ? "Dinner roll call, avg." : "No records yet"}
+          label="My attendance"
+          value={attendancePct === null ? "—" : `${attendancePct}%`}
+          sub={
+            attendance.items.length
+              ? `${presentCount} present · ${absentCount} absent · Latest: ${latestAttendanceStatus}`
+              : "No records yet"
+          }
           tone="teal"
         />
         <StatCard
           icon={<WrenchIcon />}
           label="Open complaints"
           value={openComplaints}
-          sub={`${complaints.items.length} total filed`}
+          sub={`${resolvedComplaints} resolved · ${complaints.items.length} total filed`}
           tone={openComplaints > 0 ? "rose" : "teal"}
         />
       </div>
@@ -223,17 +265,19 @@ export default function Overview() {
 
         <Card title="Active gate pass">
           {activePass ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600">
-                  <QrIcon />
-                </span>
-                <Pill tone={activePass.status}>{activePass.status}</Pill>
-              </div>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <img
+                src={qrUrl(`${activePass.id}|${activePass.type}|${activePass.from}-${activePass.to}`)}
+                alt={`QR code for gate pass ${activePass.id}`}
+                width={120}
+                height={120}
+                className="rounded-xl border border-slate-200 p-1.5 shadow-sm shadow-slate-200/60"
+              />
+              <Pill tone={activePass.status}>{activePass.status}</Pill>
               <p className="text-sm font-medium text-ink">{activePass.type}</p>
               <p className="text-xs text-slate-500">{activePass.from} → {activePass.to}</p>
-              <Link to="/dashboard/student/gate-pass">
-                <Button variant="outline" className="w-full">View QR pass</Button>
+              <Link to="/dashboard/student/gate-pass" className="w-full">
+                <Button variant="outline" className="w-full">View full pass</Button>
               </Link>
             </div>
           ) : (
@@ -260,13 +304,13 @@ export default function Overview() {
             <p className="truncate text-xs text-slate-400">Food, utensils or quality</p>
           </div>
         </Link>
-        <Link to="/dashboard/student/inventory" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+        <Link to="/dashboard/student/complaints?category=Inventory" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600 transition-transform duration-200 group-hover:scale-105">
             <BedIcon />
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Request extra furniture</p>
-            <p className="truncate text-xs text-slate-400">Submit an inventory request</p>
+            <p className="truncate text-xs text-slate-400">Raise an inventory complaint</p>
           </div>
         </Link>
         <Link to="/dashboard/student/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">

@@ -67,7 +67,10 @@ export default function Notices() {
                 </div>
               </button>
               {open && (
-                <div className="border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:px-6">
+                // pre-wrap keeps the full body legible when it spans multiple
+                // paragraphs — same font/color/spacing, it just stops the
+                // notice's own line breaks from being collapsed away.
+                <div className="whitespace-pre-wrap border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:px-6">
                   {n.body}
                 </div>
               )}

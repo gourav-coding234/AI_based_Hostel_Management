@@ -1,21 +1,66 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { SirenIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument } from "../../../firebase/firestore";
+import { toCsvText, downloadTextFile } from "../../../utils/csv";
 
 const INCIDENT_CATEGORIES = ["Suspicious activity", "Disturbance", "Gate malfunction", "Unauthorized entry attempt", "Other"];
 const INCIDENT_SEVERITIES = ["Low", "Medium", "High"];
 const EMPTY_FORM = { category: INCIDENT_CATEGORIES[0], description: "", severity: "Low" };
 
+// CSV export column spec — required fields, in the required order.
+const CSV_COLUMNS = [
+  { label: "Incident ID", value: (i) => i.id },
+  { label: "Category", value: (i) => i.category },
+  { label: "Description", value: (i) => i.description },
+  { label: "Date", value: (i) => i.date },
+  { label: "Severity", value: (i) => i.severity },
+  { label: "Status", value: (i) => i.status },
+  { label: "Reported By", value: (i) => i.reportedBy },
+];
+
 export default function SecurityIncidentReports() {
   const { profile, user } = useAuth();
-  const incidentsQuery = useCollection("incidents", { orderByField: "date" });
-  const incidents = incidentsQuery.data;
+  // No Firestore orderBy: it silently drops incidents that lack a `date`.
+  // History stays complete; newest first is applied here instead.
+  const incidentsQuery = useCollection("incidents");
+  const incidents = useMemo(() => {
+    const key = (i) => i.date || (i.createdAt?.toDate ? i.createdAt.toDate().toISOString().slice(0, 10) : "");
+    return [...incidentsQuery.data].sort((a, b) => key(b).localeCompare(key(a)));
+  }, [incidentsQuery.data]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadMessage, setDownloadMessage] = useState("");
+
+  // Mirrors whatever the table is currently showing (search applied, not yet
+  // paginated). Starts out equal to the full live dataset and only narrows
+  // once the user types into the table's search box, so a download before
+  // any search still exports every record.
+  const [visibleIncidents, setVisibleIncidents] = useState(incidents);
+
+  // Downloads exactly what's currently filtered in the table above — the
+  // complete dataset when there's no search, or just the matching records
+  // when there is. Reads from state only; never touches Firestore.
+  function handleDownload() {
+    setDownloadMessage("");
+    if (visibleIncidents.length === 0) {
+      setDownloadMessage("There are no incident reports to download yet.");
+      return;
+    }
+    setDownloading(true);
+    try {
+      downloadTextFile(toCsvText(visibleIncidents, CSV_COLUMNS), "incident-reports.csv");
+    } catch (err) {
+      console.error("Failed to download incident reports:", err);
+      setDownloadMessage("Couldn't download the incident reports. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -81,8 +126,22 @@ export default function SecurityIncidentReports() {
         </form>
       </Card>
 
-      <Card title="Incident log">
+      <Card
+        title="Incident log"
+        action={
+          <Button
+            variant="outline"
+            className="px-3 py-1.5 text-xs"
+            onClick={handleDownload}
+            disabled={incidentsQuery.loading || downloading || visibleIncidents.length === 0}
+          >
+            {downloading ? "Preparing…" : `Download Incident Reports (${visibleIncidents.length})`}
+          </Button>
+        }
+      >
+        {downloadMessage && <p className="mb-3 text-sm text-red-600">{downloadMessage}</p>}
         <DataTable
+          onFilteredChange={setVisibleIncidents}
           columns={[
             {
               key: "category",

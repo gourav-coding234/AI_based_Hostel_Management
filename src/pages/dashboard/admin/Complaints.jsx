@@ -1,8 +1,17 @@
 import { useMemo, useState } from "react";
-import { Card, Pill, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
-import { WrenchIcon } from "../../../components/dashboard/admin/icons";
+import { WrenchIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { downloadTextFile } from "../../../utils/csv";
+
+function toCsv(headers, rows) {
+  const lines = [headers.map((h) => h.label).join(",")];
+  rows.forEach((row) => {
+    lines.push(headers.map((h) => `"${String(h.value(row) ?? "").replace(/"/g, '""')}"`).join(","));
+  });
+  return lines.join("\n");
+}
 
 const statusFilters = ["All Statuses", "Open", "In Progress", "Resolved"];
 
@@ -58,6 +67,22 @@ export default function Complaints() {
   const inProgressCount = allComplaints.filter((c) => c.status === "In Progress").length;
   const resolvedCount = allComplaints.filter((c) => c.status === "Resolved").length;
 
+  const complaintCsvHeaders = [
+    { label: "Complaint", value: (c) => c.title },
+    { label: "Student", value: (c) => c.studentName },
+    { label: "Block", value: (c) => c.block },
+    { label: "Room", value: (c) => c.room },
+    { label: "Category", value: (c) => c.category },
+    { label: "Date", value: (c) => c.date },
+    { label: "Assigned To", value: (c) => c.assignedTo },
+    { label: "Priority", value: (c) => c.priority },
+    { label: "Status", value: (c) => c.status },
+  ];
+
+  function downloadComplaints() {
+    downloadTextFile(toCsv(complaintCsvHeaders, filtered), "complaints.csv");
+  }
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
@@ -80,13 +105,18 @@ export default function Complaints() {
       </Card>
 
       <Card>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-          <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-            {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
+              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <Button variant="outline" onClick={downloadComplaints} disabled={filtered.length === 0}>
+            <DownloadIcon /> Download CSV
+          </Button>
         </div>
 
         <DataTable

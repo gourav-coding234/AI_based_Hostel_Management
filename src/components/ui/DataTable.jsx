@@ -117,7 +117,7 @@ function RowActionsMenu({ actions }) {
  * per-row three-dot actions. Renders the app's shared Loading/Error/Empty
  * states — never fabricates rows.
  *
- * columns: [{ key, label, sortable?, render?(row) }]
+ * columns: [{ key, label, sortable?, render?(row), sortValue?(row) }]
  * rows: array of real records (already fetched from Firestore)
  * rowActions?: (row) => [{ label, onClick, danger? }]
  */
@@ -136,6 +136,7 @@ export default function DataTable({
   pageSize = 10,
   rowActions,
   onRowClick,
+  onFilteredChange,
 }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState(null);
@@ -154,14 +155,24 @@ export default function DataTable({
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
     const copy = [...filtered];
+    const sortValue = columns.find((c) => c.key === sortKey)?.sortValue;
     copy.sort((a, b) => {
-      const av = a[sortKey] ?? "";
-      const bv = b[sortKey] ?? "";
+      const av = (sortValue ? sortValue(a) : a[sortKey]) ?? "";
+      const bv = (sortValue ? sortValue(b) : b[sortKey]) ?? "";
       if (typeof av === "number" && typeof bv === "number") return sortDir === "asc" ? av - bv : bv - av;
       return sortDir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
     });
     return copy;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortKey, sortDir]);
+
+  // Lets a page export exactly what the user currently sees (post search,
+  // pre pagination) without duplicating the search logic on the page side.
+  // Optional — pages that don't pass it are completely unaffected.
+  useEffect(() => {
+    onFilteredChange?.(sorted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, onFilteredChange]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);

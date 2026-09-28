@@ -19,3 +19,26 @@ export function paymentAmount(record) {
   if (record?.amount !== undefined) return Number(record.amount) || 0;
   return Number(record?.paid) || 0;
 }
+
+/**
+ * Single source of truth for a fee record's status, so Admin, Warden,
+ * Student and Parent screens all agree on what "Overdue" etc. means
+ * instead of trusting a manually-entered `status` field that can go
+ * stale the moment a due date passes.
+ *
+ * Precedence: Paid (outstanding cleared) > Overdue (something's owed and
+ * the due date has passed) > Partial (something's been paid, not yet
+ * due) > Pending (nothing paid yet, not yet due).
+ */
+export function computeFeeStatus({ total, paid, dueDate } = {}) {
+  const totalAmt = Math.max(Number(total) || 0, 0);
+  const paidAmt = Math.max(Number(paid) || 0, 0);
+  const outstanding = Math.max(totalAmt - paidAmt, 0);
+
+  if (outstanding <= 0) return "Paid";
+
+  const isPastDue = !!dueDate && new Date(dueDate) < new Date();
+  if (isPastDue) return "Overdue";
+  if (paidAmt > 0) return "Partial";
+  return "Pending";
+}

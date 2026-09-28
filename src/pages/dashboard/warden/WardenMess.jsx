@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { UtensilsIcon } from "../../../components/dashboard/warden/icons";
@@ -9,6 +10,7 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 const EMPTY_MEAL = { breakfast: "", lunch: "", dinner: "" };
 
 export default function WardenMess() {
+  const { user, profile } = useAuth();
   const menuQuery = useCollection("messMenu");
   const reportsQuery = useCollection("messReports", { orderByField: "date" });
   const menuByDay = Object.fromEntries(menuQuery.data.map((d) => [d.id, d]));
@@ -26,9 +28,27 @@ export default function WardenMess() {
   }
 
   async function saveEdit() {
+    // One messMenu document per weekday (doc id = weekday name), the same
+    // document the Student page reads live. Guard against ever writing a
+    // non-weekday id, or `undefined`/non-string meal values (Firestore
+    // rejects undefined, and a stray non-string would break the student
+    // view) — every meal is coerced to a trimmed string.
+    if (saving || !DAYS.includes(activeDay)) return;
+    const meals = {
+      breakfast: String(draft.breakfast ?? "").trim(),
+      lunch: String(draft.lunch ?? "").trim(),
+      dinner: String(draft.dinner ?? "").trim(),
+    };
     setSaving(true);
     try {
-      await updateDocument("messMenu", activeDay, draft);
+      // updateDocument merges onto messMenu/{day} and stamps updatedAt;
+      // updatedBy* record which staff member made this change.
+      await updateDocument("messMenu", activeDay, {
+        ...meals,
+        day: activeDay,
+        updatedBy: profile?.name || user?.email || "Warden",
+        updatedByUid: user?.uid || "",
+      });
       setEditing(false);
     } catch (err) {
       console.error("Failed to save menu:", err);

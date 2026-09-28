@@ -4,20 +4,26 @@ import { getDocument } from "../firebase/firestore";
 
 /**
  * Loads the real student a Parent account is linked to, straight from
- * Firestore (`users/{linkedStudentId}` for identity + `students/{linkedStudentId}`
- * for room/bed). Every Parent dashboard page should use this instead of any
+ * Firestore. Every Parent dashboard page should use this instead of any
  * hardcoded child data — it's what makes "only see your own child" actually
  * true rather than just a UI label, since Firestore security rules (see
  * firestore.rules) enforce that a parent can only ever read documents whose
  * studentId matches this same linkedStudentId.
  *
+ * Reads ONLY `students/{linkedStudentId}` — the one document the rules let a
+ * linked parent read. Parents have no read access to `users/{studentId}`
+ * (deliberately, see firestore.rules), so `studentUser` is derived from the
+ * Student Directory record rather than the users collection.
+ *
  * Returns:
  *  - loading: still fetching
  *  - notLinked: this parent account has no linkedStudentId set yet (admin
  *    hasn't linked them to a student) — show a clear message, not empty data
- *  - error: the link points at an id that couldn't be read (deleted account,
- *    or a bad id from an old bulk import)
- *  - linkedStudentId, studentUser (name/email/hostelResidence), studentRecord
+ *  - notFound: linkedStudentId is set but there is no student record for it
+ *    (deleted account, or a bad id from an old bulk import)
+ *  - error: a message for either notFound or a Firestore read failure
+ *  - linkedStudentId, studentUser ({ id, name, email, hostelResidence } —
+ *    identity fields from the directory record, "" when absent), studentRecord
  *    (wing/room/bed/roommates)
  */
 export function useLinkedStudent() {
@@ -28,6 +34,7 @@ export function useLinkedStudent() {
     loading: Boolean(linkedStudentId),
     studentUser: null,
     studentRecord: null,
+    notFound: false,
     error: "",
   });
 
@@ -35,26 +42,48 @@ export function useLinkedStudent() {
     let cancelled = false;
 
     if (!linkedStudentId) {
-      setState({ loading: false, studentUser: null, studentRecord: null, error: "" });
+      setState({ loading: false, studentUser: null, studentRecord: null, notFound: false, error: "" });
       return undefined;
     }
 
-    setState((s) => ({ ...s, loading: true, error: "" }));
+    setState((s) => ({ ...s, loading: true, error: "", notFound: false }));
 
-    Promise.all([getDocument("users", linkedStudentId), getDocument("students", linkedStudentId)])
-      .then(([studentUser, studentRecord]) => {
+    getDocument("students", linkedStudentId)
+      .then((studentRecord) => {
         if (cancelled) return;
+        if (!studentRecord) {
+          setState({
+            loading: false,
+            studentUser: null,
+            studentRecord: null,
+            notFound: true,
+            error: "We couldn't find the student record your account is linked to. Contact the hostel office.",
+          });
+          return;
+        }
         setState({
           loading: false,
-          studentUser,
+          studentUser: {
+            id: linkedStudentId,
+            name: studentRecord.name || "",
+            email: studentRecord.email || "",
+            hostelResidence: studentRecord.hostelResidence || studentRecord.wing || "",
+          },
           studentRecord,
-          error: studentUser ? "" : "This account isn't linked to a valid student. Contact the hostel office.",
+          notFound: false,
+          error: "",
         });
       })
       .catch((err) => {
         if (cancelled) return;
         console.error("Failed to load linked student:", err);
-        setState({ loading: false, studentUser: null, studentRecord: null, error: "Couldn't load your child's info. Please try again." });
+        setState({
+          loading: false,
+          studentUser: null,
+          studentRecord: null,
+          notFound: false,
+          error: "Couldn't load your child's info. Please try again.",
+        });
       });
 
     return () => {

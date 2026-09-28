@@ -3,8 +3,24 @@ import { AsyncSection } from "../../../components/ui/DataState";
 import { ShieldIcon, PhoneIcon, MailIcon } from "../../../components/dashboard/parent/icons";
 import { useCollection } from "../../../hooks/useCollection";
 
+// Builds a dial-safe value for the `tel:` target only (keeps a leading "+",
+// strips spaces, dashes, brackets, dots and other display formatting).
+// The human-readable number is still what gets displayed.
+function toTelTarget(raw) {
+  const value = String(raw ?? "").trim();
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  return `${value.startsWith("+") ? "+" : ""}${digits}`;
+}
+
+function clean(value) {
+  return value == null ? "" : String(value).trim();
+}
+
+// Read-only view: parents can view and tap published contacts, never edit them.
+// Only role, name, phone and email are read from each contact document.
 export default function EmergencyContacts() {
-  const contacts = useCollection("emergencyContacts", { orderByField: "role", orderByDirection: "asc" });
+  const contacts = useCollection("emergencyContacts");
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -29,24 +45,37 @@ export default function EmergencyContacts() {
         emptyIcon={<ShieldIcon />}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {contacts.data.map((c) => (
-            <Card key={c.id}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{c.role}</p>
-              <p className="mt-1.5 font-display text-base font-semibold text-ink">{c.name}</p>
-              <div className="mt-3 flex flex-col gap-2">
-                {c.phone && (
-                  <a href={`tel:${c.phone.replace(/\s+/g, "")}`} className="flex items-center gap-2 text-sm text-teal-700 hover:underline">
-                    <PhoneIcon /> {c.phone}
-                  </a>
-                )}
-                {c.email && (
-                  <a href={`mailto:${c.email}`} className="flex items-center gap-2 text-sm text-slate-500 hover:text-teal-700 hover:underline">
-                    <MailIcon /> {c.email}
-                  </a>
-                )}
-              </div>
-            </Card>
-          ))}
+          {[...contacts.data].sort((a, b) => clean(a.role).localeCompare(clean(b.role))).map((c) => {
+            const role = clean(c.role);
+            const name = clean(c.name);
+            const phone = clean(c.phone);
+            const email = clean(c.email);
+            const telTarget = toTelTarget(phone);
+            return (
+              <Card key={c.id}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{role || "Contact"}</p>
+                <p className="mt-1.5 font-display text-base font-semibold text-ink">{name || "Unnamed contact"}</p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {phone &&
+                    (telTarget ? (
+                      <a href={`tel:${telTarget}`} className="flex items-center gap-2 text-sm text-teal-700 hover:underline">
+                        <PhoneIcon /> {phone}
+                      </a>
+                    ) : (
+                      <span className="flex items-center gap-2 text-sm text-slate-500">
+                        <PhoneIcon /> {phone}
+                      </span>
+                    ))}
+                  {email && (
+                    <a href={`mailto:${email}`} className="flex items-center gap-2 text-sm text-slate-500 hover:text-teal-700 hover:underline">
+                      <MailIcon /> {email}
+                    </a>
+                  )}
+                  {!phone && !email && <span className="text-sm text-slate-400">No contact details available</span>}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       </AsyncSection>
     </div>

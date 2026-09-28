@@ -13,6 +13,7 @@ export {
   CameraIcon,
   AlertIcon,
   PlusIcon,
+  CheckSquareIcon,
 } from "../student/icons";
 
 export { PhoneIcon, MailIcon, ShieldIcon } from "../parent/icons";

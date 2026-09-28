@@ -25,7 +25,7 @@ function toFormState(profile) {
 
 export default function ParentProfile() {
   const { user, profile, refreshProfile } = useAuth();
-  const { studentUser, studentRecord, notLinked } = useLinkedStudent();
+  const { studentUser, studentRecord, notLinked, loading: linkLoading, error: linkError } = useLinkedStudent();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -157,10 +157,14 @@ export default function ParentProfile() {
       </Card>
 
       <Card title="Linked student">
-        {notLinked ? (
+        {linkLoading ? (
+          <p className="text-sm text-slate-400">Loading your child's info…</p>
+        ) : notLinked ? (
           <p className="text-sm text-slate-500">
-            Your account isn't linked to a student yet. Contact the hostel office to get this set up.
+            Your account isn't linked to a student yet. Contact the hostel office.
           </p>
+        ) : linkError ? (
+          <p className="text-sm text-slate-500">{linkError}</p>
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -175,7 +179,7 @@ export default function ParentProfile() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Room</p>
                 <p className="mt-1 text-sm text-ink">
-                  {studentRecord?.room ? `${studentRecord.room}, ${studentRecord.wing}` : "Not yet allotted"}
+                  {studentRecord?.room ? `${studentRecord.room}${studentRecord.wing ? `, ${studentRecord.wing}` : ""}` : "Not yet allotted"}
                 </p>
               </div>
             </div>

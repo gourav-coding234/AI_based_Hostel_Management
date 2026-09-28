@@ -1,8 +1,17 @@
 import { useMemo, useState } from "react";
-import { Card, Pill, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
-import { EyeIcon, UsersIcon, QrIcon } from "../../../components/dashboard/admin/icons";
+import { EyeIcon, UsersIcon, QrIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { downloadTextFile } from "../../../utils/csv";
+
+function toCsv(headers, rows) {
+  const lines = [headers.map((h) => h.label).join(",")];
+  rows.forEach((row) => {
+    lines.push(headers.map((h) => `"${String(h.value(row) ?? "").replace(/"/g, '""')}"`).join(","));
+  });
+  return lines.join("\n");
+}
 
 const statusFilters = ["All Statuses", "On premises", "Checked out"];
 
@@ -45,6 +54,21 @@ export default function Visitors() {
 
   const onPremises = visitors.filter((v) => v.status === "On premises").length;
 
+  const visitorCsvHeaders = [
+    { label: "Visitor Name", value: (v) => v.visitorName },
+    { label: "Purpose", value: (v) => v.purpose },
+    { label: "ID Proof", value: (v) => v.idProof },
+    { label: "Block", value: (v) => v.block },
+    { label: "Student/Host", value: (v) => v.hostName || v.studentName },
+    { label: "In Time", value: (v) => v.inTime },
+    { label: "Out Time", value: (v) => v.outTime },
+    { label: "Status", value: (v) => v.status },
+  ];
+
+  function downloadVisitors() {
+    downloadTextFile(toCsv(visitorCsvHeaders, filtered), "visitors.csv");
+  }
+
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card>
@@ -66,13 +90,18 @@ export default function Visitors() {
       </div>
 
       <Card title="Visitor log">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-          <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-            {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
+              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <Button variant="outline" onClick={downloadVisitors} disabled={filtered.length === 0}>
+            <DownloadIcon /> Download CSV
+          </Button>
         </div>
 
         <DataTable

@@ -1,11 +1,17 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { WrenchIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { addDocument } from "../../../firebase/firestore";
 
-const COMPLAINT_CATEGORIES = ["Room", "Wing", "Food", "Other"];
+// "Inventory" covers requests/complaints about room furniture & fittings —
+// merged in from the old standalone Inventory page (see Inventory.jsx,
+// kept only for the Admin/Warden side). Selecting it reveals the extra
+// Item/Quantity fields below.
+const COMPLAINT_CATEGORIES = ["General", "Maintenance", "Electrical", "Plumbing", "Mess", "Inventory", "Furniture", "Other"];
+const INVENTORY_ITEM_TYPES = ["Chair", "Table", "Bed", "Mattress", "Cupboard", "Fan", "Tube light", "Other"];
 
 export default function Complaints() {
   const { user, profile } = useAuth();
@@ -13,13 +19,24 @@ export default function Complaints() {
   const complaintsQuery = useStudentCollection("complaints", studentId, { orderByField: "date" });
   const complaints = complaintsQuery.items;
 
+  // Lets other pages (e.g. the Overview quick links) deep-link straight
+  // into the Inventory category — /dashboard/student/complaints?category=Inventory
+  const [searchParams] = useSearchParams();
+  const initialCategory = COMPLAINT_CATEGORIES.includes(searchParams.get("category"))
+    ? searchParams.get("category")
+    : COMPLAINT_CATEGORIES[0];
+
   const [filter, setFilter] = useState("All");
-  const [category, setCategory] = useState(COMPLAINT_CATEGORIES[0]);
+  const [category, setCategory] = useState(initialCategory);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [item, setItem] = useState(INVENTORY_ITEM_TYPES[0]);
+  const [quantity, setQuantity] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const isInventory = category === "Inventory";
 
   const filtered = useMemo(
     () => (filter === "All" ? complaints : complaints.filter((c) => c.category === filter)),
@@ -32,22 +49,27 @@ export default function Complaints() {
     setSubmitting(true);
     setError("");
     try {
-      await addDocument(
-        "complaints",
-        {
-          studentId,
-          studentName: profile?.name || user?.email,
-          category,
-          title,
-          description,
-          status: "Open",
-          date: new Date().toISOString().slice(0, 10),
-          priority,
-        },
-        studentId
-      );
+      const payload = {
+        studentId,
+        studentName: profile?.name || user?.email,
+        category,
+        title,
+        description,
+        status: "Open",
+        date: new Date().toISOString().slice(0, 10),
+        priority,
+      };
+      // Extra, additive fields for inventory-type complaints — the base
+      // complaint fields above stay the same so the Admin/Warden complaint
+      // workflow keeps working unchanged for every category.
+      if (isInventory) {
+        payload.item = item;
+        payload.quantity = Number(quantity) || 1;
+      }
+      await addDocument("complaints", payload, studentId);
       setTitle("");
       setDescription("");
+      setQuantity(1);
     } catch (err) {
       console.error("Failed to submit complaint:", err);
       setError("Couldn't submit your complaint. Please try again.");
@@ -64,24 +86,48 @@ export default function Complaints() {
             <Field label="Category">
               <select className={inputCls} value={category} onChange={(e) => setCategory(e.target.value)}>
                 {COMPLAINT_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c === "Room" ? "My room" : c === "Wing" ? "My wing" : c === "Food" ? "Mess / food" : "Other"}
-                  </option>
+                  <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Subject">
+
+            {isInventory && (
+              <>
+                <Field label="Item">
+                  <select className={inputCls} value={item} onChange={(e) => setItem(e.target.value)}>
+                    {INVENTORY_ITEM_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Quantity">
+                  <input
+                    type="number"
+                    min={1}
+                    className={inputCls}
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </Field>
+              </>
+            )}
+
+            <Field label={isInventory ? "Problem / reason" : "Subject"}>
               <input
                 className={inputCls}
-                placeholder="Short summary — e.g. leaking tap"
+                placeholder={isInventory ? "Short summary — e.g. broken chair leg" : "Short summary — e.g. leaking tap"}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </Field>
-            <Field label="Details">
+            <Field label="Description">
               <textarea
                 className={`${inputCls} min-h-[90px] resize-none`}
-                placeholder="Describe the issue, location and how long it's been going on"
+                placeholder={
+                  isInventory
+                    ? "Describe the issue and, if requesting extra furniture, why you need it"
+                    : "Describe the issue, location and how long it's been going on"
+                }
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -142,6 +188,9 @@ export default function Complaints() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-slate-500">{c.description}</p>
+                    {c.item && (
+                      <p className="mt-0.5 text-xs text-slate-400">Item: {c.item}{c.quantity ? ` × ${c.quantity}` : ""}</p>
+                    )}
                     <p className="mt-1 text-xs text-slate-300">{c.id} · {c.date}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1.5">

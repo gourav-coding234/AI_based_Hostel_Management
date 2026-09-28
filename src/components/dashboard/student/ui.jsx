@@ -35,6 +35,8 @@ const statusTone = {
   Medium: "amber",
   Partial: "amber",
   Leave: "amber",
+  Left: "amber",
+  Returned: "green",
   Open: "red",
   Rejected: "red",
   Absent: "red",

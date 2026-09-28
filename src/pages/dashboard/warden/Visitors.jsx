@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Card, Pill, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
-import { EyeIcon, UsersIcon, QrIcon } from "../../../components/dashboard/warden/icons";
+import { EyeIcon, UsersIcon, QrIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
+import { toCsvText, downloadTextFile } from "../../../utils/csv";
 
 const statusFilters = ["All Statuses", "On premises", "Checked out"];
 
@@ -25,21 +26,49 @@ export default function Visitors() {
   const onPremises = visitors.filter((v) => v.status === "On premises").length;
 
   const columns = [
+    { key: "visitorName", label: "Visitor", sortable: true },
     {
-      key: "visitorName",
-      label: "Visitor",
-      sortable: true,
-      render: (v) => (
-        <>
-          <p className="font-medium text-ink">{v.visitorName}</p>
-          <p className="text-xs text-slate-400">{v.wing || v.block || "—"}</p>
-        </>
-      ),
+      key: "studentName",
+      label: "Student / Host",
+      render: (v) => v.studentName || v.hostName || "—",
     },
+    { key: "wing", label: "Wing/Block", sortable: true, render: (v) => v.wing || v.block || "—" },
+    { key: "room", label: "Room", render: (v) => v.room || "—" },
     { key: "purpose", label: "Purpose" },
-    { key: "inTime", label: "In / Out", sortable: true, render: (v) => `${v.inTime}${v.outTime ? ` → ${v.outTime}` : ""}` },
-    { key: "status", label: "Status", render: (v) => <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill> },
+    { key: "idProof", label: "ID Proof", render: (v) => v.idProof || "—" },
+    { key: "inTime", label: "Entry time", sortable: true, render: (v) => v.inTime || "—" },
+    { key: "outTime", label: "Exit time", render: (v) => v.outTime || "—" },
+    {
+      key: "status",
+      label: "Status",
+      // Derived, not stored — a visitor is "On premises" until an outTime
+      // is recorded, same rule the `visitors` map above already applies.
+      render: (v) => <Pill tone={v.status === "On premises" ? "Pending" : "Resolved"}>{v.status}</Pill>,
+    },
   ];
+
+  // Same column shape utils/csv.js's toCsvText expects, and the exact
+  // columns asked for. Exports `filtered` — the wing- and status-filtered
+  // rows already backing the table above — so a Warden only ever
+  // downloads visitor records already authorized for their view (never
+  // more than what's on screen), and the file always matches whatever
+  // wing/status filter is currently applied.
+  const csvColumns = [
+    { label: "Visitor", value: (v) => v.visitorName || "" },
+    { label: "Student", value: (v) => v.studentName || v.hostName || "" },
+    { label: "Wing/Block", value: (v) => v.wing || v.block || "" },
+    { label: "Room", value: (v) => v.room || "" },
+    { label: "Purpose", value: (v) => v.purpose || "" },
+    { label: "ID Proof", value: (v) => v.idProof || "" },
+    { label: "Entry Time", value: (v) => v.inTime || "" },
+    { label: "Exit Time", value: (v) => v.outTime || "" },
+    { label: "Status", value: (v) => v.status || "" },
+  ];
+
+  function handleDownload() {
+    if (filtered.length === 0) return;
+    downloadTextFile(toCsvText(filtered, csvColumns), "visitors.csv");
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -62,20 +91,25 @@ export default function Visitors() {
       </div>
 
       <Card title="Visitor log">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-          <select className={`${inputCls} sm:w-48`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
-            {wingFilters.map((w) => <option key={w} value={w}>{w}</option>)}
-          </select>
-          <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select className={`${inputCls} sm:w-48`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
+              {wingFilters.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <Button variant="outline" onClick={handleDownload} disabled={filtered.length === 0}>
+            <DownloadIcon /> Download Visitors
+          </Button>
         </div>
 
         <DataTable
           columns={columns}
           rows={filtered}
           loading={visitorsQuery.loading}
-          searchKeys={["visitorName", "purpose", "wing", "block"]}
+          searchKeys={["visitorName", "studentName", "hostName", "purpose", "wing", "block", "room"]}
           searchPlaceholder="Search visitors…"
           emptyTitle="No visitors logged yet"
           emptyDescription="Visitor check-ins logged by security will show up here."

@@ -8,6 +8,19 @@ import { addDocument } from "../../../firebase/firestore";
 
 const LEAVE_TYPES = ["Home Visit", "Medical", "Emergency", "Other"];
 
+// Checks the form in the same order a student fills it in, so whichever
+// field is wrong first is the one they're told about. `from`/`to` are the
+// browser date input's "YYYY-MM-DD" strings, which sort correctly as
+// plain strings, so no Date parsing is needed to compare them.
+function validate({ type, reason, from, to }) {
+  if (!type) return "Please select a leave type.";
+  if (!reason.trim()) return "Please tell us the reason for your leave.";
+  if (!from) return "Please pick a start date.";
+  if (!to) return "Please pick an end date.";
+  if (to < from) return "The 'To' date can't be before the 'From' date.";
+  return "";
+}
+
 export default function Leave() {
   const { user, profile } = useAuth();
   const studentId = user?.uid || "";
@@ -25,7 +38,16 @@ export default function Leave() {
 
   async function submitRequest(e) {
     e.preventDefault();
-    if (!reason.trim() || !from || !to) return;
+    // Belt-and-braces guard alongside the disabled button below — a fast
+    // double Enter/click on the same tick shouldn't file two requests.
+    if (submitting) return;
+
+    const validationError = validate({ type, reason, from, to });
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     try {
@@ -105,10 +127,16 @@ export default function Leave() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-ink">{r.type} · {r.from} → {r.to}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{r.reason}</p>
+                    {r.status === "Pending" && (
+                      <p className="mt-1 text-xs text-slate-400">Waiting for warden review.</p>
+                    )}
                     {r.status === "Approved" && (
                       <p className="mt-1 text-xs text-slate-400">
                         {r.parentNotified ? "Your parent has been notified." : "Parent notification pending."}
                       </p>
+                    )}
+                    {r.status === "Rejected" && (
+                      <p className="mt-1 text-xs text-slate-400">This request was not approved.</p>
                     )}
                   </div>
                   <Pill tone={r.status}>{r.status}</Pill>

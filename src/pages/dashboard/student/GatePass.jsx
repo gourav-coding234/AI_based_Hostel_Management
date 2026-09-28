@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/student/icons";
@@ -10,6 +10,50 @@ const GATE_PASS_TYPES = ["Outing", "Home Visit", "Medical", "Other"];
 
 function qrUrl(data) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(data)}`;
+}
+
+// Encodes exactly what Security's gate scanner needs to look the pass up
+// and cross-check it — never anything Security should trust outright. The
+// actual status/tripState always comes from Security's own Firestore fetch
+// at scan time, not from this payload.
+function qrPayload(pass) {
+  return JSON.stringify({
+    gatePassId: pass.id,
+    studentId: pass.studentId,
+    type: pass.type,
+    from: pass.from,
+    to: pass.to,
+  });
+}
+
+function parseDate(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Picks which Approved pass to show, instead of trusting array order:
+ *  - a pass whose [from, to] window contains right now wins outright;
+ *  - otherwise the soonest upcoming approved pass (from still ahead of
+ *    now) is shown, so an approval for a future outing still surfaces;
+ *  - a pass whose window has already ended is never selected, so an
+ *    expired approval doesn't linger as if it were still active.
+ * Dates that fail to parse are treated as "current" rather than dropped,
+ * so a record with an odd date value doesn't just vanish.
+ */
+function pickActivePass(approvedPasses, now) {
+  let bestUpcoming = null;
+  for (const p of approvedPasses) {
+    const from = parseDate(p.from);
+    const to = parseDate(p.to);
+    const isExpired = to && now > to;
+    const isUpcoming = from && now < from;
+    if (isExpired) continue;
+    if (!isUpcoming) return p; // currently within window (or dates missing/unparseable)
+    if (!bestUpcoming || from < parseDate(bestUpcoming.from)) bestUpcoming = p;
+  }
+  return bestUpcoming;
 }
 
 export default function GatePass() {
@@ -27,9 +71,22 @@ export default function GatePass() {
   const [to, setTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  // Purely a rendering fallback for a broken QR image request — never the
+  // source of truth for whether a pass is approved. That always comes
+  // straight from the Firestore documents above on every render, so a
+  // refresh, another tab approving the pass, or the warden changing its
+  // status all show up here immediately without any cached UI state.
+  const [qrFailed, setQrFailed] = useState(false);
 
   const passes = gatePasses.items;
-  const activePass = passes.find((p) => p.status === "Approved");
+  // Recomputed fresh from `passes` every render — nothing about which pass
+  // is "active" is ever cached in state or localStorage.
+  const activePass = useMemo(() => pickActivePass(passes.filter((p) => p.status === "Approved"), new Date()), [passes]);
+  const pendingPass = passes.find((p) => p.status === "Pending");
+
+  useEffect(() => {
+    setQrFailed(false);
+  }, [activePass?.id]);
 
   async function submitRequest(e) {
     e.preventDefault();
@@ -73,13 +130,25 @@ export default function GatePass() {
             <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
           ) : activePass ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
-              <img
-                src={qrUrl(`${activePass.id}|${activePass.type}|${activePass.from}-${activePass.to}`)}
-                alt={`QR code for gate pass ${activePass.id}`}
-                width={180}
-                height={180}
-                className="rounded-xl border border-slate-200 p-2 shadow-sm shadow-slate-200/60"
-              />
+              {qrFailed ? (
+                <div
+                  role="img"
+                  aria-label={`QR code for gate pass ${activePass.id} could not be loaded`}
+                  className="flex h-[180px] w-[180px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-2 text-center shadow-sm shadow-slate-200/60"
+                >
+                  <QrIcon />
+                  <p className="text-xs text-slate-400">QR image couldn't load — use your pass ID at the gate instead.</p>
+                </div>
+              ) : (
+                <img
+                  src={qrUrl(qrPayload(activePass))}
+                  alt={`QR code for gate pass ${activePass.id}`}
+                  width={180}
+                  height={180}
+                  className="rounded-xl border border-slate-200 p-2 shadow-sm shadow-slate-200/60"
+                  onError={() => setQrFailed(true)}
+                />
+              )}
               <div>
                 <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
                 <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
@@ -97,6 +166,12 @@ export default function GatePass() {
                 status above updates automatically once security logs it.
               </p>
             </div>
+          ) : pendingPass ? (
+            <EmptyState
+              icon={<QrIcon />}
+              title="Awaiting warden approval"
+              description="Your gate pass request is pending — the QR will appear here once it's approved."
+            />
           ) : (
             <EmptyState
               icon={<QrIcon />}

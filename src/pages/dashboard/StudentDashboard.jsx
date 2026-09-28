@@ -1,7 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import Overview from "./student/Overview";
-import RoomBed from "./student/RoomBed";
 import Fees from "./student/Fees";
 import Mess from "./student/Mess";
 import Attendance from "./student/Attendance";
@@ -9,8 +8,6 @@ import GatePass from "./student/GatePass";
 import Complaints from "./student/Complaints";
 import Notices from "./student/Notices";
 import Profile from "./student/Profile";
-import Inventory from "./student/Inventory";
-import Feedback from "./student/Feedback";
 import Leave from "./student/Leave";
 
 export default function StudentDashboard() {
@@ -19,15 +16,12 @@ export default function StudentDashboard() {
       <Routes>
         <Route index element={<Overview />} />
         <Route path="profile" element={<Profile />} />
-        <Route path="rooms" element={<RoomBed />} />
         <Route path="fees" element={<Fees />} />
         <Route path="mess" element={<Mess />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="gate-pass" element={<GatePass />} />
-        <Route path="inventory" element={<Inventory />} />
         <Route path="complaints" element={<Complaints />} />
         <Route path="notices" element={<Notices />} />
-        <Route path="feedback" element={<Feedback />} />
         <Route path="leave" element={<Leave />} />
       </Routes>
     </DashboardLayout>

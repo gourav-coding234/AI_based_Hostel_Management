@@ -29,6 +29,10 @@ export {
   CalendarClockIcon,
 } from "../security/icons";
 
+export {
+  UploadIcon,
+} from "../admin/icons";
+
 export const UsersIcon = (p) => (
   <svg width="18" height="18" {...base} {...p}>
     <circle cx="7.2" cy="7" r="2.4" />

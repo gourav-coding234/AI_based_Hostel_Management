@@ -56,8 +56,33 @@ export const CSV_TEMPLATE =
  *    on the same tick can leave the download reading a dead URL. A short
  *    delay lets it start first.
  */
+/**
+ * Escapes one CSV field: wraps in quotes (doubling any embedded quotes)
+ * whenever the value contains a comma, quote, or newline — otherwise
+ * leaves it bare. Shared by any page that builds a CSV export.
+ */
+function toCsvField(value) {
+  const s = value === undefined || value === null ? "" : String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Builds CSV text from an array of rows and a column spec:
+ * columns: [{ label, value(row) }] — `label` becomes the header cell,
+ * `value(row)` returns that column's raw (unescaped) value for a row.
+ * Used for exporting real data (e.g. the Warden's filtered Student
+ * Directory) rather than the fixed bulk-user-upload format above.
+ */
+export function toCsvText(rows, columns) {
+  const header = columns.map((c) => toCsvField(c.label)).join(",");
+  const lines = rows.map((row) => columns.map((c) => toCsvField(c.value(row))).join(","));
+  return [header, ...lines].join("\n");
+}
+
 export function downloadTextFile(content, filename, mimeType = "text/csv") {
-  const blob = new Blob([content], { type: `${mimeType};charset=utf-8;` });
+  // UTF-8 BOM so Excel opens CSVs with non-ASCII names correctly.
+  const body = mimeType === "text/csv" ? `\uFEFF${content}` : content;
+  const blob = new Blob([body], { type: `${mimeType};charset=utf-8;` });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

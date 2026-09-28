@@ -21,7 +21,6 @@ import {
   BuildingIcon,
   DownloadIcon,
   ClipboardIcon,
-  SparkleIcon,
   EyeIcon,
   QrIcon,
   CalendarClockIcon,
@@ -54,14 +53,9 @@ export const NAVIGATION = {
       items: [{ label: "Overview", to: "/dashboard/admin", end: true, icon: <ChartIcon /> }],
     },
     {
-      section: "AI",
-      items: [{ label: "AI Assistant", to: "/dashboard/admin/ai-assistant", icon: <SparkleIcon /> }],
-    },
-    {
       section: "Hostel",
       items: [
-        { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
-        { label: "Wardens", to: "/dashboard/admin/wardens", icon: <UsersIcon /> },
+        { label: "Manage Users & Wardens", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
         { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
         { label: "Blocks & Rooms", to: "/dashboard/admin/blocks", icon: <BuildingIcon /> },
       ],
@@ -79,10 +73,6 @@ export const NAVIGATION = {
     {
       section: "Finance",
       items: [{ label: "Fees", to: "/dashboard/admin/fees", icon: <WalletIcon /> }],
-    },
-    {
-      section: "Safety",
-      items: [{ label: "Safety & Emergency", to: "/dashboard/admin/safety", icon: <SirenIcon /> }],
     },
     {
       section: "Analytics",
@@ -106,10 +96,8 @@ export const NAVIGATION = {
     {
       section: "Hostel",
       items: [
-        { label: "Room & Bed", to: "/dashboard/student/rooms", icon: <BedIcon /> },
         { label: "Attendance", to: "/dashboard/student/attendance", icon: <CheckSquareIcon /> },
         { label: "Mess", to: "/dashboard/student/mess", icon: <UtensilsIcon /> },
-        { label: "Inventory", to: "/dashboard/student/inventory", icon: <PackageIcon /> },
       ],
     },
     {
@@ -122,7 +110,6 @@ export const NAVIGATION = {
         { label: "Gate Pass", to: "/dashboard/student/gate-pass", icon: <StudentQrIcon /> },
         { label: "Complaints", to: "/dashboard/student/complaints", icon: <StudentWrenchIcon /> },
         { label: "Leave Request", to: "/dashboard/student/leave", icon: <StudentAlertIcon /> },
-        { label: "Feedback", to: "/dashboard/student/feedback", icon: <SmileIcon /> },
         { label: "Notices", to: "/dashboard/student/notices", icon: <StudentMegaphoneIcon /> },
       ],
     },
@@ -136,10 +123,6 @@ export const NAVIGATION = {
     {
       section: "Main",
       items: [{ label: "Overview", to: "/dashboard/warden", end: true, icon: <HomeIcon /> }],
-    },
-    {
-      section: "AI",
-      items: [{ label: "AI Assistant", to: "/dashboard/warden/ai-assistant", icon: <SparkleIcon /> }],
     },
     {
       section: "Hostel",
@@ -168,14 +151,6 @@ export const NAVIGATION = {
       items: [
         { label: "Mess", to: "/dashboard/warden/mess", icon: <UtensilsIcon /> },
         { label: "Inventory", to: "/dashboard/warden/inventory", icon: <PackageIcon /> },
-        { label: "Safety & Emergency", to: "/dashboard/warden/safety", icon: <SirenIcon /> },
-      ],
-    },
-    {
-      section: "Analytics",
-      items: [
-        { label: "Feedback Analysis", to: "/dashboard/warden/feedback", icon: <SmileIcon /> },
-        { label: "Reports", to: "/dashboard/warden/reports", icon: <DownloadIcon /> },
       ],
     },
   ],
@@ -220,6 +195,8 @@ export const NAVIGATION = {
       items: [
         { label: "Gate Scan", to: "/dashboard/security/gate-scan", icon: <ScanIcon /> },
         { label: "In / Out Register", to: "/dashboard/security/in-out", icon: <ListIcon /> },
+        { label: "Leave Exit", to: "/dashboard/security/leave-exit", icon: <CalendarClockIcon /> },
+        { label: "Attendance", to: "/dashboard/security/attendance", icon: <CheckSquareIcon /> },
         { label: "Visitor Log", to: "/dashboard/security/visitors", icon: <UserPlusIcon /> },
       ],
     },

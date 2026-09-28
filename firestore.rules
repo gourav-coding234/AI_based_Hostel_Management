@@ -14,6 +14,24 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentId;
     }
 
+    // The signed-in user's assigned block/wing ('' if none) — used to
+    // scope a Warden's fee updates to their own block.
+    function myBlock() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('block', '');
+    }
+
+    // Quantity sanity for inventory writes made by a Warden.
+    function validInventory() {
+      let d = request.resource.data;
+      return d.get('quantity', 0) is number &&
+             d.get('available', 0) is number &&
+             d.get('damaged', 0) is number &&
+             d.get('quantity', 0) >= 0 &&
+             d.get('available', 0) >= 0 &&
+             d.get('damaged', 0) >= 0 &&
+             d.get('available', 0) + d.get('damaged', 0) <= d.get('quantity', 0);
+    }
+
     function isAdmin() {
       return signedIn() && userRole() == "Admin";
     }
@@ -82,12 +100,82 @@ service cloud.firestore {
 
     match /fees/{feeId} {
       allow read: if isStaff() || isOwnRecord(resource.data.studentId);
-      allow write: if isStaff();
+
+      // Admin keeps full control of fee records (create/edit/delete).
+      // A Warden can only UPDATE, only records in their own assigned
+      // block (a warden with no block set manages all, matching the
+      // Warden pages), only the payment/reminder fields, and paid can
+      // only go up and never past the total. Wardens cannot create or
+      // delete fee records. Student/parent privacy is unchanged (read).
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (isWarden() &&
+         (myBlock() == '' || resource.data.block == myBlock()) &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['paid', 'status', 'lastPaymentAt', 'reminderSent', 'reminderSentAt',
+                     'updatedBy', 'updatedByRole', 'updatedAt']) &&
+         request.resource.data.get('paid', 0) >= resource.data.get('paid', 0) &&
+         request.resource.data.get('paid', 0) <= request.resource.data.get('total', 0));
+    }
+
+    // Persistent messages from staff to ONE parent account (fee reminders and
+    // leave decisions). A parent can read only notifications addressed to their
+    // own uid; nobody else's. Staff create them only for a real Parent
+    // account actually linked (users/{parent}.linkedStudentId) to the
+    // student named in the message, with a deterministic id
+    // (feeId_parentId_date, or leave_leaveId_parentId_status) so repeated sends can't stack duplicates.
+    // Records are immutable after creation, with ONE exception: the parent a
+    // notification is addressed to may flip it to read (read + readAt only).
+    // Only Admin can delete.
+    match /parentNotifications/{notificationId} {
+      allow read: if isStaff() ||
+        (isParent() && resource.data.parentId == request.auth.uid);
+      allow create: if isStaff() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.read == false &&
+        get(/databases/$(database)/documents/users/$(request.resource.data.parentId)).data.role == 'Parent' &&
+        get(/databases/$(database)/documents/users/$(request.resource.data.parentId)).data.linkedStudentId == request.resource.data.studentId &&
+        ((request.resource.data.type == 'Fee Reminder' &&
+          notificationId == request.resource.data.feeId + '_' +
+                            request.resource.data.parentId + '_' +
+                            request.resource.data.date) ||
+         (request.resource.data.type == 'Leave Update' &&
+          notificationId == 'leave_' + request.resource.data.leaveId + '_' +
+                            request.resource.data.parentId + '_' +
+                            request.resource.data.leaveStatus));
+      // Parent marks THEIR OWN notification as read. Nothing else may change:
+      // only `read` (false -> true) and `readAt` (server time) are touched, so
+      // parentId, studentId, title, message, amounts etc. stay immutable, and
+      // a parent can't touch another parent's notification. Staff still can't
+      // update (unchanged).
+      allow update: if isParent() &&
+        resource.data.parentId == request.auth.uid &&
+        resource.data.get('read', false) == false &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']) &&
+        request.resource.data.read == true &&
+        request.resource.data.readAt == request.time;
+      allow delete: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
-      allow write: if isStaff();
+      // Warden and Security can both take attendance; every record they
+      // write must carry their own uid as markedBy. New records use the id
+      // studentId_date, so a student/date can only ever have one new record,
+      // and an update can't move a record to another student or date.
+      // Security has no delete. Admin is unrestricted (imports). Students
+      // and parents read only their own / linked child's records.
+      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow create: if isAdmin() ||
+        ((isWarden() || isSecurity()) &&
+         request.resource.data.markedBy == request.auth.uid &&
+         attendanceId == request.resource.data.studentId + '_' + request.resource.data.date);
+      allow update: if isAdmin() ||
+        ((isWarden() || isSecurity()) &&
+         request.resource.data.markedBy == request.auth.uid &&
+         request.resource.data.studentId == resource.data.studentId &&
+         request.resource.data.date == resource.data.date);
+      allow delete: if isStaff();
     }
 
     match /gatePasses/{gatePassId} {
@@ -95,13 +183,35 @@ service cloud.firestore {
       // keeps blanket read — everyone else is scoped to their own record.
       allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
       allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
-      allow update: if isStaff() || isSecurity();
+      // Security may only log gate movement, and only these two transitions
+      // (exactly what recordGateMovement() writes):
+      //   OUT:    Approved pass with no trip yet   -> tripState 'Out'
+      //           (status must stay 'Approved')
+      //   RETURN: Approved pass currently 'Out'    -> tripState 'Returned'
+      //           and status 'Completed'
+      // Only tripState/status/updatedAt may change, so studentId, studentName,
+      // from, to, type, reason and approval metadata are immutable for Security.
+      // A Completed pass can never be re-opened, and Security can never
+      // approve/reject a pass.
+      allow update: if isStaff() ||
+        (isSecurity() &&
+         resource.data.status == 'Approved' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tripState', 'status', 'updatedAt']) &&
+         ((!(resource.data.get('tripState', '') in ['Out', 'Returned']) &&
+           request.resource.data.tripState == 'Out' &&
+           request.resource.data.status == 'Approved') ||
+          (resource.data.get('tripState', '') == 'Out' &&
+           request.resource.data.tripState == 'Returned' &&
+           request.resource.data.status == 'Completed')));
       allow delete: if isAdmin();
     }
 
     match /visitors/{visitorId} {
       allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
-      allow write: if isStaff() || isSecurity();
+      // Check-in / check-out. The register is a permanent history, so only
+      // Admin/Warden can delete — Security cannot.
+      allow create, update: if isStaff() || isSecurity();
+      allow delete: if isStaff();
     }
 
     match /complaints/{complaintId} {
@@ -112,8 +222,15 @@ service cloud.firestore {
     }
 
     match /inventory/{inventoryId} {
+      // Actual hostel stock — staff only, never public. Admin keeps full
+      // control (including the data-import path). A Warden can add and
+      // update stock, but every write must keep quantities sane: numbers,
+      // none negative, and available + damaged never above the total.
+      // (Legacy imported rows without available/damaged still pass.)
+      // Only Admin can delete a stock record.
       allow read: if isStaff();
-      allow write: if isStaff();
+      allow create, update: if isAdmin() || (isWarden() && validInventory());
+      allow delete: if isAdmin();
     }
 
     match /notices/{noticeId} {
@@ -126,7 +243,22 @@ service cloud.firestore {
       // through the admin "Show on the public website" checkbox, so an
       // internal notice is never exposed unless someone opts it in.
       allow read: if signedIn() || resource.data.isPublic == true;
-      allow write: if isStaff();
+
+      // Admin and Warden share this one collection. Admin keeps full
+      // control. A Warden can publish/edit/delete notices but cannot use
+      // them to reach the public website: a Warden-created notice must be
+      // internal (isPublic false) and attributed to the Warden, and a
+      // Warden edit cannot flip isPublic or relabel who created a notice.
+      // Students, Security and Parents have no write access at all.
+      allow create: if isAdmin() ||
+        (isWarden() &&
+         request.resource.data.get('isPublic', false) == false &&
+         request.resource.data.get('createdByRole', '') == 'Warden');
+      allow update: if isAdmin() ||
+        (isWarden() &&
+         request.resource.data.get('isPublic', false) == resource.data.get('isPublic', false) &&
+         request.resource.data.get('createdByRole', '') == resource.data.get('createdByRole', ''));
+      allow delete: if isStaff();
     }
 
     match /auditLogs/{auditLogId} {
@@ -159,15 +291,43 @@ service cloud.firestore {
     }
 
     match /leaveRequests/{leaveId} {
-      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
+      // Security may read ONLY approved requests (to record physical exits)
+      // — never Pending/Rejected — and has no write access at all, so it
+      // can't approve, reject or otherwise change a leave request.
+      allow read: if isStaff() || isOwnRecord(resource.data.studentId) ||
+        (isSecurity() && resource.data.status == 'Approved');
       allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
       allow update: if isStaff();
       allow delete: if isAdmin();
     }
 
+    // Physical leave movements recorded by Security. Doc id == leaveRequestId
+    // so a request can only ever have one log. Creation requires the leave
+    // request to still be Approved and the log to be stamped with the
+    // caller's uid and the real server time. Security's only update is the
+    // Left -> Returned transition (status/returnedAt/returnedBy/returnedByUid).
+    match /leaveLogs/{logId} {
+      allow read: if isStaff() || isSecurity();
+      allow create: if (isSecurity() || isStaff()) &&
+        logId == request.resource.data.leaveRequestId &&
+        request.resource.data.status == 'Left' &&
+        request.resource.data.recordedByUid == request.auth.uid &&
+        request.resource.data.leftAt == request.time &&
+        get(/databases/$(database)/documents/leaveRequests/$(logId)).data.status == 'Approved';
+      allow update: if (isSecurity() || isStaff()) &&
+        resource.data.status == 'Left' &&
+        request.resource.data.status == 'Returned' &&
+        request.resource.data.returnedByUid == request.auth.uid &&
+        request.resource.data.returnedAt == request.time &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'returnedAt', 'returnedBy', 'returnedByUid']);
+      allow delete: if isAdmin();
+    }
+
     match /incidents/{incidentId} {
       allow read: if isStaff() || isSecurity();
-      allow write: if isStaff() || isSecurity();
+      allow create, update: if isStaff() || isSecurity();
+      allow delete: if isStaff();
     }
 
     match /sosAlerts/{alertId} {
@@ -178,7 +338,8 @@ service cloud.firestore {
     }
 
     match /emergencyContacts/{contactId} {
-      allow read: if signedIn();
+      // Read-only for Security and Parent; only Admin/Warden manage contacts.
+      allow read: if isStaff() || isSecurity() || isParent();
       allow write: if isStaff();
     }
 
@@ -200,8 +361,18 @@ service cloud.firestore {
     }
 
     match /messMenu/{menuId} {
+      // Any signed-in user can read the timetable (students view/download
+      // it); only Admin/Warden can change it. The menu is exactly one
+      // document per weekday (doc id = weekday name), and meal fields, if
+      // present, must be strings — so no stray documents or bad values.
+      // Students, Parents and Security have no write access.
       allow read: if signedIn();
-      allow write: if isStaff();
+      allow create, update: if isStaff() &&
+        menuId in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+        request.resource.data.get('breakfast', '') is string &&
+        request.resource.data.get('lunch', '') is string &&
+        request.resource.data.get('dinner', '') is string;
+      allow delete: if isStaff();
     }
 
     match /messReports/{reportId} {

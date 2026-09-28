@@ -1,25 +1,66 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { UserPlusIcon, LogOutIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { addDocument, updateDocument } from "../../../firebase/firestore";
+import { useAuth } from "../../../context/AuthContext";
+import { addDocument, updateDocument, getCollection } from "../../../firebase/firestore";
+import { toCsvText, downloadTextFile } from "../../../utils/csv";
 
 const VISITOR_PURPOSES = ["Meeting a student", "Parent visit", "Delivery / courier", "Vendor / maintenance", "Other"];
 const EMPTY_FORM = { visitorName: "", purpose: VISITOR_PURPOSES[0], idProof: "", phone: "" };
 
-function nowLabel() {
-  return new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+// Display string only — never used for sorting or ordering.
+function timeLabel(date) {
+  return date.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+// Sortable key for a record's check-in: the ISO `inTimeSort` written with
+// every entry, falling back to the server `createdAt` for older records
+// that were saved before that field existed. Never parses the display text.
+function inSortKey(v) {
+  if (v.inTimeSort) return v.inTimeSort;
+  const d = v.createdAt?.toDate ? v.createdAt.toDate() : null;
+  return d ? d.toISOString() : "";
+}
+
+function byNewestFirst(a, b) {
+  return inSortKey(b).localeCompare(inSortKey(a));
+}
+
+// Oldest first for the printed register.
+function byOldestFirst(a, b) {
+  return inSortKey(a).localeCompare(inSortKey(b));
+}
+
+function statusOf(v) {
+  return v.outTime || v.outTimeSort ? "Checked out" : "On premises";
+}
+
+const CSV_COLUMNS = [
+  { label: "Visitor Name", value: (v) => v.visitorName },
+  { label: "Purpose", value: (v) => v.purpose },
+  { label: "ID Proof", value: (v) => v.idProof },
+  { label: "Phone", value: (v) => v.phone },
+  { label: "In Time", value: (v) => v.inTime },
+  { label: "Out Time", value: (v) => v.outTime },
+  { label: "Status", value: (v) => statusOf(v) },
+  { label: "Recorded By", value: (v) => v.recordedBy },
+];
+
 export default function SecurityVisitorLog() {
-  // Order by inTimeSort (a real ISO timestamp), not the inTime display
-  // string — locale strings with month names don't sort correctly once
-  // entries span more than one month.
-  const visitorsQuery = useCollection("visitors", { orderByField: "inTimeSort" });
-  const visitors = visitorsQuery.data;
+  const { user, profile } = useAuth();
+  const guardName = profile?.name || user?.displayName || user?.email || "";
+
+  // No Firestore orderBy on purpose: a query ordered by `inTimeSort` silently
+  // drops any document that lacks that field (older / imported records).
+  // Fetch everything and sort client-side on the ISO key instead.
+  const visitorsQuery = useCollection("visitors");
+  const visitors = useMemo(() => [...visitorsQuery.data].sort(byNewestFirst), [visitorsQuery.data]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [message, setMessage] = useState("");
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -29,21 +70,74 @@ export default function SecurityVisitorLog() {
     e.preventDefault();
     if (!form.visitorName.trim()) return;
     setSubmitting(true);
+    setMessage("");
     try {
-      await addDocument("visitors", { ...form, inTime: nowLabel(), inTimeSort: new Date().toISOString(), outTime: "" });
+      const now = new Date();
+      await addDocument("visitors", {
+        visitorName: form.visitorName.trim(),
+        purpose: form.purpose,
+        idProof: form.idProof.trim(),
+        phone: form.phone.trim(),
+        inTime: timeLabel(now),
+        inTimeSort: now.toISOString(),
+        outTime: "",
+        outTimeSort: "",
+        status: "On premises",
+        recordedBy: guardName,
+        ...(user?.uid ? { recordedByUid: user.uid } : {}),
+      });
       setForm(EMPTY_FORM);
     } catch (err) {
       console.error("Failed to check in visitor:", err);
+      setMessage("Couldn't check in this visitor. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleCheckOut(id) {
+  // Check-out only updates the record — visitors are never deleted, so the
+  // register stays a complete history. Fields missing on older records are
+  // filled in so every record ends up with the full shape.
+  async function handleCheckOut(v) {
+    setMessage("");
     try {
-      await updateDocument("visitors", id, { outTime: nowLabel() });
+      const now = new Date();
+      await updateDocument("visitors", v.id, {
+        visitorName: v.visitorName || "",
+        purpose: v.purpose || "",
+        idProof: v.idProof || "",
+        phone: v.phone || "",
+        inTime: v.inTime || "",
+        inTimeSort: inSortKey(v),
+        outTime: timeLabel(now),
+        outTimeSort: now.toISOString(),
+        status: "Checked out",
+        ...(v.recordedBy ? {} : { recordedBy: guardName }),
+        checkedOutBy: guardName,
+      });
     } catch (err) {
       console.error("Failed to check out visitor:", err);
+      setMessage("Couldn't check out this visitor. Please try again.");
+    }
+  }
+
+  // Downloads the WHOLE register straight from Firestore (not the rows on
+  // screen), oldest first, so it always matches the stored history.
+  async function handleDownload() {
+    setDownloading(true);
+    setMessage("");
+    try {
+      const all = await getCollection("visitors");
+      if (all.length === 0) {
+        setMessage("There are no visitor records to download yet.");
+        return;
+      }
+      downloadTextFile(toCsvText([...all].sort(byOldestFirst), CSV_COLUMNS), "visitor-register.csv");
+    } catch (err) {
+      console.error("Failed to download visitor register:", err);
+      setMessage("Couldn't download the visitor register. Please try again.");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -75,7 +169,15 @@ export default function SecurityVisitorLog() {
         </form>
       </Card>
 
-      <Card title="Visitor log">
+      <Card
+        title="Visitor log"
+        action={
+          <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={handleDownload} disabled={visitorsQuery.loading || downloading}>
+            {downloading ? "Preparing…" : "Download Visitor Register"}
+          </Button>
+        }
+      >
+        {message && <p className="mb-3 text-sm text-red-600">{message}</p>}
         {visitorsQuery.loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : visitorsQuery.isEmpty ? (
@@ -96,9 +198,9 @@ export default function SecurityVisitorLog() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <Pill tone={v.outTime ? "Resolved" : "Pending"}>{v.outTime ? "Checked out" : "On premises"}</Pill>
+                  <Pill tone={v.outTime ? "Resolved" : "Pending"}>{statusOf(v)}</Pill>
                   {!v.outTime && (
-                    <Button variant="outline" onClick={() => handleCheckOut(v.id)}>
+                    <Button variant="outline" onClick={() => handleCheckOut(v)}>
                       <LogOutIcon /> Check out
                     </Button>
                   )}

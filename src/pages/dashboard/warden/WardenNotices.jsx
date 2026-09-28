@@ -21,6 +21,7 @@ export default function WardenNotices() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const staffName = profile?.name || user?.email || "Warden";
 
   function startCreate() {
     setEditingId("new");
@@ -39,17 +40,31 @@ export default function WardenNotices() {
 
   async function saveDraft(e) {
     e.preventDefault();
-    if (!draft.title.trim() || !draft.body.trim()) return;
+    if (saving || !draft.title.trim() || !draft.body.trim()) return;
     setSaving(true);
     try {
       if (editingId === "new") {
+        // Same `notices` collection and field names the Admin page writes
+        // (title/body/target/priority/date/postedBy, createdBy via
+        // addDocument), plus explicit role attribution. Warden notices are
+        // always internal (isPublic: false) — the public-website flag is
+        // an Admin-only opt-in, and Firestore rules enforce that too.
         await addDocument(
           "notices",
-          { ...draft, date: new Date().toISOString().slice(0, 10), postedBy: profile?.name || user?.email },
+          {
+            ...draft,
+            date: new Date().toISOString().slice(0, 10),
+            postedBy: `${staffName} (Warden)`,
+            createdByRole: "Warden",
+            isPublic: false,
+          },
           user?.uid
         );
       } else {
-        await updateDocument("notices", editingId, draft);
+        // Edits only touch the form fields (never isPublic/createdBy/
+        // createdByRole, so an Admin notice keeps its original
+        // attribution), and record who last changed it.
+        await updateDocument("notices", editingId, { ...draft, updatedBy: staffName, updatedByRole: "Warden" });
       }
       cancelEdit();
     } catch (err) {

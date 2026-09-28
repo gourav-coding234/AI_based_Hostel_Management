@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { CalendarClockIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { updateDocument } from "../../../firebase/firestore";
+import { getCollection, decideLeaveRequest } from "../../../firebase/firestore";
 
 const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected"];
 
 export default function Leave() {
+  const { user, profile } = useAuth();
   const requestsQuery = useCollection("leaveRequests", { orderByField: "from" });
   const requests = requestsQuery.data;
   const wingFilters = ["All Wings", ...Array.from(new Set(requests.map((r) => r.wing).filter(Boolean)))];
@@ -26,11 +28,48 @@ export default function Leave() {
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
 
-  async function decide(id, status) {
+  // Ids currently being written — guards against a double-click firing two
+  // decisions for the same request before the first write's snapshot comes
+  // back, and is what disables that row's buttons while the update is in
+  // flight (mirrors the same guard on the Warden Gate Passes page).
+  const [processingIds, setProcessingIds] = useState(() => new Set());
+
+  async function decide(request, nextStatus) {
+    // Only a still-Pending, not-already-processing request can be decided
+    // — closes the window for a duplicate approval/rejection from a
+    // repeated click, a second tab, or a stale render. This always
+    // updates the same leaveRequests/{id} document (never creates a new
+    // one), so it stays the one record both the student and their linked
+    // parent read from.
+    if (request.status !== "Pending" || processingIds.has(request.id)) return;
+
+    setProcessingIds((prev) => new Set(prev).add(request.id));
+    const staffName = profile?.name || user?.email || "Warden";
+
     try {
-      await updateDocument("leaveRequests", id, { status, parentNotified: status === "Approved" });
+      // Linked parents are resolved through the existing link
+      // (users/{parentUid}.linkedStudentId). Each gets a persistent
+      // parentNotifications record written in the same transaction as the
+      // decision, and `parentNotified` is set only when such a record
+      // really exists — never just because the Warden clicked.
+      let parentIds = [];
+      try {
+        const parents = await getCollection("users", {
+          whereClauses: [["role", "==", "Parent"], ["linkedStudentId", "==", request.studentId]],
+        });
+        parentIds = parents.map((p) => p.id);
+      } catch (lookupErr) {
+        console.error("Couldn't look up linked parent:", lookupErr);
+      }
+      await decideLeaveRequest(request.id, nextStatus, parentIds, { uid: user?.uid || "", name: staffName });
     } catch (err) {
       console.error("Failed to update leave request:", err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(request.id);
+        return next;
+      });
     }
   }
 
@@ -55,21 +94,24 @@ export default function Leave() {
     {
       key: "status",
       label: "Status / action",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          <Pill tone={r.status}>{r.status}</Pill>
-          {r.status === "Pending" && (
-            <>
-              <Button variant="outline" className="px-2.5 py-1 text-xs" onClick={() => decide(r.id, "Approved")}>
-                <CheckIcon />
-              </Button>
-              <Button variant="danger" className="px-2.5 py-1 text-xs" onClick={() => decide(r.id, "Rejected")}>
-                <XIcon />
-              </Button>
-            </>
-          )}
-        </div>
-      ),
+      render: (r) => {
+        const busy = processingIds.has(r.id);
+        return (
+          <div className="flex items-center gap-2">
+            <Pill tone={r.status}>{r.status}</Pill>
+            {r.status === "Pending" && (
+              <>
+                <Button variant="outline" className="px-2.5 py-1 text-xs" onClick={() => decide(r, "Approved")} disabled={busy}>
+                  <CheckIcon />
+                </Button>
+                <Button variant="danger" className="px-2.5 py-1 text-xs" onClick={() => decide(r, "Rejected")} disabled={busy}>
+                  <XIcon />
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
