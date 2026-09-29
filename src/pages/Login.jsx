@@ -12,6 +12,7 @@ export default function Login() {
   const [role, setRole] = useState(ROLE_LIST[0]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -176,16 +177,41 @@ export default function Login() {
                 <label htmlFor="password" className="form-label">
                   Password
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="input"
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="input"
+                    style={{ paddingRight: "3.5rem" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      right: "0.75rem",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      padding: "0.25rem",
+                      cursor: "pointer",
+                      color: "inherit",
+                      opacity: 0.7,
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
               </div>
 
               {error && <p className="form-error">{error}</p>}
