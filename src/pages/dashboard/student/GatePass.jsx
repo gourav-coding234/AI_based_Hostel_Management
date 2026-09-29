@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/student/icons";
-import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useDocument } from "../../../hooks/useDocument";
 import { addDocument } from "../../../firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../../../firebase/config";
 
 const GATE_PASS_TYPES = ["Outing", "Home Visit", "Medical", "Other"];
 
@@ -32,6 +33,53 @@ function parseDate(v) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Newest first, by the pass window's start; falls back to creation time.
+function sortNewestFirst(items) {
+  const key = (p) => {
+    const from = parseDate(p.from);
+    if (from) return from.getTime();
+    const created = p.createdAt?.toMillis ? p.createdAt.toMillis() : 0;
+    return created;
+  };
+  return [...items].sort((a, b) => key(b) - key(a));
+}
+
+/**
+ * Live listener for THIS student's gate passes.
+ *
+ * The shared useStudentCollection hook combines where("studentId") with
+ * orderBy("from"), which Firestore only serves through a composite index.
+ * Without that index the query fails, the hook swallows the error and
+ * returns an empty list — so approved passes never reached the QR card or
+ * the history table. Here we filter by studentId only (no index needed)
+ * and sort on the client, and we expose the error instead of hiding it.
+ */
+function useMyGatePasses(studentId) {
+  const [state, setState] = useState({ loading: Boolean(studentId), items: [], error: "" });
+
+  useEffect(() => {
+    if (!studentId) {
+      setState({ loading: false, items: [], error: "" });
+      return undefined;
+    }
+    setState((s) => ({ ...s, loading: true, error: "" }));
+    const q = query(collection(db, "gatePasses"), where("studentId", "==", studentId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setState({ loading: false, items: sortNewestFirst(items), error: "" });
+      },
+      (err) => {
+        console.error("Failed to load gatePasses:", err);
+        setState({ loading: false, items: [], error: "Couldn't load your gate passes right now. Please refresh." });
+      }
+    );
+  }, [studentId]);
+
+  return state;
+}
+
 /**
  * Picks which Approved pass to show, instead of trusting array order:
  *  - a pass whose [from, to] window contains right now wins outright;
@@ -47,6 +95,9 @@ function pickActivePass(approvedPasses, now) {
   for (const p of approvedPasses) {
     const from = parseDate(p.from);
     const to = parseDate(p.to);
+    // A student who is currently Out on this pass still needs its QR to
+    // get back in, even if the return time has slipped past.
+    if (p.tripState === "Out") return p;
     const isExpired = to && now > to;
     const isUpcoming = from && now < from;
     if (isExpired) continue;
@@ -59,7 +110,7 @@ function pickActivePass(approvedPasses, now) {
 export default function GatePass() {
   const { user, profile } = useAuth();
   const studentId = user?.uid || "";
-  const gatePasses = useStudentCollection("gatePasses", studentId, { orderByField: "from" });
+  const gatePasses = useMyGatePasses(studentId);
   // Own room/wing record — used only to tag the pass with block/room so the
   // admin/warden GatePasses pages' block & wing filters actually have
   // something to filter on. Never used to gate access; that's Firestore's job.
@@ -79,9 +130,16 @@ export default function GatePass() {
   const [qrFailed, setQrFailed] = useState(false);
 
   const passes = gatePasses.items;
+  // Re-evaluated on a timer so a pass whose window starts/ends while this
+  // page is open appears/disappears without a manual refresh.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
   // Recomputed fresh from `passes` every render — nothing about which pass
   // is "active" is ever cached in state or localStorage.
-  const activePass = useMemo(() => pickActivePass(passes.filter((p) => p.status === "Approved"), new Date()), [passes]);
+  const activePass = useMemo(() => pickActivePass(passes.filter((p) => p.status === "Approved"), now), [passes, now]);
   const pendingPass = passes.find((p) => p.status === "Pending");
 
   useEffect(() => {
@@ -128,6 +186,8 @@ export default function GatePass() {
         <Card title="Active pass">
           {gatePasses.loading ? (
             <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+          ) : gatePasses.error ? (
+            <p className="py-10 text-center text-sm text-rose-600">{gatePasses.error}</p>
           ) : activePass ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               {qrFailed ? (
@@ -217,6 +277,8 @@ export default function GatePass() {
       <Card title="Gate pass history">
         {gatePasses.loading ? (
           <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
+        ) : gatePasses.error ? (
+          <p className="py-10 text-center text-sm text-rose-600">{gatePasses.error}</p>
         ) : passes.length === 0 ? (
           <EmptyState icon={<QrIcon />} title="No gate passes yet" description="Requests you submit will show up here." />
         ) : (
