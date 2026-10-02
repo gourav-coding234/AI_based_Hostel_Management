@@ -76,6 +76,42 @@ function runSmartSearch(query, { blocks, complaints, fees }) {
   return null;
 }
 
+function renderFormattedText(text) {
+  if (!text) return "";
+
+  const parts = [];
+  const regex = /(\*\*[^*]+\*\*)/g;
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(regex)) {
+    const start = match.index;
+    const end = start + match[0].length;
+
+    if (start > lastIndex) {
+      const segment = text.slice(lastIndex, start);
+      const lines = segment.split("\n");
+      lines.forEach((line, index) => {
+        if (index > 0) parts.push(<br key={`segment-${start}-${index}`} />);
+        if (line) parts.push(line);
+      });
+    }
+
+    parts.push(<strong key={`bold-${start}`}>{match[0].slice(2, -2)}</strong>);
+    lastIndex = end;
+  }
+
+  if (lastIndex < text.length) {
+    const tail = text.slice(lastIndex);
+    const lines = tail.split("\n");
+    lines.forEach((line, index) => {
+      if (index > 0) parts.push(<br key={`tail-${index}`} />);
+      if (line) parts.push(line);
+    });
+  }
+
+  return parts;
+}
+
 function AssistantPanel({ liveData }) {
   const [messages, setMessages] = useState([
     { from: "ai", text: "Hi! I'm the hostel assistant. Ask me about bed vacancy, open complaints, or unpaid fees — I answer from the live database." },
@@ -101,7 +137,7 @@ function AssistantPanel({ liveData }) {
                   m.from === "admin" ? "bg-navy-950 text-white" : "bg-slate-100 text-ink"
                 }`}
               >
-                {m.text}
+                {renderFormattedText(m.text)}
               </div>
             </div>
           ))}
