@@ -4,6 +4,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import AIChatWidget from "./components/AIChatWidget";
 import { ROLES } from "./roles";
 
 // Each role's dashboard pulls in ~15-20 pages. Loading all five eagerly
@@ -36,53 +37,57 @@ function Guarded({ role, children }) {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
+    <>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
 
-      <Route
-        path="/dashboard/admin/*"
-        element={
-          <Guarded role={ROLES.ADMIN}>
-            <AdminDashboard />
-          </Guarded>
-        }
-      />
-      <Route
-        path="/dashboard/student/*"
-        element={
-          <Guarded role={ROLES.STUDENT}>
-            <StudentDashboard />
-          </Guarded>
-        }
-      />
-      <Route
-        path="/dashboard/warden/*"
-        element={
-          <Guarded role={ROLES.WARDEN}>
-            <WardenDashboard />
-          </Guarded>
-        }
-      />
-      <Route
-        path="/dashboard/parent/*"
-        element={
-          <Guarded role={ROLES.PARENT}>
-            <ParentDashboard />
-          </Guarded>
-        }
-      />
-      <Route
-        path="/dashboard/security/*"
-        element={
-          <Guarded role={ROLES.SECURITY}>
-            <SecurityDashboard />
-          </Guarded>
-        }
-      />
+        <Route
+          path="/dashboard/admin/*"
+          element={
+            <Guarded role={ROLES.ADMIN}>
+              <AdminDashboard />
+            </Guarded>
+          }
+        />
+        <Route
+          path="/dashboard/student/*"
+          element={
+            <Guarded role={ROLES.STUDENT}>
+              <StudentDashboard />
+            </Guarded>
+          }
+        />
+        <Route
+          path="/dashboard/warden/*"
+          element={
+            <Guarded role={ROLES.WARDEN}>
+              <WardenDashboard />
+            </Guarded>
+          }
+        />
+        <Route
+          path="/dashboard/parent/*"
+          element={
+            <Guarded role={ROLES.PARENT}>
+              <ParentDashboard />
+            </Guarded>
+          }
+        />
+        <Route
+          path="/dashboard/security/*"
+          element={
+            <Guarded role={ROLES.SECURITY}>
+              <SecurityDashboard />
+            </Guarded>
+          }
+        />
 
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+
+      <AIChatWidget />
+    </>
   );
 }
 
