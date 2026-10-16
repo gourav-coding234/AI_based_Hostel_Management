@@ -216,10 +216,10 @@ async function buildRoleScopedContext(user, profile, role) {
 }
 
 async function requestGeminiReply(contextText, userMessage) {
+  // Deployed: call /api/gemini (serverless function holds GEMINI_API_KEY privately).
+  // Local shortcut: if VITE_GEMINI_API_KEY is set in .env, call Google directly.
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error("Add VITE_GEMINI_API_KEY to your .env file to enable the AI assistant.");
-  }
+  const useDirect = typeof apiKey === "string" && apiKey.trim() !== "";
 
   const prompt = `
 You are the hostel AI assistant for this project.
@@ -239,13 +239,19 @@ Answer in a concise, helpful, and professional way.
   const errors = [];
 
   for (const model of GEMINI_MODEL_FALLBACKS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const url = useDirect
+      ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+      : "/api/gemini";
 
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(useDirect ? { "x-goog-api-key": apiKey } : {}),
+        },
         body: JSON.stringify({
+          ...(useDirect ? {} : { model }),
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
