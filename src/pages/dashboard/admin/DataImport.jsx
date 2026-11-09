@@ -8,9 +8,90 @@ import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, delet
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { useCollection } from "../../../hooks/useCollection";
 
+function validateMixedRecords(records) {
+  if (!records.length) return { validRecords: [], errors: [{ row: 0, field: "dataType", message: "The file has no data rows." }], byTarget: {} };
+  const routeKey = Object.keys(records[0]).find((key) => key.trim().toLowerCase() === "datatype");
+  const groups = new Map();
+  const errors = [];
+  const normalizeType = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const identifyTarget = (record) => {
+    const value = routeKey ? String(record[routeKey] || "").trim().toLowerCase() : "";
+    if (value) {
+      return IMPORT_TARGETS.find((candidate) => [candidate.key, candidate.collection, candidate.label].some((name) => normalizeType(name) === normalizeType(value))) || null;
+    }
+
+    const has = (...keys) => keys.every((key) => String(record[key] ?? "").trim() !== "");
+    const candidates = [
+      ["studentRegister", has("regNo", "gender", "branch", "year")],
+      ["students", has("email", "name") && !has("regNo") && ["hostelResidence", "wing", "floor", "room", "bed"].some((key) => String(record[key] ?? "").trim())],
+      ["fees", has("studentId", "studentName", "total", "paid")],
+      ["attendance", has("studentId", "studentName", "date", "status")],
+      ["complaints", has("studentId", "category", "description")],
+      ["gatePasses", has("studentId", "type", "from", "to", "reason")],
+      ["leaveRequests", has("studentId", "from", "to", "reason")],
+      ["visitors", has("visitorName")],
+      ["inventory", has("item", "quantity")],
+      ["incidents", has("title", "severity", "location")],
+      ["emergencyContacts", has("name", "phone")],
+      ["expenses", has("category", "description", "amount", "date") && !has("total", "paid")],
+      ["feedback", has("subject", "message")],
+      ["blocks", has("name", "totalBeds")],
+      ["dutyRoster", has("guardName", "shift")],
+      ["notices", has("title", "target")],
+    ].filter(([, matches]) => matches);
+    return candidates.length === 1 ? IMPORT_TARGETS.find((item) => item.key === candidates[0][0]) : null;
+  };
+
+  records.forEach((record, index) => {
+    const item = identifyTarget(record);
+    if (!item) {
+      const route = routeKey ? String(record[routeKey] || "").trim() : "";
+      errors.push({ row: index + 2, field: routeKey || "dataType", message: route
+        ? `Unknown dataType “${route}”. Use a supported type key, collection name, or label.`
+        : "Could not identify one destination from this row. Add a dataType value (for example, studentRegister or fees)." });
+      return;
+    }
+    if (!groups.has(item.key)) groups.set(item.key, []);
+    const data = { ...record };
+    if (routeKey) delete data[routeKey];
+    groups.get(item.key).push({ sourceRow: index + 2, data });
+  });
+
+  const byTarget = {};
+  for (const item of IMPORT_TARGETS) {
+    const group = groups.get(item.key) || [];
+    if (!group.length) continue;
+    const result = validateRecords(group.map((entry) => entry.data), item.columns, item.dedupeKeys || []);
+    byTarget[item.key] = result.validRecords;
+    result.errors.forEach((error) => {
+      const sourceRow = error.row > 1 ? group[error.row - 2]?.sourceRow : undefined;
+      errors.push({ ...error, row: sourceRow ?? error.row, field: `${item.label}${error.field ? ` · ${error.field}` : ""}` });
+    });
+  }
+
+  return { validRecords: Object.values(byTarget).flat(), errors, byTarget };
+}
+
+async function importRecords(target, records, createdBy) {
+  if (target.key === "students") {
+    return bulkUpsertStudentsByEmail(records, createdBy);
+  }
+  if (target.key === "visitors") {
+    const withSortableTime = records.map((record) => {
+      const parsed = record.inTime ? Date.parse(record.inTime) : NaN;
+      return { ...record, inTimeSort: Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString() };
+    });
+    const written = await bulkAddDocuments(target.collection, withSortableTime, createdBy);
+    return { written, failed: [] };
+  }
+  const written = await bulkAddDocuments(target.collection, records, createdBy);
+  return { written, failed: [] };
+}
+
 export default function DataImport() {
   const { user } = useAuth();
   const [targetKey, setTargetKey] = useState(IMPORT_TARGETS[0].key);
+  const isMixedImport = targetKey === "mixed";
   const target = IMPORT_TARGETS.find((t) => t.key === targetKey);
 
   const [file, setFile] = useState(null);
@@ -41,7 +122,9 @@ export default function DataImport() {
 
     try {
       const { records } = await parseDataFile(f);
-      const result = validateRecords(records, target.columns, target.dedupeKeys || []);
+      const result = isMixedImport
+        ? validateMixedRecords(records)
+        : validateRecords(records, target.columns, target.dedupeKeys || []);
       setValidation(result);
       setStatus("validated");
     } catch (err) {
@@ -56,6 +139,26 @@ export default function DataImport() {
     setStatus("importing");
     setImportFailures([]);
     try {
+      if (isMixedImport) {
+        let writtenTotal = 0;
+        const failures = [];
+        for (const item of IMPORT_TARGETS) {
+          const rows = validation.byTarget[item.key] || [];
+          if (!rows.length) continue;
+          try {
+            const { written, failed = [] } = await importRecords(item, rows, user?.uid);
+            writtenTotal += written;
+            failures.push(...failed.map((failure) => ({ ...failure, target: item.label })));
+          } catch (err) {
+            console.error(`Mixed import failed for ${item.collection}:`, err);
+            failures.push({ target: item.label, reason: err.message || "This data section could not be saved." });
+          }
+        }
+        setImportedCount(writtenTotal);
+        setImportFailures(failures);
+        setStatus("done");
+        return;
+      }
       if (target.key === "students") {
         // Special case: this collection's document ID must be the
         // student's real Firebase Auth UID, resolved here from the row's
@@ -91,7 +194,7 @@ export default function DataImport() {
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card
         title="Bulk data import"
-        subtitle="Upload a CSV or Excel file to add real records to the database. Every row is validated before anything is written."
+        subtitle="Upload a CSV or Excel file to add records to the correct database sections. Every row is validated before it is written."
       >
         <div className="flex flex-col gap-4">
           <Field label="Data type">
@@ -103,6 +206,7 @@ export default function DataImport() {
                 reset();
               }}
             >
+              <option value="mixed">Mixed data (route each row by dataType)</option>
               {IMPORT_TARGETS.map((t) => (
                 <option key={t.key} value={t.key}>
                   {t.label}
@@ -112,9 +216,15 @@ export default function DataImport() {
           </Field>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
-            <p className="font-medium text-ink">Expected columns for “{target.label}”</p>
-            {target.description && <p className="mt-1 text-xs text-slate-500">{target.description}</p>}
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <p className="font-medium text-ink">{isMixedImport ? "Mixed data file format" : `Expected columns for “${target.label}”`}</p>
+            {isMixedImport ? (
+              <div className="mt-1 text-xs text-slate-500">
+                <p>Include the union of the columns needed by your data types in the header row, then put different record types on separate rows. The system routes recognizable rows automatically using their fields.</p>
+                <p className="mt-1">For rows with ambiguous fields, add a <code>dataType</code> value such as <code>studentRegister</code> or <code>fees</code>. Type keys, collection names, and labels are accepted; spaces and punctuation are ignored.</p>
+                <p className="mt-1">Supported types: {IMPORT_TARGETS.map((item) => item.key).join(", ")}.</p>
+              </div>
+            ) : target.description && <p className="mt-1 text-xs text-slate-500">{target.description}</p>}
+            {!isMixedImport && <div className="mt-2 flex flex-wrap gap-1.5">
               {target.columns.map((c) => (
                 <span
                   key={c.key}
@@ -126,8 +236,8 @@ export default function DataImport() {
                   {c.required ? " *" : ""}
                 </span>
               ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-400">* required column. First row of the file must be the header row.</p>
+            </div>}
+            {!isMixedImport && <p className="mt-2 text-xs text-slate-400">* required column. First row of the file must be the header row.</p>}
           </div>
 
           <Field label="File (.csv, .xlsx, .xls)">
@@ -157,6 +267,10 @@ export default function DataImport() {
                 )}
                 <span className="text-xs text-slate-400">from {file?.name}</span>
               </div>
+
+              {isMixedImport && validation.byTarget && <div className="flex flex-wrap gap-2">
+                {IMPORT_TARGETS.filter((item) => validation.byTarget[item.key]?.length).map((item) => <Pill key={item.key} tone="Resolved">{item.label}: {validation.byTarget[item.key].length}</Pill>)}
+              </div>}
 
               {validation.errors.length > 0 && (
                 <div className="max-h-56 overflow-y-auto rounded-xl border border-rose-200">
@@ -200,7 +314,7 @@ export default function DataImport() {
           {status === "done" && (
             <div className="flex flex-col gap-2">
               <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-                Imported {importedCount} record{importedCount === 1 ? "" : "s"} into “{target.collection}”. They'll now
+                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. They'll now
                 appear on the relevant dashboards immediately — refresh any open page to see them.
                 {importFailures.length > 0 && ` ${importFailures.length} row${importFailures.length === 1 ? "" : "s"} could not be matched to an existing account and were not imported.`}
               </div>
@@ -210,6 +324,7 @@ export default function DataImport() {
                     <thead className="bg-amber-50 text-amber-800">
                       <tr>
                         <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Data type</th>
                         <th className="px-3 py-2">Reason</th>
                       </tr>
                     </thead>
@@ -217,6 +332,7 @@ export default function DataImport() {
                       {importFailures.map((f, i) => (
                         <tr key={i}>
                           <td className="px-3 py-2 text-slate-500">{f.email || "—"}</td>
+                          <td className="px-3 py-2 text-slate-500">{f.target || "Student roster"}</td>
                           <td className="px-3 py-2 text-amber-800">{f.reason}</td>
                         </tr>
                       ))}
@@ -272,6 +388,9 @@ function DataDeleteSection() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [deletePhrase, setDeletePhrase] = useState("");
+  const [page, setPage] = useState(1);
+  const [deleteProgress, setDeleteProgress] = useState(null);
+  const pageSize = 50;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -279,6 +398,9 @@ function DataDeleteSection() {
     return records.filter((record) => Object.entries(record).some(([key, value]) =>
       key !== "id" && displayValue(value).toLowerCase().includes(q)));
   }, [records, search]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRecords = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   function requestDelete(spec) {
     setDeletePhrase("");
@@ -295,6 +417,7 @@ function DataDeleteSection() {
     setDeletePhrase("");
     setError("");
     setMessage("");
+    setPage(1);
   }
 
   function toggle(id) {
@@ -302,7 +425,7 @@ function DataDeleteSection() {
   }
 
   function toggleVisible() {
-    const ids = filtered.map((record) => record.id);
+    const ids = pageRecords.map((record) => record.id);
     const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
     setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
   }
@@ -313,9 +436,14 @@ function DataDeleteSection() {
     setError("");
     setMessage("");
     const { ids, bulk } = confirm;
+    let completedDeletes = 0;
+    setDeleteProgress(bulk ? { done: 0, total: ids.length } : null);
     setDeletePhrase("");
     try {
-      if (bulk) await bulkDeleteDocuments(target.collection, ids);
+      if (bulk) await bulkDeleteDocuments(target.collection, ids, (done, total) => {
+        completedDeletes = done;
+        setDeleteProgress({ done, total });
+      });
       else await deleteDocument(target.collection, ids[0]);
       setSelected((current) => current.filter((id) => !ids.includes(id)));
       setMessage(`Deleted ${ids.length} record${ids.length === 1 ? "" : "s"} from ${target.label}.`);
@@ -327,14 +455,15 @@ function DataDeleteSection() {
       setConfirm(null);
     } catch (err) {
       console.error("Failed to delete records:", err);
-      setError("Some records could not be deleted. Refresh the list and try again.");
+      setError(`${completedDeletes ? `Deleted ${completedDeletes} of ${ids.length} records before the remaining batch failed. ` : ""}Some records could not be deleted. The remaining records are still listed so you can retry.`);
       setConfirm(null);
     } finally {
       setBusy(false);
+      setDeleteProgress(null);
     }
   }
 
-  const visibleAllSelected = filtered.length > 0 && filtered.every((record) => selected.includes(record.id));
+  const visibleAllSelected = pageRecords.length > 0 && pageRecords.every((record) => selected.includes(record.id));
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -347,30 +476,31 @@ function DataDeleteSection() {
               </select>
             </Field>
             <Field label="Search records">
-              <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by any field" />
+              <input className="input" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search by any field" />
             </Field>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-            <span>{loading ? "Loading records..." : filtered.length + " shown | " + records.length + " total"}{selected.length ? " | " + selected.length + " selected" : ""}</span>
+            <span>{loading ? "Loading records..." : `${filtered.length} matching | ${records.length} total · page ${currentPage} of ${pageCount}`}{selected.length ? " | " + selected.length + " selected" : ""}</span>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={toggleVisible} disabled={loading || filtered.length === 0}>{visibleAllSelected ? "Clear visible" : "Select visible"}</Button>
+              <Button variant="outline" onClick={toggleVisible} disabled={loading || pageRecords.length === 0}>{visibleAllSelected ? "Clear page" : "Select page"}</Button>
               <Button variant="danger" onClick={() => requestDelete({ ids: selected, bulk: true })} disabled={loading || selected.length === 0}>Delete selected ({selected.length})</Button>
               <Button variant="danger" onClick={() => requestDelete({ ids: records.map((record) => record.id), bulk: true, all: true })} disabled={loading || records.length === 0}>Delete all {target.label} ({records.length})</Button>
             </div>
           </div>
           {(error || recordsQuery.error) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error || "Could not load these records. Check admin access and try again."}</div>}
           {message && <div role="status" className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">{message}</div>}
+          {busy && deleteProgress && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Deleting records: {deleteProgress.done.toLocaleString()} of {deleteProgress.total.toLocaleString()} completed. You can leave this page open while it finishes.</div>}
           {!loading && records.length === 0 && <EmptyState title="No records found" description={`There are no records in ${target.collection}.`} />}
           {!loading && records.length > 0 && filtered.length === 0 && <EmptyState title="No matching records" description="Try a different search term." />}
           {filtered.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
-                  <th className="px-3 py-3"><input aria-label="Select visible records" type="checkbox" checked={visibleAllSelected} onChange={toggleVisible} /></th>
+                  <th className="px-3 py-3"><input aria-label="Select records on this page" type="checkbox" checked={visibleAllSelected} onChange={toggleVisible} /></th>
                   <th className="px-3 py-3">Record</th><th className="px-3 py-3">Document ID</th><th className="px-3 py-3 text-right">Action</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.map((record) => {
+                  {pageRecords.map((record) => {
                     const summary = Object.entries(record).filter(([key, value]) => key !== "id" && value != null && value !== "").slice(0, 3);
                     return <tr key={record.id}>
                       <td className="px-3 py-3"><input aria-label={`Select record ${record.id}`} type="checkbox" checked={selected.includes(record.id)} onChange={() => toggle(record.id)} /></td>
@@ -383,11 +513,18 @@ function DataDeleteSection() {
               </table>
             </div>
           )}
+          {pageCount > 1 && <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage <= 1}>Previous</Button>
+            <span className="text-sm text-slate-500">Page {currentPage} / {pageCount}</span>
+            <Button variant="outline" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={currentPage >= pageCount}>Next</Button>
+          </div>}
         </div>
       </Card>
       {confirm && <ConfirmDialog
         title={confirm.all ? `Delete all ${confirm.ids.length} ${target.label} records?` : confirm.bulk ? `Delete ${confirm.ids.length} records?` : "Delete this record?"}
-        description={`This will permanently delete ${confirm.ids.length === 1 ? "this record" : `these ${confirm.ids.length} records`} from ${target.collection}. This cannot be undone.`}
+        description={busy && deleteProgress
+          ? `Deleting ${deleteProgress.done.toLocaleString()} of ${deleteProgress.total.toLocaleString()} records from ${target.collection}. Keep this page open until it finishes.`
+          : `This will permanently delete ${confirm.ids.length === 1 ? "this record" : `these ${confirm.ids.length} records`} from ${target.collection}. This cannot be undone.`}
         confirmLabel={confirm.all ? "Delete all records" : confirm.bulk ? "Delete records" : "Delete record"}
         confirmText={confirm.all ? `DELETE ALL ${target.collection.toUpperCase()}` : ["fees", "expenses", "attendance", "gatePasses", "leaveRequests"].includes(target.collection) ? `DELETE ${target.collection.toUpperCase()}` : ""}
         confirmValue={deletePhrase}

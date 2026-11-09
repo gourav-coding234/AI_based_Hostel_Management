@@ -115,7 +115,7 @@ export async function deleteDocument(collectionName, id) {
   await deleteDoc(doc(db, collectionName, id));
 }
 /** Deletes multiple documents in safe Firestore write batches. */
-export async function bulkDeleteDocuments(collectionName, ids) {
+export async function bulkDeleteDocuments(collectionName, ids, onProgress) {
   const CHUNK = 450;
   let deleted = 0;
   for (let i = 0; i < ids.length; i += CHUNK) {
@@ -124,6 +124,7 @@ export async function bulkDeleteDocuments(collectionName, ids) {
     chunk.forEach((id) => batch.delete(doc(db, collectionName, id)));
     await batch.commit();
     deleted += chunk.length;
+    onProgress?.(deleted, ids.length);
   }
   return deleted;
 }
