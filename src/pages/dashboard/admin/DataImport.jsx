@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, bulkUpdateDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { useCollection } from "../../../hooks/useCollection";
 
@@ -79,6 +79,95 @@ function looksLikeAcademicRoster(records) {
   const headerKeys = new Set(Object.keys(records[0] || {}).map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "")));
   const hasRegistrationNumber = headerKeys.has("regno") || headerKeys.has("registrationno") || headerKeys.has("registrationnumber");
   return hasRegistrationNumber && ["gender", "branch", "year"].every((key) => headerKeys.has(key));
+}
+
+async function fingerprintRecords(records) {
+  const canonicalRows = records
+    .map((record) => JSON.stringify(Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)))))
+    .sort();
+  const bytes = new TextEncoder().encode(JSON.stringify(canonicalRows));
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  let hash = 2166136261;
+  for (const byte of new Uint8Array(bytes)) hash = Math.imul(hash ^ byte, 16777619);
+  return `fnv-${(hash >>> 0).toString(16)}-${bytes.byteLength}`;
+}
+
+async function resolveStudentIds(records, importedRegister = [], allowMissingReference = true) {
+  const accounts = (await getCollection("users")).filter((account) => account.role === "Student");
+  const accountByUid = new Map(accounts.map((account) => [account.id, account]));
+  const uidByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
+  const uidByRegistration = new Map();
+  for (const roster of importedRegister) {
+    const uid = uidByEmail.get(String(roster.email || "").trim().toLowerCase());
+    if (uid && roster.regNo) uidByRegistration.set(String(roster.regNo).trim(), uid);
+  }
+
+  const registrationNumbers = [...new Set(records.map((record) => String(record.studentId || "").trim())
+    .filter((reference) => reference && !accountByUid.has(reference) && !reference.includes("@") && !uidByRegistration.has(reference)))];
+  for (let i = 0; i < registrationNumbers.length; i += 30) {
+    const chunk = registrationNumbers.slice(i, i + 30);
+    const roster = await getCollection("studentRegister", { whereClauses: [["regNo", "in", chunk]] });
+    for (const entry of roster) {
+      const uid = uidByEmail.get(String(entry.email || "").trim().toLowerCase());
+      if (uid && entry.regNo) uidByRegistration.set(String(entry.regNo).trim(), uid);
+    }
+  }
+
+  const resolved = [];
+  const failed = [];
+  for (const record of records) {
+    const reference = String(record.studentId || "").trim();
+    if (!reference) {
+      if (allowMissingReference) resolved.push(record);
+      else failed.push({ studentId: "", reason: "Attendance record has no student ID to link." });
+      continue;
+    }
+    const uid = accountByUid.has(reference)
+      ? reference
+      : uidByEmail.get(reference.toLowerCase()) || uidByRegistration.get(reference);
+    if (!uid) {
+      failed.push({ studentId: reference, reason: `Student ID ${reference || "(blank)"} could not be matched to a Student account by account ID, email, or registration number.` });
+      continue;
+    }
+    resolved.push({ ...record, studentId: uid, studentName: record.studentName || accountByUid.get(uid)?.name || "" });
+  }
+  return { resolved, failed, studentUids: new Set(accountByUid.keys()) };
+}
+
+async function repairAttendanceStudentLinks() {
+  const attendance = await getCollection("attendance");
+  const { resolved, failed, studentUids } = await resolveStudentIds(attendance, [], false);
+  const existingUidDates = new Set(attendance
+    .filter((record) => studentUids.has(String(record.studentId || "")) && record.date)
+    .map((record) => `${record.studentId}|${record.date}`));
+  const updates = [];
+  let alreadyLinked = 0;
+  let duplicateDates = 0;
+
+  // Resolve a second pass from original IDs so each existing document keeps its ID.
+  const resolvedByDocument = new Map(resolved.filter((record) => record.id).map((record) => [record.id, record]));
+  const sourceByDocument = new Map(attendance.map((record) => [record.id, record]));
+  for (const [id, record] of resolvedByDocument) {
+    const source = sourceByDocument.get(id);
+    if (!source || !source.studentId) continue;
+    if (source.studentId === record.studentId && studentUids.has(source.studentId)) {
+      alreadyLinked += 1;
+      continue;
+    }
+    if (source.studentId === record.studentId) continue;
+    const uidDate = `${record.studentId}|${record.date || ""}`;
+    if (record.date && existingUidDates.has(uidDate)) {
+      duplicateDates += 1;
+      continue;
+    }
+    if (record.date) existingUidDates.add(uidDate);
+    updates.push({ id, data: { studentId: record.studentId, ...(record.studentName ? { studentName: record.studentName } : {}) } });
+  }
+  const linked = await bulkUpdateDocuments("attendance", updates);
+  return { linked, alreadyLinked, unmatched: failed.length, duplicateDates, total: attendance.length };
 }
 
 function expandStudentBundleRows(records) {
@@ -267,6 +356,9 @@ export default function DataImport() {
   const [importedCount, setImportedCount] = useState(0);
   const [importFailures, setImportFailures] = useState([]);
   const [importProgress, setImportProgress] = useState(null);
+  const [fileAlreadyImported, setFileAlreadyImported] = useState(null);
+  const [fileFingerprint, setFileFingerprint] = useState("");
+  const [attendanceRepair, setAttendanceRepair] = useState({ busy: false, error: "", result: null });
   const inputRef = useRef(null);
 
   function reset() {
@@ -277,6 +369,8 @@ export default function DataImport() {
     setImportedCount(0);
     setImportFailures([]);
     setImportProgress(null);
+    setFileAlreadyImported(null);
+    setFileFingerprint("");
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -287,9 +381,21 @@ export default function DataImport() {
     setStatus("parsing");
     setParseError("");
     setValidation(null);
+    setFileAlreadyImported(null);
 
     try {
       const { records } = await parseDataFile(f);
+      const fingerprint = await fingerprintRecords(records);
+      setFileFingerprint(fingerprint);
+      const priorImport = await getCollection("auditLogs", {
+        whereClauses: [["importFileHash", "==", fingerprint]],
+        limitCount: 1,
+      });
+      if (priorImport.length) {
+        setFileAlreadyImported(priorImport[0]);
+        setStatus("duplicate");
+        return;
+      }
       if (!isMixedImport && looksLikeAcademicRoster(records)) {
         setValidation({
           validRecords: [],
@@ -311,7 +417,7 @@ export default function DataImport() {
   }
 
   async function handleImport() {
-    if (!validation || validation.validRecords.length === 0) return;
+    if (!validation || validation.validRecords.length === 0 || fileAlreadyImported) return;
     setStatus("importing");
     setImportFailures([]);
     setImportProgress(null);
@@ -320,8 +426,6 @@ export default function DataImport() {
         let writtenTotal = 0;
         let createdAccountsTotal = 0;
         const failures = [];
-        let studentIdsBySourceId = null;
-        let studentEmailsBySourceId = new Map();
         const linkedCollections = new Set(["fees", "attendance", "complaints", "gatePasses", "visitors", "leaveRequests", "feedback"]);
         const priority = { students: 0, studentRegister: 1 };
         const orderedTargets = [...IMPORT_TARGETS].sort((a, b) => (priority[a.key] ?? 2) - (priority[b.key] ?? 2));
@@ -332,34 +436,9 @@ export default function DataImport() {
           try {
             let rowsToImport = rows;
             if (linkedCollections.has(item.key)) {
-              if (!studentIdsBySourceId) {
-                const accounts = await getCollection("users");
-                const studentAccounts = accounts.filter((account) => account.role === "Student");
-                const uidByEmail = new Map(studentAccounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
-                studentIdsBySourceId = new Map(studentAccounts.map((account) => [account.id, account.id]));
-                for (const roster of validation.byTarget.studentRegister || []) {
-                  const uid = uidByEmail.get(String(roster.email || "").trim().toLowerCase());
-                  if (uid && roster.regNo) {
-                    studentIdsBySourceId.set(String(roster.regNo).trim(), uid);
-                    studentEmailsBySourceId.set(String(roster.regNo).trim(), roster.email);
-                  }
-                }
-              }
-              rowsToImport = [];
-              for (const row of rows) {
-                if (!row.studentId) {
-                  rowsToImport.push(row);
-                  continue;
-                }
-                const sourceId = String(row.studentId).trim();
-                const uid = studentIdsBySourceId.get(sourceId);
-                if (uid) rowsToImport.push({ ...row, studentId: uid });
-                else failures.push({
-                  email: studentEmailsBySourceId.get(sourceId) || "",
-                  target: item.label,
-                  reason: `Student ID ${sourceId} could not be linked to a Student login, so this record was skipped.`,
-                });
-              }
+              const result = await resolveStudentIds(rows, validation.byTarget.studentRegister || []);
+              rowsToImport = result.resolved;
+              failures.push(...result.failed.map((failure) => ({ ...failure, target: item.label })));
             }
             if (!rowsToImport.length) continue;
             const { written, failed = [], createdAccounts = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
@@ -372,20 +451,64 @@ export default function DataImport() {
           }
         }
         setImportedCount(writtenTotal);
+        if (writtenTotal > 0) {
+          try {
+            await logAudit({
+              actor: user?.email || user?.uid || "Admin",
+              action: "Imported data file",
+              target: `${file?.name || "Mixed data file"} · ${writtenTotal} records`,
+              metadata: { importFileHash: fileFingerprint },
+            });
+          } catch (auditError) {
+            console.error("Import succeeded but duplicate-file history could not be saved:", auditError);
+            failures.push({ target: "Repeat-file protection", reason: "Import completed, but its duplicate-file record could not be saved. Avoid uploading this same file again." });
+          }
+        }
         setImportFailures(failures);
         setImportProgress({ done: writtenTotal, total: writtenTotal, createdAccounts: createdAccountsTotal, finished: true });
         setStatus("done");
         return;
       }
-      const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, validation.validRecords, user?.uid);
+      let recordsToImport = validation.validRecords;
+      const linkingFailures = [];
+      if (target.key === "attendance") {
+        const result = await resolveStudentIds(recordsToImport);
+        recordsToImport = result.resolved;
+        linkingFailures.push(...result.failed.map((failure) => ({ ...failure, target: target.label })));
+      }
+      const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
       setImportedCount(written);
-      setImportFailures(failed);
+      if (written > 0) {
+        try {
+          await logAudit({
+            actor: user?.email || user?.uid || "Admin",
+            action: "Imported data file",
+            target: `${file?.name || target.label} · ${written} records`,
+            metadata: { importFileHash: fileFingerprint },
+          });
+        } catch (auditError) {
+          console.error("Import succeeded but duplicate-file history could not be saved:", auditError);
+          failed.push({ target: "Repeat-file protection", reason: "Import completed, but its duplicate-file record could not be saved. Avoid uploading this same file again." });
+        }
+      }
+      setImportFailures([...linkingFailures, ...failed]);
       if (createdAccounts) setImportProgress({ target: target.label, done: validation.validRecords.length, total: validation.validRecords.length, createdAccounts, finished: true });
       setStatus("done");
     } catch (err) {
       console.error("Import failed:", err);
       setParseError("Import failed while writing to the database. Please try again.");
       setStatus("error");
+    }
+  }
+
+  async function handleRepairAttendance() {
+    setAttendanceRepair({ busy: true, error: "", result: null });
+    try {
+      const result = await repairAttendanceStudentLinks();
+      setAttendanceRepair({ busy: false, error: "", result });
+    } catch (error) {
+      console.error("Failed to link imported attendance:", error);
+      setAttendanceRepair({ busy: false, error: error.message || "Attendance records could not be checked.", result: null });
     }
   }
 
@@ -450,11 +573,35 @@ export default function DataImport() {
             />
           </Field>
 
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-medium text-ink">Already imported attendance not showing?</p>
+                <p className="mt-1 text-xs text-slate-500">Link attendance rows that use a student registration number or email to the matching Student account.</p>
+              </div>
+              <Button variant="outline" onClick={handleRepairAttendance} disabled={attendanceRepair.busy}>
+                {attendanceRepair.busy ? "Checking attendance…" : "Link existing attendance"}
+              </Button>
+            </div>
+            {attendanceRepair.error && <p role="alert" className="mt-3 text-sm text-rose-700">{attendanceRepair.error}</p>}
+            {attendanceRepair.result && (
+              <p role="status" className="mt-3 text-sm text-teal-800">
+                Linked {attendanceRepair.result.linked} attendance record{attendanceRepair.result.linked === 1 ? "" : "s"} to Student accounts. {attendanceRepair.result.alreadyLinked} already linked; {attendanceRepair.result.unmatched} could not be matched; {attendanceRepair.result.duplicateDates} skipped because that student already has a record for the date.
+              </p>
+            )}
+          </div>
+
           {status === "parsing" && <p className="text-sm text-slate-400">Reading file…</p>}
           {status === "importing" && importProgress && <p role="status" className="text-sm text-slate-500">Creating student accounts: {importProgress.done} of {importProgress.total} processed; {importProgress.createdAccounts} new account{importProgress.createdAccounts === 1 ? "" : "s"} created.</p>}
 
           {status === "error" && parseError && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{parseError}</div>
+          )}
+
+          {status === "duplicate" && (
+            <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              This exact file was already imported{fileAlreadyImported?.target ? ` (${fileAlreadyImported.target})` : ""}. Import is blocked to prevent duplicate records. Choose a different file or change its contents before importing.
+            </div>
           )}
 
           {validation && (

@@ -101,8 +101,9 @@ export async function updateDocument(collectionName, id, data) {
  * Log page. Fire-and-forget by design (callers .catch() this) — a logging
  * failure should never block or roll back the real action it's describing.
  */
-export async function logAudit({ actor, action, target }) {
+export async function logAudit({ actor, action, target, metadata = {} }) {
   await addDoc(collection(db, "auditLogs"), {
+    ...metadata,
     actor: actor || "Unknown",
     action,
     target: target || "",
@@ -156,6 +157,23 @@ export async function bulkAddDocuments(collectionName, records, createdBy) {
   }
 
   return written;
+}
+
+/** Updates existing documents in safe Firestore batches. */
+export async function bulkUpdateDocuments(collectionName, records) {
+  const CHUNK = 450;
+  let updated = 0;
+  for (let i = 0; i < records.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    const chunk = records.slice(i, i + CHUNK);
+    chunk.forEach(({ id, data }) => batch.update(doc(db, collectionName, id), {
+      ...data,
+      updatedAt: serverTimestamp(),
+    }));
+    await batch.commit();
+    updated += chunk.length;
+  }
+  return updated;
 }
 
 /**
