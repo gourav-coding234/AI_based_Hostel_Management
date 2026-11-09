@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
+import { createUserAccount } from "../../../firebase/adminUsers";
 import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
@@ -74,7 +75,37 @@ function validateMixedRecords(records) {
 
 async function importRecords(target, records, createdBy) {
   if (target.key === "students") {
-    return bulkUpsertStudentsByEmail(records, createdBy);
+    let createdAccounts = 0;
+    const accountCreationErrors = new Map();
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      try {
+        await createUserAccount({
+          name: record.name,
+          email: record.email,
+          password: "123456",
+          role: "Student",
+          hostelResidence: record.hostelResidence,
+        });
+        createdAccounts += 1;
+      } catch (error) {
+        // An existing account may already be a Student; the roster upsert
+        // below resolves that case and only reports non-Student/missing users.
+        if (error?.code !== "auth/email-already-in-use") {
+          accountCreationErrors.set(record.email, error?.message || "Could not create the student login account.");
+        }
+      }
+      target.onProgress?.(index + 1, records.length, createdAccounts);
+    }
+    const result = await bulkUpsertStudentsByEmail(records, createdBy);
+    return {
+      ...result,
+      createdAccounts,
+      failed: result.failed.map((failure) => ({
+        ...failure,
+        reason: accountCreationErrors.get(failure.email) || failure.reason,
+      })),
+    };
   }
   if (target.key === "visitors") {
     const withSortableTime = records.map((record) => {
@@ -100,6 +131,7 @@ export default function DataImport() {
   const [validation, setValidation] = useState(null); // { validRecords, errors }
   const [importedCount, setImportedCount] = useState(0);
   const [importFailures, setImportFailures] = useState([]);
+  const [importProgress, setImportProgress] = useState(null);
   const inputRef = useRef(null);
 
   function reset() {
@@ -109,6 +141,7 @@ export default function DataImport() {
     setValidation(null);
     setImportedCount(0);
     setImportFailures([]);
+    setImportProgress(null);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -138,6 +171,7 @@ export default function DataImport() {
     if (!validation || validation.validRecords.length === 0) return;
     setStatus("importing");
     setImportFailures([]);
+    setImportProgress(null);
     try {
       if (isMixedImport) {
         let writtenTotal = 0;
@@ -146,7 +180,7 @@ export default function DataImport() {
           const rows = validation.byTarget[item.key] || [];
           if (!rows.length) continue;
           try {
-            const { written, failed = [] } = await importRecords(item, rows, user?.uid);
+            const { written, failed = [] } = await importRecords({ ...item, onProgress: (done, total, createdAccounts) => setImportProgress({ target: item.label, done, total, createdAccounts }) }, rows, user?.uid);
             writtenTotal += written;
             failures.push(...failed.map((failure) => ({ ...failure, target: item.label })));
           } catch (err) {
@@ -164,9 +198,10 @@ export default function DataImport() {
         // student's real Firebase Auth UID, resolved here from the row's
         // email — a plain auto-ID bulk insert would create records no
         // student's dashboard ever reads. See bulkUpsertStudentsByEmail.
-        const { written, failed } = await bulkUpsertStudentsByEmail(validation.validRecords, user?.uid);
+        const { written, failed, createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, validation.validRecords, user?.uid);
         setImportedCount(written);
         setImportFailures(failed);
+        setImportProgress({ target: target.label, done: validation.validRecords.length, total: validation.validRecords.length, createdAccounts, finished: true });
       } else if (target.key === "visitors") {
         // Backfill a real sortable timestamp alongside the human-readable
         // inTime string — Firestore's orderBy silently drops documents
@@ -221,6 +256,7 @@ export default function DataImport() {
               <div className="mt-1 text-xs text-slate-500">
                 <p>Include the union of the columns needed by your data types in the header row, then put different record types on separate rows. The system routes recognizable rows automatically using their fields.</p>
                 <p className="mt-1">For rows with ambiguous fields, add a <code>dataType</code> value such as <code>studentRegister</code> or <code>fees</code>. Type keys, collection names, and labels are accepted; spaces and punctuation are ignored.</p>
+                <p className="mt-1">Student roster rows need a valid <code>email</code> and <code>name</code>. Missing Student logins are created automatically with initial password <code>123456</code>; existing Student accounts are reused without changing their passwords. Ask new students to change the shared initial password after signing in.</p>
                 <p className="mt-1">Supported types: {IMPORT_TARGETS.map((item) => item.key).join(", ")}.</p>
               </div>
             ) : target.description && <p className="mt-1 text-xs text-slate-500">{target.description}</p>}
@@ -251,6 +287,7 @@ export default function DataImport() {
           </Field>
 
           {status === "parsing" && <p className="text-sm text-slate-400">Reading file…</p>}
+          {status === "importing" && importProgress && <p role="status" className="text-sm text-slate-500">Creating student accounts: {importProgress.done} of {importProgress.total} processed; {importProgress.createdAccounts} new account{importProgress.createdAccounts === 1 ? "" : "s"} created.</p>}
 
           {status === "error" && parseError && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{parseError}</div>
@@ -314,7 +351,7 @@ export default function DataImport() {
           {status === "done" && (
             <div className="flex flex-col gap-2">
               <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. They'll now
+                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
                 appear on the relevant dashboards immediately — refresh any open page to see them.
                 {importFailures.length > 0 && ` ${importFailures.length} row${importFailures.length === 1 ? "" : "s"} could not be matched to an existing account and were not imported.`}
               </div>
