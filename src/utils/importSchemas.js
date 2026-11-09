@@ -155,7 +155,18 @@ export const IMPORT_SCHEMAS = {
       { key: "phone", label: "Phone", required: true, type: "string" },
     ],
   },
-  feedback: {
+  expenses: {
+    label: "Hostel expenses",
+    collection: "expenses",
+    description: "One row per recorded hostel expense.",
+    columns: [
+      { key: "category", label: "Expense category", required: true, type: "string" },
+      { key: "description", label: "Description", required: true, type: "string" },
+      { key: "amount", label: "Amount", required: true, type: "number" },
+      { key: "date", label: "Expense date", required: true, type: "date" },
+      { key: "paymentMethod", label: "Payment method", required: false, type: "string" },
+    ],
+  },  feedback: {
     label: "Feedback entries",
     collection: "feedback",
     columns: [

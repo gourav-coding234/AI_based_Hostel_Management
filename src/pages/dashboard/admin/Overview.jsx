@@ -45,9 +45,10 @@ export default function AdminOverview() {
     gatePasses: { name: "gatePasses", options: { orderByField: "from" } },
     leaveRequests: { name: "leaveRequests", options: { orderByField: "from" } },
     visitors: { name: "visitors", options: { orderByField: "inTimeSort" } },
+    expenses: { name: "expenses" },
   });
 
-  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors } = data;
+  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses } = data;
 
   // Occupancy
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
@@ -58,6 +59,8 @@ export default function AdminOverview() {
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const totalCollected = fees.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const totalPending = Math.max(totalDue - totalCollected, 0);
+  const totalExpenses = expenses.reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
+  const availableBalance = totalCollected - totalExpenses;
   const collectionPct = totalDue ? Math.round((totalCollected / totalDue) * 100) : 0;
   const studentsWithDues = fees.filter((f) => (Number(f.total) || 0) - (Number(f.paid) || 0) > 0).length;
 
@@ -127,18 +130,23 @@ export default function AdminOverview() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : students.length} sub={`${wardens.length} wardens on staff`} tone="teal" />
-        <StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "No blocks recorded yet"} tone="navy" />
-        <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" />
-        <StatCard icon={<WrenchIcon />} label="Open complaints" value={openComplaints} sub={`${complaints.length} filed institute-wide`} tone={openComplaints > 0 ? "rose" : "teal"} />
+        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : students.length} sub={`${wardens.length} wardens on staff`} tone="teal" /></Link>
+        <Link to="/dashboard/admin/blocks"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "No blocks recorded yet"} tone="navy" /></Link>
+        <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
+        <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints" value={openComplaints} sub={`${complaints.length} filed institute-wide`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${gatePasses.length} requests total`} tone={pendingGatePasses > 0 ? "amber" : "teal"} />
-        <StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} />
-        <StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub={`${visitors.length} logged total`} tone={visitorsInside > 0 ? "amber" : "teal"} />
-        <StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub={`${blocks.length} blocks to manage`} tone="navy" />
-        <StatCard icon={<AlertIcon />} label="Students with dues" value={loading ? "…" : studentsWithDues} sub={totalPending ? `${inr(totalPending)} pending` : "No dues pending"} tone={studentsWithDues > 0 ? "rose" : "teal"} />
+        <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${gatePasses.length} requests total`} tone={pendingGatePasses > 0 ? "amber" : "teal"} /></Link>
+        <Link to="/dashboard/admin/leave"><StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} /></Link>
+        <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub={`${visitors.length} logged total`} tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
+        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub={`${blocks.length} blocks to manage`} tone="navy" /></Link>
+        <Link to="/dashboard/admin/fees"><StatCard icon={<AlertIcon />} label="Students with dues" value={loading ? "…" : studentsWithDues} sub={totalPending ? `${inr(totalPending)} pending` : "No dues pending"} tone={studentsWithDues > 0 ? "rose" : "teal"} /></Link>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link to="/dashboard/admin/expenses"><StatCard icon={<WalletIcon />} label="Hostel expenses" value={loading ? "..." : inr(totalExpenses)} sub={`${expenses.length} recorded entries`} tone="amber" /></Link>
+        <Link to="/dashboard/admin/expenses"><StatCard icon={<WalletIcon />} label="Calculated available balance" value={loading ? "..." : inr(availableBalance)} sub="Collections minus recorded expenses; not a live bank balance" tone={availableBalance < 0 ? "rose" : "teal"} /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

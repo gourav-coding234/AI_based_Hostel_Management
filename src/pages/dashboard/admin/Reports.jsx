@@ -1,8 +1,8 @@
 import { Card, Button } from "../../../components/dashboard/student/ui";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { EmptyState } from "../../../components/ui/DataState";
 import { ChartIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { downloadTextFile } from "../../../utils/csv";
 
 function toCsv(rows) {
   if (!rows.length) return "";
@@ -15,7 +15,7 @@ function toCsv(rows) {
 }
 
 function download(rows, name) {
-  downloadTextFile(toCsv(rows), `${name.toLowerCase().replace(/\s+/g, "-")}.csv`);
+  downloadCsvAsXlsx(toCsv(rows), `${name.toLowerCase().replace(/\s+/g, "-")}.xlsx`);
 }
 
 export default function Reports() {
@@ -24,6 +24,7 @@ export default function Reports() {
     fees: { name: "fees" },
     blocks: { name: "blocks" },
     complaints: { name: "complaints" },
+    expenses: { name: "expenses" },
   });
 
   const reports = [
@@ -31,6 +32,7 @@ export default function Reports() {
     { id: "RPT-FEE", name: "Fee collection summary", description: "Per-student dues, collections and outstanding balances.", rows: data.fees },
     { id: "RPT-OCC", name: "Occupancy report", description: "Room and bed occupancy across every block.", rows: data.blocks },
     { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed institute-wide with current status.", rows: data.complaints },
+    { id: "RPT-EXP", name: "Hostel expenses", description: "Recorded expenses with category, date, and payment method.", rows: data.expenses },
   ];
 
   return (
@@ -42,7 +44,7 @@ export default function Reports() {
           </span>
           <div>
             <p className="font-display text-base font-semibold text-ink">Reports & export</p>
-            <p className="text-sm text-slate-500">Download institute-wide data as CSV for offline review or sharing.</p>
+            <p className="text-sm text-slate-500">Download institute-wide data as Excel workbooks for offline review or sharing.</p>
           </div>
         </div>
       </Card>
@@ -60,13 +62,13 @@ export default function Reports() {
               </div>
             </div>
             <Button variant="outline" className="mt-4" disabled={loading || r.rows.length === 0} onClick={() => download(r.rows, r.name)}>
-              <DownloadIcon /> Download CSV
+              <DownloadIcon /> Download Excel (.xlsx)
             </Button>
           </Card>
         ))}
       </div>
 
-      {!loading && data.students.length === 0 && data.fees.length === 0 && data.blocks.length === 0 && data.complaints.length === 0 && (
+      {!loading && data.students.length === 0 && data.fees.length === 0 && data.blocks.length === 0 && data.complaints.length === 0 && data.expenses.length === 0 && (
         <EmptyState icon={<ChartIcon />} title="No data to export yet" description="Once records exist in the database, they'll be downloadable here." />
       )}
     </div>

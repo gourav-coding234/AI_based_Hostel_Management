@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { EyeIcon, UsersIcon, QrIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 
 const statusFilters = ["All Statuses", "On premises", "Checked out"];
 
@@ -67,7 +68,7 @@ export default function Visitors() {
 
   function handleDownload() {
     if (filtered.length === 0) return;
-    downloadTextFile(toCsvText(filtered, csvColumns), "visitors.csv");
+    downloadCsvAsXlsx(toCsvText(filtered, csvColumns), "visitors.xlsx");
   }
 
   return (

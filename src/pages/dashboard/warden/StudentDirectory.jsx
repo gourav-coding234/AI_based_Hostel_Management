@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
@@ -6,7 +7,7 @@ import { UsersIcon, DownloadIcon, UploadIcon } from "../../../components/dashboa
 import { useCollections } from "../../../hooks/useCollection";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 import { bulkUpsertHostelAssignments, logAudit } from "../../../firebase/firestore";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 import { parseAndValidateHostelCsv } from "../../../utils/wardenDirectoryImport";
 
 const COLUMNS = [
@@ -97,7 +98,7 @@ export default function StudentDirectory() {
 
   function handleDownload() {
     const csv = toCsvText(scoped, CSV_EXPORT_COLUMNS);
-    downloadTextFile(csv, "student-directory.csv");
+    downloadCsvAsXlsx(csv, "student-directory.xlsx");
   }
 
   // ---- Upload CSV: update hostel assignment (wing/room/bed) only ----
@@ -185,7 +186,7 @@ export default function StudentDirectory() {
               ))}
             </select>
             <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={handleDownload}>
-              <DownloadIcon /> Download CSV
+              <DownloadIcon /> Download Excel
             </Button>
             <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => fileInputRef.current?.click()}>
               <UploadIcon /> Upload CSV

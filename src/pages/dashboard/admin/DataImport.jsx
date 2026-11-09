@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
-import { Card, Button, Field, Pill } from "../../../components/dashboard/student/ui";
+import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
+import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, deleteDocument, logAudit } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
+import { useCollection } from "../../../hooks/useCollection";
 
 export default function DataImport() {
   const { user } = useAuth();
@@ -227,6 +229,8 @@ export default function DataImport() {
         </div>
       </Card>
 
+      <DataDeleteSection />
+
       <Card title="How this works" className="bg-slate-50/60">
         <ul className="flex flex-col gap-2 text-sm text-slate-500">
           <li className="flex gap-2">
@@ -243,6 +247,142 @@ export default function DataImport() {
           </li>
         </ul>
       </Card>
+    </div>
+  );
+}
+
+function displayValue(value) {
+  if (value == null || value === "") return "-";
+  if (typeof value?.toDate === "function") return value.toDate().toLocaleString();
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function DataDeleteSection() {
+  const { profile, user } = useAuth();
+  const [targetKey, setTargetKey] = useState(IMPORT_TARGETS[0].key);
+  const target = IMPORT_TARGETS.find((item) => item.key === targetKey);
+  const recordsQuery = useCollection(target.collection);
+  const records = recordsQuery.data;
+  const loading = recordsQuery.loading;
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [confirm, setConfirm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [deletePhrase, setDeletePhrase] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return records;
+    return records.filter((record) => Object.entries(record).some(([key, value]) =>
+      key !== "id" && displayValue(value).toLowerCase().includes(q)));
+  }, [records, search]);
+
+  function requestDelete(spec) {
+    setDeletePhrase("");
+    setConfirm(spec);
+  }
+
+  function toggle(id) {
+    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  function toggleVisible() {
+    const ids = filtered.map((record) => record.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id));
+    setSelected((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+  }
+
+  async function performDelete() {
+    if (!confirm) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const { ids, bulk } = confirm;
+    setDeletePhrase("");
+    try {
+      if (bulk) await bulkDeleteDocuments(target.collection, ids);
+      else await deleteDocument(target.collection, ids[0]);
+      setSelected((current) => current.filter((id) => !ids.includes(id)));
+      setMessage(`Deleted ${ids.length} record${ids.length === 1 ? "" : "s"} from ${target.label}.`);
+      logAudit({
+        actor: profile?.name || user?.email || "Admin",
+        action: bulk ? "Bulk-deleted records" : "Deleted record",
+        target: `${target.collection}: ${ids.length} record${ids.length === 1 ? "" : "s"}`,
+      }).catch(() => {});
+      setConfirm(null);
+    } catch (err) {
+      console.error("Failed to delete records:", err);
+      setError("Some records could not be deleted. Refresh the list and try again.");
+      setConfirm(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const visibleAllSelected = filtered.length > 0 && filtered.every((record) => selected.includes(record.id));
+
+  return (
+    <div className="flex flex-col gap-6 animate-fade-in">
+      <Card title="Delete data" subtitle="Remove individual records or select multiple records from an imported data collection. Deletion is permanent.">
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Data type">
+              <select className="input" value={targetKey} onChange={(event) => { setTargetKey(event.target.value); setSearch(""); setMessage(""); }}>
+                {IMPORT_TARGETS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Search records">
+              <input className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by any field" />
+            </Field>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+            <span>{loading ? "Loading records..." : filtered.length + " shown | " + records.length + " total"}{selected.length ? " | " + selected.length + " selected" : ""}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={toggleVisible} disabled={loading || filtered.length === 0}>{visibleAllSelected ? "Clear visible" : "Select visible"}</Button>
+              <Button variant="danger" onClick={() => requestDelete({ ids: selected, bulk: true })} disabled={loading || selected.length === 0}>Delete selected ({selected.length})</Button>
+            </div>
+          </div>
+          {(error || recordsQuery.error) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error || "Could not load these records. Check admin access and try again."}</div>}
+          {message && <div role="status" className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">{message}</div>}
+          {!loading && records.length === 0 && <EmptyState title="No records found" description={`There are no records in ${target.collection}.`} />}
+          {!loading && records.length > 0 && filtered.length === 0 && <EmptyState title="No matching records" description="Try a different search term." />}
+          {filtered.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>
+                  <th className="px-3 py-3"><input aria-label="Select visible records" type="checkbox" checked={visibleAllSelected} onChange={toggleVisible} /></th>
+                  <th className="px-3 py-3">Record</th><th className="px-3 py-3">Document ID</th><th className="px-3 py-3 text-right">Action</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((record) => {
+                    const summary = Object.entries(record).filter(([key, value]) => key !== "id" && value != null && value !== "").slice(0, 3);
+                    return <tr key={record.id}>
+                      <td className="px-3 py-3"><input aria-label={`Select record ${record.id}`} type="checkbox" checked={selected.includes(record.id)} onChange={() => toggle(record.id)} /></td>
+                      <td className="max-w-[32rem] px-3 py-3"><div className="flex flex-wrap gap-x-3 gap-y-1">{summary.map(([key, value]) => <span key={key} className="text-slate-600"><b className="font-medium text-slate-800">{key}:</b> {displayValue(value)}</span>)}</div></td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-400">{record.id}</td>
+                      <td className="px-3 py-3 text-right"><Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => requestDelete({ ids: [record.id], bulk: false })}>Delete</Button></td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Card>
+      {confirm && <ConfirmDialog
+        title={confirm.bulk ? `Delete ${confirm.ids.length} records?` : "Delete this record?"}
+        description={`This will permanently delete ${confirm.ids.length === 1 ? "this record" : `these ${confirm.ids.length} records`} from ${target.collection}. This cannot be undone.`}
+        confirmLabel={confirm.bulk ? "Delete records" : "Delete record"}
+        confirmText={["fees", "expenses", "attendance", "gatePasses", "leaveRequests"].includes(target.collection) ? `DELETE ${target.collection.toUpperCase()}` : ""}
+        confirmValue={deletePhrase}
+        onConfirmValueChange={setDeletePhrase}
+        busy={busy}
+        onConfirm={performDelete}
+        onCancel={() => { setDeletePhrase(""); setConfirm(null); }}
+      />}
     </div>
   );
 }

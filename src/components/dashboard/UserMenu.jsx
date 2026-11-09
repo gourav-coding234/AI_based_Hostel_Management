@@ -9,9 +9,9 @@ const CHEVRON = (
 );
 
 const PROFILE_PATH_BY_ROLE = {
-  Admin: "/dashboard/admin/users",
+  Admin: "/dashboard/admin/profile",
   Student: "/dashboard/student/profile",
-  Warden: null,
+  Warden: "/dashboard/warden/profile",
   Parent: "/dashboard/parent/profile",
   Security: "/dashboard/security/profile",
 };

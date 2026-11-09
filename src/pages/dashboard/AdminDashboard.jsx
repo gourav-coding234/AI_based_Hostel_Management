@@ -1,11 +1,13 @@
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
+import StaffProfile from "./admin/StaffProfile";
 import AdminOverview from "./admin/Overview";
 import DataImport from "./admin/DataImport";
 import ManageUsers from "./admin/ManageUsers";
 import StudentRegister from "./admin/StudentRegister";
 import Complaints from "./admin/Complaints";
 import Fees from "./admin/Fees";
+import Expenses from "./admin/Expenses";
 import Notices from "./admin/Notices";
 import Blocks from "./admin/Blocks";
 import Reports from "./admin/Reports";
@@ -19,6 +21,7 @@ export default function AdminDashboard() {
   return (
     <DashboardLayout title="Admin Dashboard">
       <Routes>
+        <Route path="profile" element={<StaffProfile />} />
         <Route index element={<AdminOverview />} />
         <Route path="users" element={<ManageUsers />} />
         <Route path="data-import" element={<DataImport />} />
@@ -29,6 +32,7 @@ export default function AdminDashboard() {
         <Route path="leave" element={<Leave />} />
         <Route path="complaints" element={<Complaints />} />
         <Route path="fees" element={<Fees />} />
+        <Route path="expenses" element={<Expenses />} />
         <Route path="notices" element={<Notices />} />
         <Route path="feedback" element={<Feedback />} />
         <Route path="reports" element={<Reports />} />

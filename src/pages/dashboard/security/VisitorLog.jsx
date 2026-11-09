@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { UserPlusIcon, LogOutIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { useAuth } from "../../../context/AuthContext";
 import { addDocument, updateDocument, getCollection } from "../../../firebase/firestore";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 
 const VISITOR_PURPOSES = ["Meeting a student", "Parent visit", "Delivery / courier", "Vendor / maintenance", "Other"];
 const EMPTY_FORM = { visitorName: "", purpose: VISITOR_PURPOSES[0], idProof: "", phone: "" };
@@ -132,7 +133,7 @@ export default function SecurityVisitorLog() {
         setMessage("There are no visitor records to download yet.");
         return;
       }
-      downloadTextFile(toCsvText([...all].sort(byOldestFirst), CSV_COLUMNS), "visitor-register.csv");
+      downloadCsvAsXlsx(toCsvText([...all].sort(byOldestFirst), CSV_COLUMNS), "visitor-register.xlsx");
     } catch (err) {
       console.error("Failed to download visitor register:", err);
       setMessage("Couldn't download the visitor register. Please try again.");

@@ -14,6 +14,9 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   busy = false,
+  confirmText = "",
+  confirmValue = "",
+  onConfirmValueChange,
 }) {
   const confirmBtnRef = useRef(null);
 
@@ -54,6 +57,12 @@ export default function ConfirmDialog({
         {description && (
           <p id="confirm-dialog-desc" className="confirm-description">{description}</p>
         )}
+        {confirmText && (
+          <label className="mt-4 block text-sm text-slate-600">
+            Type <strong className="font-mono text-rose-700">{confirmText}</strong> to continue.
+            <input className="input mt-2" value={confirmValue} onChange={(event) => onConfirmValueChange?.(event.target.value)} autoComplete="off" />
+          </label>
+        )}
         <div className="confirm-actions">
           <Button
             ref={confirmBtnRef}
@@ -63,7 +72,7 @@ export default function ConfirmDialog({
           >
             {cancelLabel}
           </Button>
-          <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm} disabled={busy}>
+          <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm} disabled={busy || (confirmText && confirmValue !== confirmText)}>
             {busy ? "Please wait…" : confirmLabel}
           </Button>
         </div>

@@ -114,6 +114,19 @@ export async function logAudit({ actor, action, target }) {
 export async function deleteDocument(collectionName, id) {
   await deleteDoc(doc(db, collectionName, id));
 }
+/** Deletes multiple documents in safe Firestore write batches. */
+export async function bulkDeleteDocuments(collectionName, ids) {
+  const CHUNK = 450;
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    const chunk = ids.slice(i, i + CHUNK);
+    chunk.forEach((id) => batch.delete(doc(db, collectionName, id)));
+    await batch.commit();
+    deleted += chunk.length;
+  }
+  return deleted;
+}
 
 /**
  * Bulk-writes many records into a collection in Firestore batches (max 500

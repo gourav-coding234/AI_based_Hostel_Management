@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, ProgressBar, Field, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
@@ -6,7 +7,7 @@ import { WalletIcon, DownloadIcon } from "../../../components/dashboard/warden/i
 import { useCollection } from "../../../hooks/useCollection";
 import { getCollection, recordFeePayment, sendFeeReminder, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -159,7 +160,7 @@ export default function WardenFees() {
 
   function handleDownload() {
     if (filtered.length === 0) return;
-    downloadTextFile(toCsvText(filtered, csvColumns), "fees.csv");
+    downloadCsvAsXlsx(toCsvText(filtered, csvColumns), "fees.xlsx");
   }
 
   const totalDue = studentFees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -256,7 +257,7 @@ export default function WardenFees() {
               </button>
             ))}
             <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={handleDownload} disabled={filtered.length === 0}>
-              <DownloadIcon /> Download CSV
+              <DownloadIcon /> Download Excel
             </Button>
           </div>
         }

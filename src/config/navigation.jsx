@@ -31,7 +31,6 @@ import {
 
 import {
   HomeIcon,
-  UserIcon,
   BedIcon,
   WalletIcon as StudentWalletIcon,
   UtensilsIcon,
@@ -72,7 +71,10 @@ export const NAVIGATION = {
     },
     {
       section: "Finance",
-      items: [{ label: "Fees", to: "/dashboard/admin/fees", icon: <WalletIcon /> }],
+      items: [
+        { label: "Fees", to: "/dashboard/admin/fees", icon: <WalletIcon /> },
+        { label: "Expenses", to: "/dashboard/admin/expenses", icon: <WalletIcon /> },
+      ],
     },
     {
       section: "Analytics",
@@ -112,10 +114,6 @@ export const NAVIGATION = {
         { label: "Leave Request", to: "/dashboard/student/leave", icon: <StudentAlertIcon /> },
         { label: "Notices", to: "/dashboard/student/notices", icon: <StudentMegaphoneIcon /> },
       ],
-    },
-    {
-      section: "Settings",
-      items: [{ label: "My Profile", to: "/dashboard/student/profile", icon: <UserIcon /> }],
     },
   ],
 
@@ -163,8 +161,7 @@ export const NAVIGATION = {
     {
       section: "Hostel",
       items: [
-        { label: "Room & Bed", to: "/dashboard/parent/room", icon: <BedIcon /> },
-        { label: "Attendance", to: "/dashboard/parent/attendance", icon: <CheckSquareIcon /> },
+        { label: "Attendance & Room Details", to: "/dashboard/parent/attendance", icon: <BedIcon /> },
       ],
     },
     {
@@ -179,10 +176,6 @@ export const NAVIGATION = {
         { label: "Emergency Contacts", to: "/dashboard/parent/emergency", icon: <ShieldIcon /> },
       ],
     },
-    {
-      section: "Settings",
-      items: [{ label: "My Profile", to: "/dashboard/parent/profile", icon: <UserIcon /> }],
-    },
   ],
 
   [ROLES.SECURITY]: [
@@ -194,8 +187,7 @@ export const NAVIGATION = {
       section: "Gate Desk",
       items: [
         { label: "Gate Scan", to: "/dashboard/security/gate-scan", icon: <ScanIcon /> },
-        { label: "In / Out Register", to: "/dashboard/security/in-out", icon: <ListIcon /> },
-        { label: "Leave Exit", to: "/dashboard/security/leave-exit", icon: <CalendarClockIcon /> },
+        { label: "In & Out Register", to: "/dashboard/security/in-out", icon: <ListIcon /> },
         { label: "Attendance", to: "/dashboard/security/attendance", icon: <CheckSquareIcon /> },
         { label: "Visitor Log", to: "/dashboard/security/visitors", icon: <UserPlusIcon /> },
       ],
@@ -204,17 +196,12 @@ export const NAVIGATION = {
       section: "Safety",
       items: [
         { label: "Incident Reports", to: "/dashboard/security/incidents", icon: <SirenIcon /> },
-        { label: "Duty Roster", to: "/dashboard/security/duty-roster", icon: <CalendarClockIcon /> },
         { label: "Emergency Contacts", to: "/dashboard/security/emergency", icon: <ShieldIcon /> },
       ],
     },
     {
       section: "Services",
       items: [{ label: "Notices", to: "/dashboard/security/notices", icon: <MegaphoneIcon /> }],
-    },
-    {
-      section: "Settings",
-      items: [{ label: "My Profile", to: "/dashboard/security/profile", icon: <UserIcon /> }],
     },
   ],
 };

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, StatCard } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
@@ -6,7 +7,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { CalendarClockIcon, LogOutIcon, LogInIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { markLeaveLeft, markLeaveReturned } from "../../../firebase/firestore";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 
 const FILTERS = ["All", "Not left", "Left", "Returned"];
 
@@ -116,7 +117,7 @@ export default function SecurityLeaveExit() {
 
   function download() {
     if (exportLogs.length === 0) return;
-    downloadTextFile(toCsvText(exportLogs, csvColumns), "leave-hostel-register.csv");
+    downloadCsvAsXlsx(toCsvText(exportLogs, csvColumns), "leave-hostel-register.xlsx");
   }
 
   const columns = [

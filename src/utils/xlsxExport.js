@@ -40,3 +40,30 @@ export async function downloadXlsxFile(rows, columns, filename, sheetName = "She
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export async function downloadCsvAsXlsx(csvText, filename, sheetName = "Records") {
+  const XLSX = await import("xlsx");
+  const parsed = XLSX.read(csvText, { type: "string", raw: true });
+  const source = parsed.Sheets[parsed.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(source, { header: 1, defval: "" });
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const widths = rows.reduce((maxima, row) => {
+    row.forEach((value, index) => { maxima[index] = Math.min(48, Math.max(maxima[index] || 10, String(value ?? "").length + 2)); });
+    return maxima;
+  }, []);
+  worksheet["!cols"] = widths.map((wch) => ({ wch }));
+  if (worksheet["!ref"]) worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+  const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.replace(/\.csv$/i, ".xlsx");
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

@@ -5,7 +5,6 @@ import Profile from "./parent/Profile";
 import Attendance from "./parent/Attendance";
 import Fees from "./parent/Fees";
 import GatePass from "./parent/GatePass";
-import RoomBed from "./parent/RoomBed";
 import Notices from "./parent/Notices";
 import EmergencyContacts from "./parent/EmergencyContacts";
 
@@ -18,7 +17,6 @@ export default function ParentDashboard() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<Fees />} />
         <Route path="gate-pass" element={<GatePass />} />
-        <Route path="room" element={<RoomBed />} />
         <Route path="notices" element={<Notices />} />
         <Route path="emergency" element={<EmergencyContacts />} />
       </Routes>

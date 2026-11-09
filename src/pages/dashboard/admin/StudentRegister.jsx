@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Card, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, inputCls, Button } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { ClipboardIcon } from "../../../components/dashboard/admin/icons";
 import { useCollection } from "../../../hooks/useCollection";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
 
 const COLUMNS = [
   { key: "regNo", label: "Reg. No", sortable: true },
@@ -49,10 +50,24 @@ export default function StudentRegister() {
 
   const maleCount = scoped.filter((s) => s.gender === "Male").length;
   const femaleCount = scoped.filter((s) => s.gender === "Female").length;
+  async function exportRegister() {
+    await downloadXlsxFile(scoped, [
+      { label: "Student ID", value: (row) => row.id },
+      { label: "Registration Number", value: (row) => row.regNo },
+      { label: "Student Name", value: (row) => row.name },
+      { label: "Gender", value: (row) => row.gender },
+      { label: "Branch", value: (row) => row.branch },
+      { label: "Year", value: (row) => row.year },
+      { label: "Batch", value: (row) => row.batch },
+      { label: "Email", value: (row) => row.email },
+      { label: "Phone", value: (row) => row.phone },
+      { label: "Admission Year", value: (row) => row.admissionYear },
+    ], "student-register.xlsx", "Student Register");
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <Card>
+      <Card action={<Button variant="outline" onClick={exportRegister} disabled={loading || scoped.length === 0}>Download Excel</Button>}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-950/5 text-navy-900">

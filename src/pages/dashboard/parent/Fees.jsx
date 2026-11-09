@@ -1,9 +1,10 @@
-import { Card, ProgressBar, EmptyState, Pill } from "../../../components/dashboard/student/ui";
+import { Card, ProgressBar, EmptyState, Pill, Button } from "../../../components/dashboard/student/ui";
 import { ErrorState, LoadingState } from "../../../components/ui/DataState";
 import { WalletIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
 import { inr, feeRow, feeTone, summarizeChildFees } from "./parentData";
 
 export default function ParentFees() {
@@ -25,6 +26,20 @@ export default function ParentFees() {
   const records = fees.items;
   const { total: totalFee, paid, pending: remaining, nextDue, status: overallStatus } = summarizeChildFees(records);
   const pct = totalFee ? Math.round((paid / totalFee) * 100) : 0;
+  async function exportFees() {
+    await downloadXlsxFile(records, [
+      { label: "Student Name", value: () => studentUser?.name || "" },
+      { label: "Student ID", value: () => linkedStudentId },
+      { label: "Fee Category", value: (row) => row.category || row.type || "Hostel and mess" },
+      { label: "Due Date", value: (row) => row.dueDate },
+      { label: "Total", value: (row) => feeRow(row).total },
+      { label: "Paid", value: (row) => feeRow(row).paid },
+      { label: "Pending", value: (row) => feeRow(row).pending },
+      { label: "Payment Date", value: (row) => row.lastPaymentAt?.toDate?.().toISOString?.() || row.paymentDate || "" },
+      { label: "Transaction ID", value: (row) => row.transactionId || "" },
+      { label: "Status", value: (row) => feeRow(row).status },
+    ], "child-fees.xlsx", "Child Fees");
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -76,7 +91,7 @@ export default function ParentFees() {
         </div>
       )}
 
-      <Card title="Fee records">
+      <Card title="Fee records" action={<Button variant="outline" onClick={exportFees} disabled={records.length === 0}><WalletIcon /> Download Excel</Button>}>
         {records.length === 0 ? (
           <EmptyState icon={<WalletIcon />} title="No fee records yet" description="Fee periods your child's fees office posts will show up here." />
         ) : (

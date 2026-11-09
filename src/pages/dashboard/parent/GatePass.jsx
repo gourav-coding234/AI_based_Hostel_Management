@@ -1,9 +1,10 @@
-import { Card, Pill, EmptyState } from "../../../components/dashboard/student/ui";
+import { Card, Pill, EmptyState, Button } from "../../../components/dashboard/student/ui";
 import { AsyncSection } from "../../../components/ui/DataState";
 import { QrIcon, CheckSquareIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
 import { formatDate } from "./parentData";
 
 export default function ParentGatePass() {
@@ -19,6 +20,21 @@ export default function ParentGatePass() {
 
   const passList = gatePasses.items;
   const activePass = passList.find((p) => p.status === "Approved");
+  async function exportGatePasses() {
+    await downloadXlsxFile(passList, [
+      { label: "Gate Pass ID", value: (row) => row.id },
+      { label: "Student Name", value: () => studentUser?.name || "" },
+      { label: "Student ID", value: () => linkedStudentId },
+      { label: "Type", value: (row) => row.type },
+      { label: "Reason", value: (row) => row.reason },
+      { label: "Destination", value: (row) => row.destination },
+      { label: "Requested Date", value: (row) => row.createdAt?.toDate?.().toISOString?.() || row.requestedAt || "" },
+      { label: "Exit", value: (row) => row.from },
+      { label: "Expected Return", value: (row) => row.to },
+      { label: "Status", value: (row) => row.status },
+      { label: "Trip Status", value: (row) => row.tripState },
+    ], "child-gate-passes.xlsx", "Gate Passes");
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -51,7 +67,7 @@ export default function ParentGatePass() {
         )}
       </Card>
 
-      <Card title="Gate pass history">
+      <Card title="Gate pass history" action={<Button variant="outline" onClick={exportGatePasses} disabled={passList.length === 0 || gatePasses.loading}>Download Excel</Button>}>
         {gatePasses.loading ? (
           <p className="py-6 text-center text-sm text-slate-400">Loading gate passes…</p>
         ) : gatePasses.error ? (

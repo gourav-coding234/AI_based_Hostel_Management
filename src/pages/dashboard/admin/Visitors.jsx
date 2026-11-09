@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { EyeIcon, UsersIcon, QrIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { downloadTextFile } from "../../../utils/csv";
 
 function toCsv(headers, rows) {
   const lines = [headers.map((h) => h.label).join(",")];
@@ -66,7 +66,7 @@ export default function Visitors() {
   ];
 
   function downloadVisitors() {
-    downloadTextFile(toCsv(visitorCsvHeaders, filtered), "visitors.csv");
+    downloadCsvAsXlsx(toCsv(visitorCsvHeaders, filtered), "visitors.xlsx");
   }
 
   return (
@@ -100,7 +100,7 @@ export default function Visitors() {
             </select>
           </div>
           <Button variant="outline" onClick={downloadVisitors} disabled={filtered.length === 0}>
-            <DownloadIcon /> Download CSV
+            <DownloadIcon /> Download Excel
           </Button>
         </div>
 

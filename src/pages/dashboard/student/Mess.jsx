@@ -1,9 +1,9 @@
 import { useMemo } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Button } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { UtensilsIcon } from "../../../components/dashboard/student/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { downloadTextFile } from "../../../utils/csv";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const NOT_POSTED = "Not posted";
@@ -58,7 +58,7 @@ export default function Mess() {
   const hasAnyMenu = menuQuery.data.length > 0;
 
   function downloadTimetable() {
-    downloadTextFile(toCsv(timetableCsvHeaders, timetable), "mess-timetable.csv");
+    downloadCsvAsXlsx(toCsv(timetableCsvHeaders, timetable), "mess-timetable.xlsx");
   }
 
   return (

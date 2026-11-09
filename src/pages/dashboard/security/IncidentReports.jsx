@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { SirenIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument } from "../../../firebase/firestore";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import { toCsvText } from "../../../utils/csv";
 
 const INCIDENT_CATEGORIES = ["Suspicious activity", "Disturbance", "Gate malfunction", "Unauthorized entry attempt", "Other"];
 const INCIDENT_SEVERITIES = ["Low", "Medium", "High"];
@@ -53,7 +54,7 @@ export default function SecurityIncidentReports() {
     }
     setDownloading(true);
     try {
-      downloadTextFile(toCsvText(visibleIncidents, CSV_COLUMNS), "incident-reports.csv");
+      downloadCsvAsXlsx(toCsvText(visibleIncidents, CSV_COLUMNS), "incident-reports.xlsx");
     } catch (err) {
       console.error("Failed to download incident reports:", err);
       setDownloadMessage("Couldn't download the incident reports. Please try again.");

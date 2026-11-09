@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { ScanIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { toCsvText, downloadTextFile } from "../../../utils/csv";
+import LeaveExit from "./LeaveExit";
+import { toCsvText } from "../../../utils/csv";
 
 const FILTERS = ["All", "In", "Out"];
 
@@ -70,13 +72,13 @@ export default function SecurityInOutRegister() {
 
   function download() {
     if (exportRows.length === 0) return;
-    downloadTextFile(toCsvText(exportRows, csvColumns), "in-out-register.csv");
+    downloadCsvAsXlsx(toCsvText(exportRows, csvColumns), "in-out-register.xlsx");
   }
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card
-        title="In / Out register"
+        title="In & Out register"
         action={
           <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={download} disabled={logQuery.loading || exportRows.length === 0}>
             Download ({exportRows.length})
@@ -110,6 +112,7 @@ export default function SecurityInOutRegister() {
           pageSize={12}
         />
       </Card>
+      <LeaveExit />
     </div>
   );
 }

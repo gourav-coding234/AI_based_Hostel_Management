@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { downloadTextFile } from "../../../utils/csv";
 
 function toCsv(headers, rows) {
   const lines = [headers.map((h) => h.label).join(",")];
@@ -50,7 +50,7 @@ export default function GatePasses() {
   ];
 
   function downloadGatePasses() {
-    downloadTextFile(toCsv(gatePassCsvHeaders, filtered), "gate-passes.csv");
+    downloadCsvAsXlsx(toCsv(gatePassCsvHeaders, filtered), "gate-passes.xlsx");
   }
 
   const columns = [
@@ -115,7 +115,7 @@ export default function GatePasses() {
             </select>
           </div>
           <Button variant="outline" onClick={downloadGatePasses} disabled={filtered.length === 0}>
-            <DownloadIcon /> Download CSV
+            <DownloadIcon /> Download Excel
           </Button>
         </div>
 

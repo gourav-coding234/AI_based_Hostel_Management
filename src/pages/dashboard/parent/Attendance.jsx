@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, Pill, Field, inputCls } from "../../../components/dashboard/student/ui";
+import RoomBed from "./RoomBed";
+import { Card, Pill, Field, inputCls, Button } from "../../../components/dashboard/student/ui";
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
@@ -7,6 +8,7 @@ import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import DataTable from "../../../components/ui/DataTable";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
 
 const MODES = [
   { id: "day", label: "Day-wise" },
@@ -128,12 +130,36 @@ export default function ParentAttendance() {
     if (nextIdx >= 0 && nextIdx < allMonths.length) setCalendarMonth(allMonths[nextIdx]);
   }
 
+  async function downloadChildRecords() {
+    const rows = (log.length ? log : [{}]).map((record) => ({
+      studentName: studentUser?.name || "",
+      studentId: linkedStudentId,
+      block: studentRecord?.hostelResidence || "",
+      floor: studentRecord?.floor || "",
+      wing: studentRecord?.wing || "",
+      room: studentRecord?.room || "",
+      bed: studentRecord?.bed || "",
+      attendanceDate: record.date || "",
+      attendanceStatus: record.status || "",
+    }));
+    await downloadXlsxFile(rows, [
+      { label: "Student Name", value: (row) => row.studentName },
+      { label: "Student ID", value: (row) => row.studentId },
+      { label: "Block", value: (row) => row.block },
+      { label: "Floor", value: (row) => row.floor },
+      { label: "Wing", value: (row) => row.wing },
+      { label: "Room", value: (row) => row.room },
+      { label: "Bed", value: (row) => row.bed },
+      { label: "Attendance Date", value: (row) => row.attendanceDate },
+      { label: "Attendance Status", value: (row) => row.attendanceStatus },
+    ], "child-attendance-room.xlsx", "Attendance & Room");
+  }
   const status = <LinkedStudentStatus {...linked} />;
   if (status) return status;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <Card>
+      <Card action={<Button variant="outline" onClick={downloadChildRecords} disabled={attendance.loading}>Download attendance and room details</Button>}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
@@ -290,6 +316,7 @@ export default function ParentAttendance() {
           )}
         </Card>
       )}
+      <RoomBed />
     </div>
   );
 }

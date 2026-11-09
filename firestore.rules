@@ -98,6 +98,11 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    match /expenses/{expenseId} {
+      // Expense records and the calculated balance are restricted to admins.
+      allow read, write: if isAdmin();
+    }
+
     match /fees/{feeId} {
       allow read: if isStaff() || isOwnRecord(resource.data.studentId);
 

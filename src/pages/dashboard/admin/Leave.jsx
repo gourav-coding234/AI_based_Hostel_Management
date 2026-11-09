@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { CalendarClockIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { downloadTextFile } from "../../../utils/csv";
 
 function toCsv(headers, rows) {
   const lines = [headers.map((h) => h.label).join(",")];
@@ -50,7 +50,7 @@ export default function Leave() {
   ];
 
   function downloadLeaveRequests() {
-    downloadTextFile(toCsv(leaveCsvHeaders, filtered), "leave-requests.csv");
+    downloadCsvAsXlsx(toCsv(leaveCsvHeaders, filtered), "leave-requests.xlsx");
   }
 
   const columns = [
@@ -109,7 +109,7 @@ export default function Leave() {
             </select>
           </div>
           <Button variant="outline" onClick={downloadLeaveRequests} disabled={filtered.length === 0}>
-            <DownloadIcon /> Download CSV
+            <DownloadIcon /> Download Excel
           </Button>
         </div>
 

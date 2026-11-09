@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, ProgressBar, StatCard, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
@@ -6,7 +7,6 @@ import DataTable from "../../../components/ui/DataTable";
 import { WalletIcon, AlertIcon, CheckIcon, CalendarClockIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, updateDocument, logAudit } from "../../../firebase/firestore";
-import { downloadTextFile } from "../../../utils/csv";
 import { computeFeeStatus } from "../../../utils/fees";
 
 function inr(n) {
@@ -104,7 +104,7 @@ export default function Fees() {
   ];
 
   function downloadFees() {
-    downloadTextFile(toCsv(feeCsvHeaders, filtered), "fee-records.csv");
+    downloadCsvAsXlsx(toCsv(feeCsvHeaders, filtered), "fee-records.xlsx");
   }
 
   const defaulterColumns = [
@@ -322,7 +322,7 @@ export default function Fees() {
             </select>
           </div>
           <Button variant="outline" onClick={downloadFees} disabled={filtered.length === 0}>
-            <DownloadIcon /> Download CSV
+            <DownloadIcon /> Download Excel
           </Button>
         </div>
 
