@@ -46,9 +46,12 @@ export default function AdminOverview() {
     leaveRequests: { name: "leaveRequests", options: { orderByField: "from" } },
     visitors: { name: "visitors", options: { orderByField: "inTimeSort" } },
     expenses: { name: "expenses" },
+    studentRegister: { name: "studentRegister" },
+    attendance: { name: "attendance" },
+    feedback: { name: "feedback" },
   });
 
-  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses } = data;
+  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses, studentRegister, attendance, feedback } = data;
 
   // Occupancy
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
@@ -147,6 +150,12 @@ export default function AdminOverview() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link to="/dashboard/admin/expenses"><StatCard icon={<WalletIcon />} label="Hostel expenses" value={loading ? "..." : inr(totalExpenses)} sub={`${expenses.length} recorded entries`} tone="amber" /></Link>
         <Link to="/dashboard/admin/expenses"><StatCard icon={<WalletIcon />} label="Calculated available balance" value={loading ? "..." : inr(availableBalance)} sub="Collections minus recorded expenses; not a live bank balance" tone={availableBalance < 0 ? "rose" : "teal"} /></Link>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Academic registrations" value={loading ? "…" : studentRegister.length} sub={`${students.length} student accounts with roster data`} tone="navy" /></Link>
+        <Link to="/dashboard/admin/feedback"><StatCard icon={<MegaphoneIcon />} label="Student feedback" value={loading ? "…" : feedback.length} sub="Imported and submitted feedback records" tone="teal" /></Link>
+        <Link to="/dashboard/admin/reports"><StatCard icon={<ChartIcon />} label="Attendance records" value={loading ? "…" : attendance.length} sub="Records available for attendance reporting" tone="amber" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

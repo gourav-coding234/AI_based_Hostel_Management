@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, deleteDocument, logAudit } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { useCollection } from "../../../hooks/useCollection";
 
@@ -55,7 +55,9 @@ function validateMixedRecords(records) {
     if (!groups.has(item.key)) groups.set(item.key, []);
     const data = { ...record };
     if (routeKey) delete data[routeKey];
-    groups.get(item.key).push({ sourceRow: index + 2, data });
+    const sourceRow = Number(record.__sourceRow) || index + 2;
+    delete data.__sourceRow;
+    groups.get(item.key).push({ sourceRow, data });
   });
 
   const byTarget = {};
@@ -73,39 +75,134 @@ function validateMixedRecords(records) {
   return { validRecords: Object.values(byTarget).flat(), errors, byTarget };
 }
 
+function expandStudentBundleRows(records) {
+  const expanded = [];
+  const sharedSeen = new Set();
+  const add = (source, sourceRow, type, data, sharedKey = "") => {
+    if (sharedKey) {
+      const key = `${type}:${sharedKey}`;
+      if (sharedSeen.has(key)) return;
+      sharedSeen.add(key);
+    }
+    expanded.push({ dataType: type, __sourceRow: sourceRow, ...data });
+  };
+  const present = (record, key) => String(record[key] ?? "").trim() !== "";
+
+  records.forEach((record, index) => {
+    const sourceRow = index + 2;
+    const typeValue = String(record.dataType || "").trim().toLowerCase();
+    const isStudentBundle = ["students", "student", "student roster", "student roster (room/bed)"].includes(typeValue);
+    if (!isStudentBundle) {
+      expanded.push({ ...record, __sourceRow: sourceRow });
+      return;
+    }
+
+    if (!present(record, "regNo") && !present(record, "studentId") && !present(record, "total")) {
+      expanded.push({ ...record, __sourceRow: sourceRow });
+      return;
+    }
+
+    if (present(record, "regNo") && present(record, "gender") && present(record, "branch") && present(record, "year")) {
+      add(record, sourceRow, "studentRegister", {
+        regNo: record.regNo, name: record.name, gender: record.gender, branch: record.branch,
+        branchCode: record.branchCode, year: record.year, batch: record.batch,
+        admissionYear: record.admissionYear, email: record.email, phone: record.phone,
+      });
+    }
+    if (present(record, "email") && present(record, "name")) {
+      add(record, sourceRow, "students", {
+        email: record.email, name: record.name, hostelResidence: record.hostelResidence,
+        wing: record.wing, floor: record.floor, room: record.room, bed: record.bed, allottedOn: record.allottedOn,
+      });
+    }
+    if (present(record, "studentId") && present(record, "studentName") && present(record, "total") && present(record, "paid")) {
+      add(record, sourceRow, "fees", {
+        studentId: record.studentId, studentName: record.studentName, block: record.block,
+        total: record.total, paid: record.paid, dueDate: record.dueDate, status: record.status,
+      });
+    }
+    if (present(record, "studentId") && present(record, "studentName") && present(record, "category") && present(record, "description")) {
+      add(record, sourceRow, "complaints", {
+        studentId: record.studentId, studentName: record.studentName, category: record.category,
+        description: record.description, status: "Open", date: record.date,
+      });
+    }
+    if (present(record, "studentId") && present(record, "studentName") && present(record, "type") && present(record, "from") && present(record, "to")) {
+      const leaveType = /medical|home visit|family function|overnight|leave/i.test(String(record.type));
+      add(record, sourceRow, leaveType ? "leaveRequests" : "gatePasses", {
+        studentId: record.studentId, studentName: record.studentName, type: record.type,
+        from: record.from, to: record.to, block: record.block || record.hostelResidence,
+        wing: record.wing, status: "Pending",
+      });
+    }
+    if (present(record, "visitorName") && present(record, "purpose")) {
+      add(record, sourceRow, "visitors", {
+        visitorName: record.visitorName, block: record.block, studentId: record.studentId,
+        studentName: record.studentName, purpose: record.purpose, idProof: record.idProof,
+        inTime: record.inTime, outTime: record.outTime,
+      });
+    }
+    if (present(record, "title") && present(record, "target") && present(record, "priority") && present(record, "postedBy")) {
+      add(record, sourceRow, "notices", {
+        title: record.title, target: record.target, priority: record.priority,
+        date: record.date, postedBy: record.postedBy,
+      }, `${record.title}|${record.target}|${record.date}|${record.priority}`);
+    }
+    if (present(record, "item") && present(record, "quantity")) {
+      add(record, sourceRow, "inventory", {
+        item: record.item, location: record.location, quantity: record.quantity, condition: record.condition,
+      });
+    }
+    if (present(record, "title") && present(record, "severity") && present(record, "reportedBy")) {
+      add(record, sourceRow, "incidents", {
+        title: record.title, category: record.category, severity: record.severity,
+        date: record.date, reportedBy: record.reportedBy,
+      }, `${record.title}|${record.severity}|${record.date}|${record.reportedBy}`);
+    }
+    if (present(record, "category") && present(record, "description") && present(record, "amount") && present(record, "paymentMethod")) {
+      add(record, sourceRow, "expenses", {
+        category: record.category, description: record.description, amount: record.amount,
+        date: record.date, paymentMethod: record.paymentMethod,
+      });
+    }
+    if (present(record, "subject") && present(record, "message")) {
+      add(record, sourceRow, "feedback", {
+        studentName: record.studentName, studentId: record.studentId,
+        subject: record.subject, message: record.message, date: record.date,
+      });
+    }
+    if (present(record, "guardName") && present(record, "shift")) {
+      add(record, sourceRow, "dutyRoster", {
+        guardName: record.guardName, shift: record.shift, date: record.date, gate: record.gate,
+      }, `${record.guardName}|${record.shift}|${record.date}|${record.gate}`);
+    }
+    if (present(record, "block") && present(record, "warden") && present(record, "totalBeds")) {
+      add(record, sourceRow, "blocks", {
+        name: record.block, warden: record.warden, totalBeds: record.totalBeds,
+        occupiedBeds: record.occupiedBeds,
+      }, record.block);
+    }
+  });
+  return expanded;
+}
+
 async function importRecords(target, records, createdBy) {
   if (target.key === "students") {
-    let createdAccounts = 0;
-    const accountCreationErrors = new Map();
-    for (let index = 0; index < records.length; index += 1) {
-      const record = records[index];
-      try {
-        await createUserAccount({
-          name: record.name,
-          email: record.email,
-          password: "123456",
-          role: "Student",
-          hostelResidence: record.hostelResidence,
-        });
-        createdAccounts += 1;
-      } catch (error) {
-        // An existing account may already be a Student; the roster upsert
-        // below resolves that case and only reports non-Student/missing users.
-        if (error?.code !== "auth/email-already-in-use") {
-          accountCreationErrors.set(record.email, error?.message || "Could not create the student login account.");
-        }
-      }
-      target.onProgress?.(index + 1, records.length, createdAccounts);
-    }
+    const accountResult = await ensureStudentAccounts(records, target.onProgress);
     const result = await bulkUpsertStudentsByEmail(records, createdBy);
     return {
       ...result,
-      createdAccounts,
+      createdAccounts: accountResult.createdAccounts,
       failed: result.failed.map((failure) => ({
         ...failure,
-        reason: accountCreationErrors.get(failure.email) || failure.reason,
+        reason: accountResult.errors.get(failure.email) || failure.reason,
       })),
     };
+  }
+  if (target.key === "studentRegister") {
+    const accountResult = await ensureStudentAccounts(records.filter((record) => record.email), target.onProgress);
+    const written = await bulkAddDocuments(target.collection, records, createdBy);
+    return { written, createdAccounts: accountResult.createdAccounts, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
   }
   if (target.key === "visitors") {
     const withSortableTime = records.map((record) => {
@@ -117,6 +214,37 @@ async function importRecords(target, records, createdBy) {
   }
   const written = await bulkAddDocuments(target.collection, records, createdBy);
   return { written, failed: [] };
+}
+
+async function ensureStudentAccounts(records, onProgress) {
+  let createdAccounts = 0;
+  const errors = new Map();
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record.email || !record.name) {
+      errors.set(record.email || `row-${index + 2}`, "A student name and valid email are required to create a login.");
+      onProgress?.(index + 1, records.length, createdAccounts);
+      continue;
+    }
+    try {
+      await createUserAccount({
+        name: record.name,
+        email: record.email,
+        password: "123456",
+        role: "Student",
+        hostelResidence: record.hostelResidence || record.block,
+      });
+      createdAccounts += 1;
+    } catch (error) {
+      // Existing accounts are reused; the student roster upsert or UID
+      // mapping below confirms whether the existing account is a Student.
+      if (error?.code !== "auth/email-already-in-use") {
+        errors.set(record.email, error?.message || "Could not create the student login account.");
+      }
+    }
+    onProgress?.(index + 1, records.length, createdAccounts);
+  }
+  return { createdAccounts, errors };
 }
 
 export default function DataImport() {
@@ -156,7 +284,7 @@ export default function DataImport() {
     try {
       const { records } = await parseDataFile(f);
       const result = isMixedImport
-        ? validateMixedRecords(records)
+        ? validateMixedRecords(expandStudentBundleRows(records))
         : validateRecords(records, target.columns, target.dedupeKeys || []);
       setValidation(result);
       setStatus("validated");
@@ -175,13 +303,53 @@ export default function DataImport() {
     try {
       if (isMixedImport) {
         let writtenTotal = 0;
+        let createdAccountsTotal = 0;
         const failures = [];
-        for (const item of IMPORT_TARGETS) {
+        let studentIdsBySourceId = null;
+        let studentEmailsBySourceId = new Map();
+        const linkedCollections = new Set(["fees", "attendance", "complaints", "gatePasses", "visitors", "leaveRequests", "feedback"]);
+        const priority = { students: 0, studentRegister: 1 };
+        const orderedTargets = [...IMPORT_TARGETS].sort((a, b) => (priority[a.key] ?? 2) - (priority[b.key] ?? 2));
+
+        for (const item of orderedTargets) {
           const rows = validation.byTarget[item.key] || [];
           if (!rows.length) continue;
           try {
-            const { written, failed = [] } = await importRecords({ ...item, onProgress: (done, total, createdAccounts) => setImportProgress({ target: item.label, done, total, createdAccounts }) }, rows, user?.uid);
+            let rowsToImport = rows;
+            if (linkedCollections.has(item.key)) {
+              if (!studentIdsBySourceId) {
+                const accounts = await getCollection("users");
+                const studentAccounts = accounts.filter((account) => account.role === "Student");
+                const uidByEmail = new Map(studentAccounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
+                studentIdsBySourceId = new Map(studentAccounts.map((account) => [account.id, account.id]));
+                for (const roster of validation.byTarget.studentRegister || []) {
+                  const uid = uidByEmail.get(String(roster.email || "").trim().toLowerCase());
+                  if (uid && roster.regNo) {
+                    studentIdsBySourceId.set(String(roster.regNo).trim(), uid);
+                    studentEmailsBySourceId.set(String(roster.regNo).trim(), roster.email);
+                  }
+                }
+              }
+              rowsToImport = [];
+              for (const row of rows) {
+                if (!row.studentId) {
+                  rowsToImport.push(row);
+                  continue;
+                }
+                const sourceId = String(row.studentId).trim();
+                const uid = studentIdsBySourceId.get(sourceId);
+                if (uid) rowsToImport.push({ ...row, studentId: uid });
+                else failures.push({
+                  email: studentEmailsBySourceId.get(sourceId) || "",
+                  target: item.label,
+                  reason: `Student ID ${sourceId} could not be linked to a Student login, so this record was skipped.`,
+                });
+              }
+            }
+            if (!rowsToImport.length) continue;
+            const { written, failed = [], createdAccounts = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
             writtenTotal += written;
+            createdAccountsTotal += createdAccounts || 0;
             failures.push(...failed.map((failure) => ({ ...failure, target: item.label })));
           } catch (err) {
             console.error(`Mixed import failed for ${item.collection}:`, err);
@@ -190,33 +358,14 @@ export default function DataImport() {
         }
         setImportedCount(writtenTotal);
         setImportFailures(failures);
+        setImportProgress({ done: writtenTotal, total: writtenTotal, createdAccounts: createdAccountsTotal, finished: true });
         setStatus("done");
         return;
       }
-      if (target.key === "students") {
-        // Special case: this collection's document ID must be the
-        // student's real Firebase Auth UID, resolved here from the row's
-        // email — a plain auto-ID bulk insert would create records no
-        // student's dashboard ever reads. See bulkUpsertStudentsByEmail.
-        const { written, failed, createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, validation.validRecords, user?.uid);
-        setImportedCount(written);
-        setImportFailures(failed);
-        setImportProgress({ target: target.label, done: validation.validRecords.length, total: validation.validRecords.length, createdAccounts, finished: true });
-      } else if (target.key === "visitors") {
-        // Backfill a real sortable timestamp alongside the human-readable
-        // inTime string — Firestore's orderBy silently drops documents
-        // missing the ordered field, so without this every imported
-        // visitor would vanish from the (inTimeSort-ordered) visitor pages.
-        const withSortableTime = validation.validRecords.map((r) => {
-          const parsed = r.inTime ? Date.parse(r.inTime) : NaN;
-          return { ...r, inTimeSort: Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString() };
-        });
-        const written = await bulkAddDocuments(target.collection, withSortableTime, user?.uid);
-        setImportedCount(written);
-      } else {
-        const written = await bulkAddDocuments(target.collection, validation.validRecords, user?.uid);
-        setImportedCount(written);
-      }
+      const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, validation.validRecords, user?.uid);
+      setImportedCount(written);
+      setImportFailures(failed);
+      if (createdAccounts) setImportProgress({ target: target.label, done: validation.validRecords.length, total: validation.validRecords.length, createdAccounts, finished: true });
       setStatus("done");
     } catch (err) {
       console.error("Import failed:", err);
@@ -352,15 +501,15 @@ export default function DataImport() {
             <div className="flex flex-col gap-2">
               <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
                 Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
-                appear on the relevant dashboards immediately — refresh any open page to see them.
-                {importFailures.length > 0 && ` ${importFailures.length} row${importFailures.length === 1 ? "" : "s"} could not be matched to an existing account and were not imported.`}
+                appear on the relevant dashboards automatically as the database syncs; open dashboard pages update without a manual refresh.
+                {importFailures.length > 0 && ` ${importFailures.length} record${importFailures.length === 1 ? "" : "s"} could not be linked or imported; see details below.`}
               </div>
               {importFailures.length > 0 && (
                 <div className="max-h-56 overflow-y-auto rounded-xl border border-amber-200">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-amber-50 text-amber-800">
                       <tr>
-                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Email / student ID</th>
                         <th className="px-3 py-2">Data type</th>
                         <th className="px-3 py-2">Reason</th>
                       </tr>
@@ -368,7 +517,7 @@ export default function DataImport() {
                     <tbody className="divide-y divide-amber-100">
                       {importFailures.map((f, i) => (
                         <tr key={i}>
-                          <td className="px-3 py-2 text-slate-500">{f.email || "—"}</td>
+                          <td className="px-3 py-2 text-slate-500">{f.email || f.studentId || "—"}</td>
                           <td className="px-3 py-2 text-slate-500">{f.target || "Student roster"}</td>
                           <td className="px-3 py-2 text-amber-800">{f.reason}</td>
                         </tr>

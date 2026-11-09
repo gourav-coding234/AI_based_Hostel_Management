@@ -43,6 +43,8 @@ export default function WardenOverview() {
     gatePasses: { name: "gatePasses", options: { orderByField: "from" } },
     leaveRequests: { name: "leaveRequests", options: { orderByField: "from" } },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
+    visitors: { name: "visitors" },
+    inventory: { name: "inventory" },
   });
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----
@@ -78,13 +80,13 @@ export default function WardenOverview() {
 
   // ---- Gate passes (records carry `wing`, same scoping as Warden Gate
   // Passes page) ----
-  const myGatePasses = myWing ? data.gatePasses.filter((p) => p.wing === myWing) : data.gatePasses;
+  const myGatePasses = myWing ? data.gatePasses.filter((p) => (p.block || p.hostelResidence || p.wing) === myWing) : data.gatePasses;
   const pendingGatePasses = myGatePasses.filter((p) => p.status === "Pending").length;
   const approvedGatePasses = myGatePasses.filter((p) => p.status === "Approved").length;
 
   // ---- Leave requests (records carry `wing`, same scoping as Warden
   // Leave page) ----
-  const myLeaveRequests = myWing ? data.leaveRequests.filter((r) => r.wing === myWing) : data.leaveRequests;
+  const myLeaveRequests = myWing ? data.leaveRequests.filter((r) => (r.block || r.hostelResidence || r.wing) === myWing) : data.leaveRequests;
   const pendingLeave = myLeaveRequests.filter((r) => r.status === "Pending").length;
   const approvedLeave = myLeaveRequests.filter((r) => r.status === "Approved").length;
   const rejectedLeave = myLeaveRequests.filter((r) => r.status === "Rejected").length;
@@ -147,6 +149,11 @@ export default function WardenOverview() {
         <StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeave} sub={`${myLeaveRequests.length} total`} tone={pendingLeave > 0 ? "amber" : "teal"} />
         <StatCard icon={<WrenchIcon />} label="Open complaints" value={loading ? "…" : openComplaints} sub={`${complaints.length} total filed`} tone={openComplaints > 0 ? "rose" : "teal"} />
         <StatCard icon={<PackageIcon />} label="Pending inventory requests" value={loading ? "…" : pendingInventoryRequests} sub={`${data.inventoryRequests.length} total`} tone={pendingInventoryRequests > 0 ? "amber" : "teal"} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Link to="/dashboard/warden/inventory"><StatCard icon={<PackageIcon />} label="Inventory records" value={loading ? "…" : data.inventory.length} sub="Items currently recorded for the hostel" tone="navy" /></Link>
+        <Link to="/dashboard/warden/visitors"><StatCard icon={<UsersIcon />} label="Visitor records" value={loading ? "…" : data.visitors.length} sub={`${data.visitors.filter((v) => !v.outTime).length} currently inside`} tone="teal" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -47,6 +47,7 @@ export default function Overview() {
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
   const complaints = useStudentCollection("complaints", studentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", studentId, { orderByField: "from" });
+  const leaveRequests = useStudentCollection("leaveRequests", studentId, { orderByField: "from" });
   // Fetch a bit more than we display — filtering by wing happens client-side
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
   // silently drop relevant notices behind irrelevant ones targeted at a
@@ -199,7 +200,7 @@ export default function Overview() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={<BedIcon />}
           label="Room & bed status"
@@ -236,6 +237,7 @@ export default function Overview() {
           sub={`${resolvedComplaints} resolved · ${complaints.items.length} total filed`}
           tone={openComplaints > 0 ? "rose" : "teal"}
         />
+        <Link to="/dashboard/student/leave"><StatCard icon={<AlertIcon />} label="Leave requests" value={leaveRequests.loading ? "…" : leaveRequests.items.filter((r) => r.status === "Pending").length} sub={`${leaveRequests.items.length} total submitted`} tone={leaveRequests.items.some((r) => r.status === "Pending") ? "amber" : "teal"} /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
