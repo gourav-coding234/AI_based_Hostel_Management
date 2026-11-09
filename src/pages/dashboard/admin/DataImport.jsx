@@ -282,7 +282,19 @@ function DataDeleteSection() {
 
   function requestDelete(spec) {
     setDeletePhrase("");
+    setError("");
+    setMessage("");
     setConfirm(spec);
+  }
+
+  function changeTarget(nextTargetKey) {
+    setTargetKey(nextTargetKey);
+    setSearch("");
+    setSelected([]);
+    setConfirm(null);
+    setDeletePhrase("");
+    setError("");
+    setMessage("");
   }
 
   function toggle(id) {
@@ -326,11 +338,11 @@ function DataDeleteSection() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <Card title="Delete data" subtitle="Remove individual records or select multiple records from an imported data collection. Deletion is permanent.">
+      <Card title="Delete data" subtitle="Delete one record, selected records, or every record in the chosen data type. Deletion is permanent.">
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Data type">
-              <select className="input" value={targetKey} onChange={(event) => { setTargetKey(event.target.value); setSearch(""); setMessage(""); }}>
+              <select className="input" value={targetKey} onChange={(event) => changeTarget(event.target.value)}>
                 {IMPORT_TARGETS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
               </select>
             </Field>
@@ -343,6 +355,7 @@ function DataDeleteSection() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={toggleVisible} disabled={loading || filtered.length === 0}>{visibleAllSelected ? "Clear visible" : "Select visible"}</Button>
               <Button variant="danger" onClick={() => requestDelete({ ids: selected, bulk: true })} disabled={loading || selected.length === 0}>Delete selected ({selected.length})</Button>
+              <Button variant="danger" onClick={() => requestDelete({ ids: records.map((record) => record.id), bulk: true, all: true })} disabled={loading || records.length === 0}>Delete all {target.label} ({records.length})</Button>
             </div>
           </div>
           {(error || recordsQuery.error) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error || "Could not load these records. Check admin access and try again."}</div>}
@@ -373,10 +386,10 @@ function DataDeleteSection() {
         </div>
       </Card>
       {confirm && <ConfirmDialog
-        title={confirm.bulk ? `Delete ${confirm.ids.length} records?` : "Delete this record?"}
+        title={confirm.all ? `Delete all ${confirm.ids.length} ${target.label} records?` : confirm.bulk ? `Delete ${confirm.ids.length} records?` : "Delete this record?"}
         description={`This will permanently delete ${confirm.ids.length === 1 ? "this record" : `these ${confirm.ids.length} records`} from ${target.collection}. This cannot be undone.`}
-        confirmLabel={confirm.bulk ? "Delete records" : "Delete record"}
-        confirmText={["fees", "expenses", "attendance", "gatePasses", "leaveRequests"].includes(target.collection) ? `DELETE ${target.collection.toUpperCase()}` : ""}
+        confirmLabel={confirm.all ? "Delete all records" : confirm.bulk ? "Delete records" : "Delete record"}
+        confirmText={confirm.all ? `DELETE ALL ${target.collection.toUpperCase()}` : ["fees", "expenses", "attendance", "gatePasses", "leaveRequests"].includes(target.collection) ? `DELETE ${target.collection.toUpperCase()}` : ""}
         confirmValue={deletePhrase}
         onConfirmValueChange={setDeletePhrase}
         busy={busy}
