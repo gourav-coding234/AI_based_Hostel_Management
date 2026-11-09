@@ -43,17 +43,20 @@ export default function Overview() {
   // set directly on each doc (matching the admin/warden Fees pages and the
   // CSV import schema) — not a list of `amount` line items, and not
   // ordered by a `date` field the schema doesn't have.
-  const fees = useStudentCollection("fees", studentId, { orderByField: "dueDate" });
+  const fees = useStudentCollection("fees", studentId);
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
-  const complaints = useStudentCollection("complaints", studentId, { orderByField: "date" });
-  const gatePasses = useStudentCollection("gatePasses", studentId, { orderByField: "from" });
-  const leaveRequests = useStudentCollection("leaveRequests", studentId, { orderByField: "from" });
+  const complaints = useStudentCollection("complaints", studentId);
+  const gatePasses = useStudentCollection("gatePasses", studentId);
+  const leaveRequests = useStudentCollection("leaveRequests", studentId);
   // Fetch a bit more than we display — filtering by wing happens client-side
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
   // silently drop relevant notices behind irrelevant ones targeted at a
   // different wing.
-  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 12 });
-  const filteredNoticeData = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence)).slice(0, 3);
+  const noticesQuery = useCollection("notices");
+  const filteredNoticeData = noticesQuery.data
+    .filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence))
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 3);
   const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
 
   // Room/bed allotment lives on the student's own `students/{uid}` document
@@ -91,7 +94,7 @@ export default function Overview() {
 
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
-  const activePass = gatePasses.items.find((p) => p.status === "Approved");
+  const activePass = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find((p) => p.status === "Approved");
 
   const [sosSending, setSosSending] = useState(false);
   const [sosSent, setSosSent] = useState(false);

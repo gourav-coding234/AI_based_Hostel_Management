@@ -189,9 +189,8 @@ export const IMPORT_SCHEMAS = {
     collection: "studentRegister",
     description:
       "The institute-wide academic roster — registration number, branch and year for every " +
-      "enrolled student, independent of hostel residency or portal login. Import the full " +
-      "college register here first; use Manage Users separately, only for students who need " +
-      "an actual portal login.",
+      "enrolled student. Rows with an email also create a Student login using the initial " +
+      "password 123456; rows without an email still appear in the academic register.",
     columns: [
       { key: "regNo", label: "Registration No", required: true, type: "string" },
       { key: "name", label: "Name", required: true, type: "string" },

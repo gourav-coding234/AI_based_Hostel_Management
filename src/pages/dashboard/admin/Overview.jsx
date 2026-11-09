@@ -39,12 +39,12 @@ export default function AdminOverview() {
     blocks: { name: "blocks" },
     students: { name: "students" },
     wardens: { name: "users", options: { where: [["role", "==", "Warden"]] } },
-    complaints: { name: "complaints", options: { orderByField: "date" } },
+    complaints: { name: "complaints" },
     fees: { name: "fees" },
-    notices: { name: "notices", options: { orderByField: "date", limitCount: 3 } },
-    gatePasses: { name: "gatePasses", options: { orderByField: "from" } },
-    leaveRequests: { name: "leaveRequests", options: { orderByField: "from" } },
-    visitors: { name: "visitors", options: { orderByField: "inTimeSort" } },
+    notices: { name: "notices" },
+    gatePasses: { name: "gatePasses" },
+    leaveRequests: { name: "leaveRequests" },
+    visitors: { name: "visitors" },
     expenses: { name: "expenses" },
     studentRegister: { name: "studentRegister" },
     attendance: { name: "attendance" },
@@ -52,6 +52,11 @@ export default function AdminOverview() {
   });
 
   const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses, studentRegister, attendance, feedback } = data;
+  const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
+  const recentComplaints = recentByDate(complaints, "date");
+  const recentGatePasses = recentByDate(gatePasses, "from");
+  const recentLeaveRequests = recentByDate(leaveRequests, "from");
+  const recentNotices = recentByDate(notices, "date").slice(0, 3);
 
   // Occupancy
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
@@ -260,7 +265,7 @@ export default function AdminOverview() {
             <EmptyState icon={<WrenchIcon />} title="No complaints yet" description="Complaints filed by students will show up here." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
-              {complaints.slice(0, 3).map((c) => (
+              {recentComplaints.slice(0, 3).map((c) => (
                 <li key={c.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{c.title}</p>
@@ -282,7 +287,7 @@ export default function AdminOverview() {
             <EmptyState icon={<QrIcon />} title="No gate passes yet" description="Gate pass requests will show up here." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
-              {gatePasses.slice(0, 3).map((p) => (
+              {recentGatePasses.slice(0, 3).map((p) => (
                 <li key={p.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{p.studentName || "—"}</p>
@@ -304,7 +309,7 @@ export default function AdminOverview() {
             <EmptyState icon={<CalendarClockIcon />} title="No leave requests yet" description="Leave requests will show up here." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
-              {leaveRequests.slice(0, 3).map((r) => (
+              {recentLeaveRequests.slice(0, 3).map((r) => (
                 <li key={r.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{r.studentName || "—"}</p>
@@ -326,7 +331,7 @@ export default function AdminOverview() {
             <EmptyState icon={<MegaphoneIcon />} title="No notices yet" description="Notices you publish will show up here." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
-              {notices.map((n) => (
+              {recentNotices.map((n) => (
                 <li key={n.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{n.title}</p>

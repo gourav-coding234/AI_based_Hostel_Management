@@ -43,11 +43,11 @@ export default function ParentOverview() {
   const linked = useLinkedStudent();
   const { studentUser, studentRecord, linkedStudentId } = linked;
 
-  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
+  const fees = useStudentCollection("fees", linkedStudentId);
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
-  const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from" });
-  const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId, { orderByField: "from" });
-  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 12 });
+  const gatePasses = useStudentCollection("gatePasses", linkedStudentId);
+  const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId);
+  const noticesQuery = useCollection("notices");
   const notifications = useParentNotifications();
 
   const status = <LinkedStudentStatus {...linked} />;
@@ -70,7 +70,7 @@ export default function ParentOverview() {
   });
   const attendancePct = monthLog.length ? Math.round((monthCounts.Present / monthLog.length) * 100) : null;
 
-  const pass = currentPass(gatePasses.items);
+  const pass = currentPass([...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))));
 
   // Latest notices AND the parent's own notifications in one short list,
   // newest first — same merge the Notices page uses.

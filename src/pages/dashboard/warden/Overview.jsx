@@ -35,17 +35,18 @@ export default function WardenOverview() {
   const { data, loading } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students" },
-    complaints: { name: "complaints", options: { orderByField: "date" } },
+    complaints: { name: "complaints" },
     fees: { name: "fees" },
     attendance: { name: "attendance", options: { orderByField: "date", orderByDirection: "desc" } },
     roomRequests: { name: "roomRequests" },
     inventoryRequests: { name: "inventoryRequests" },
-    gatePasses: { name: "gatePasses", options: { orderByField: "from" } },
-    leaveRequests: { name: "leaveRequests", options: { orderByField: "from" } },
-    notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
+    gatePasses: { name: "gatePasses" },
+    leaveRequests: { name: "leaveRequests" },
+    notices: { name: "notices" },
     visitors: { name: "visitors" },
     inventory: { name: "inventory" },
   });
+  const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----
   const myBlocks = myWing ? data.blocks.filter((b) => b.name === myWing) : data.blocks;
@@ -348,11 +349,11 @@ export default function WardenOverview() {
           Manage <ArrowRightIcon />
         </Link>
       }>
-        {data.notices.length === 0 ? (
+        {recentNotices.length === 0 ? (
           <EmptyState title="No notices yet" description="Notices published by admins or wardens will show up here." />
         ) : (
           <ul className="flex flex-col divide-y divide-slate-100">
-            {data.notices.map((n) => (
+            {recentNotices.map((n) => (
               <li key={n.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">{n.title}</p>

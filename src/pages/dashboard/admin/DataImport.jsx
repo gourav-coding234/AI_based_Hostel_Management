@@ -75,6 +75,12 @@ function validateMixedRecords(records) {
   return { validRecords: Object.values(byTarget).flat(), errors, byTarget };
 }
 
+function looksLikeAcademicRoster(records) {
+  const headerKeys = new Set(Object.keys(records[0] || {}).map((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const hasRegistrationNumber = headerKeys.has("regno") || headerKeys.has("registrationno") || headerKeys.has("registrationnumber");
+  return hasRegistrationNumber && ["gender", "branch", "year"].every((key) => headerKeys.has(key));
+}
+
 function expandStudentBundleRows(records) {
   const expanded = [];
   const sharedSeen = new Set();
@@ -91,7 +97,8 @@ function expandStudentBundleRows(records) {
   records.forEach((record, index) => {
     const sourceRow = index + 2;
     const typeValue = String(record.dataType || "").trim().toLowerCase();
-    const isStudentBundle = ["students", "student", "student roster", "student roster (room/bed)"].includes(typeValue);
+    const isAcademicRoster = present(record, "regNo") && present(record, "gender") && present(record, "branch") && present(record, "year");
+    const isStudentBundle = ["students", "student", "student roster", "student roster (room/bed)"].includes(typeValue) || isAcademicRoster;
     if (!isStudentBundle) {
       expanded.push({ ...record, __sourceRow: sourceRow });
       return;
@@ -249,7 +256,7 @@ async function ensureStudentAccounts(records, onProgress) {
 
 export default function DataImport() {
   const { user } = useAuth();
-  const [targetKey, setTargetKey] = useState(IMPORT_TARGETS[0].key);
+  const [targetKey, setTargetKey] = useState("mixed");
   const isMixedImport = targetKey === "mixed";
   const target = IMPORT_TARGETS.find((t) => t.key === targetKey);
 
@@ -283,6 +290,14 @@ export default function DataImport() {
 
     try {
       const { records } = await parseDataFile(f);
+      if (!isMixedImport && looksLikeAcademicRoster(records)) {
+        setValidation({
+          validRecords: [],
+          errors: [{ row: 1, field: "Data type", message: "This file contains academic student registration columns. Select Mixed data or Student register (academic) so it is saved to the Student Register." }],
+        });
+        setStatus("validated");
+        return;
+      }
       const result = isMixedImport
         ? validateMixedRecords(expandStudentBundleRows(records))
         : validateRecords(records, target.columns, target.dedupeKeys || []);
@@ -545,7 +560,7 @@ export default function DataImport() {
           </li>
           <li className="flex gap-2">
             <UploadIcon />
-            <span>Student login accounts (with email/password) are created individually or via bulk-CSV under “Manage Users”, not here — this page is for the operational records tied to those accounts.</span>
+            <span>Academic roster imports with an email create a Student login automatically using the initial password 123456. Rows without an email still appear in the academic Student Register but do not create a login.</span>
           </li>
         </ul>
       </Card>
