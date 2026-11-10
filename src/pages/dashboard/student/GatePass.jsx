@@ -6,6 +6,7 @@ import { useDocument } from "../../../hooks/useDocument";
 import { addDocument } from "../../../firebase/firestore";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../../firebase/config";
+import { getDemoStudentCollection, isDemoMode } from "../../../data/demoFixtures";
 
 const GATE_PASS_TYPES = ["Outing", "Home Visit", "Medical", "Other"];
 
@@ -58,6 +59,10 @@ function useMyGatePasses(studentId) {
   const [state, setState] = useState({ loading: Boolean(studentId), items: [], error: "" });
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setState({ loading: false, items: sortNewestFirst(getDemoStudentCollection("gatePasses", studentId || undefined)), error: "" });
+      return undefined;
+    }
     if (!studentId) {
       setState({ loading: false, items: [], error: "" });
       return undefined;

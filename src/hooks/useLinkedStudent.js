@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getDocument } from "../firebase/firestore";
+import { DEMO_STUDENT_ID, getDemoDocument, isDemoMode } from "../data/demoFixtures";
+import { readErrorMessage } from "../firebase/readErrorMessage";
+import { publishReadStatus } from "../firebase/readStatusEvents";
 
 /**
  * Loads the real student a Parent account is linked to, straight from
@@ -41,6 +44,18 @@ export function useLinkedStudent() {
   useEffect(() => {
     let cancelled = false;
 
+    if (isDemoMode()) {
+      const studentRecord = getDemoDocument("students", DEMO_STUDENT_ID);
+      setState({
+        loading: false,
+        studentUser: { id: DEMO_STUDENT_ID, name: studentRecord.name, email: "student1@demo.hostel.test", hostelResidence: studentRecord.hostelResidence },
+        studentRecord,
+        notFound: false,
+        error: "",
+      });
+      return undefined;
+    }
+
     if (!linkedStudentId) {
       setState({ loading: false, studentUser: null, studentRecord: null, notFound: false, error: "" });
       return undefined;
@@ -48,9 +63,11 @@ export function useLinkedStudent() {
 
     setState((s) => ({ ...s, loading: true, error: "", notFound: false }));
 
+    const statusKey = `linked-student:${linkedStudentId}`;
     getDocument("students", linkedStudentId)
       .then((studentRecord) => {
         if (cancelled) return;
+        publishReadStatus(statusKey, "", "students (parent link)");
         if (!studentRecord) {
           setState({
             loading: false,
@@ -77,17 +94,20 @@ export function useLinkedStudent() {
       .catch((err) => {
         if (cancelled) return;
         console.error("Failed to load linked student:", err);
+        const message = readErrorMessage(err, "Couldn't load your child's info. Please try again.");
+        publishReadStatus(statusKey, message, "students (parent link)");
         setState({
           loading: false,
           studentUser: null,
           studentRecord: null,
           notFound: false,
-          error: "Couldn't load your child's info. Please try again.",
+          error: message,
         });
       });
 
     return () => {
       cancelled = true;
+      publishReadStatus(`linked-student:${linkedStudentId}`);
     };
   }, [linkedStudentId]);
 

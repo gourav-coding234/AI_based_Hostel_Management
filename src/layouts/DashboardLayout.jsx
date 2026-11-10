@@ -6,6 +6,7 @@ import PageHeader from "../components/dashboard/PageHeader";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { NAVIGATION, flatNavForRole } from "../config/navigation";
+import { isDemoMode } from "../data/demoFixtures";
 
 const COLLAPSE_STORAGE_KEY = "hostel-sidebar-collapsed";
 
@@ -25,8 +26,10 @@ export default function DashboardLayout({ title, children }) {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const role = profile?.role;
+  const demoMode = isDemoMode();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [readIssues, setReadIssues] = useState({});
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1";
@@ -35,6 +38,21 @@ export default function DashboardLayout({ title, children }) {
   useEffect(() => {
     localStorage.setItem(COLLAPSE_STORAGE_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
+
+  useEffect(() => {
+    function onReadStatus(event) {
+      const { key, error, source } = event.detail || {};
+      if (!key) return;
+      setReadIssues((current) => {
+        const next = { ...current };
+        if (error) next[key] = { source, error };
+        else delete next[key];
+        return next;
+      });
+    }
+    window.addEventListener("hostel:firestore-read-status", onReadStatus);
+    return () => window.removeEventListener("hostel:firestore-read-status", onReadStatus);
+  }, []);
 
   // Close the mobile drawer whenever the route changes (e.g. via SearchBar).
   useEffect(() => {
@@ -97,6 +115,19 @@ export default function DashboardLayout({ title, children }) {
       <div className={`dashboard-main ${collapsed ? "sidebar-is-collapsed" : ""}`}>
         <Topbar title={pageTitle} onMenuClick={() => setMenuOpen(true)} theme={theme} onToggleTheme={toggleTheme} />
         <main className="dashboard-content">
+          {Object.keys(readIssues).length > 0 && !demoMode && (
+            <div role="alert" className="mb-5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+              <p className="font-semibold">Database data did not load from Firebase.</p>
+              <p className="mt-1">{Object.values(readIssues)[0].error}</p>
+              <p className="mt-1 text-xs">Affected: {[...new Set(Object.values(readIssues).map((issue) => issue.source))].slice(0, 5).join(", ")}</p>
+            </div>
+          )}
+          {demoMode && (
+            <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <span><strong>DEMO MODE:</strong> The records shown are fictional sample data, not live hostel records. Backend actions may not save.</span>
+              <button type="button" className="font-semibold underline underline-offset-2" onClick={() => { window.localStorage.removeItem("hostel-demo-mode"); window.location.reload(); }}>Exit demo</button>
+            </div>
+          )}
           {activeItem?.label !== "Overview" && (
             <PageHeader title={pageTitle} crumbs={crumbs} icon={activeItem?.icon} />
           )}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Field, inputCls } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
+import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import DonutChart from "../../../components/dashboard/student/DonutChart";
 import { CheckSquareIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
@@ -126,6 +126,14 @@ export default function Attendance() {
     return (
       <div className="flex flex-col gap-6 animate-fade-in">
         <Card><p className="py-10 text-center text-sm text-slate-400">Loading attendance…</p></Card>
+      </div>
+    );
+  }
+
+  if (attendanceQuery.error) {
+    return (
+      <div className="flex flex-col gap-6 animate-fade-in">
+        <Card><ErrorState message={attendanceQuery.error} /></Card>
       </div>
     );
   }

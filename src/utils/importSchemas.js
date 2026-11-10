@@ -53,7 +53,7 @@ export const IMPORT_SCHEMAS = {
     dedupeKeys: ["studentId", "date"],
     label: "Attendance records",
     collection: "attendance",
-    description: "One row per student per date.",
+    description: "One row per student per date. Student ID may be a Firebase account ID, email, or registration number; the importer links it to the Student account.",
     columns: [
       { key: "studentId", label: "Student ID", required: true, type: "string" },
       { key: "studentName", label: "Student name", required: true, type: "string" },

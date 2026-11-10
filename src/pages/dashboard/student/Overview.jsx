@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
+import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import {
   BedIcon,
   WalletIcon,
@@ -37,7 +37,7 @@ export default function Overview() {
   const { profile, user } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "Student";
   const studentId = user?.uid || "";
-  const { data: studentRecord } = useDocument("students", studentId);
+  const { data: studentRecord, error: studentRecordError } = useDocument("students", studentId);
 
   // Fee records are one document per billing period, with `total`/`paid`
   // set directly on each doc (matching the admin/warden Fees pages and the
@@ -58,6 +58,7 @@ export default function Overview() {
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
     .slice(0, 3);
   const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
+  const attendanceError = attendance.error;
 
   // Room/bed allotment lives on the student's own `students/{uid}` document
   // (written by the warden's Room Allotment page), never on the `users`
@@ -159,6 +160,10 @@ export default function Overview() {
         </div>
       </Card>
 
+      {(studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error) && (
+        <ErrorState message={studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error} />
+      )}
+
       <Card className={sosSent ? "border-teal-300 bg-teal-50" : "border-rose-200"}>
         {sosSent ? (
           <div className="flex items-center gap-3">
@@ -225,11 +230,11 @@ export default function Overview() {
         <StatCard
           icon={<CheckSquareIcon />}
           label="My attendance"
-          value={attendancePct === null ? "—" : `${attendancePct}%`}
+          value={attendance.error ? "Unavailable" : attendancePct === null ? "—" : `${attendancePct}%`}
           sub={
             attendance.items.length
               ? `${presentCount} present · ${absentCount} absent · Latest: ${latestAttendanceStatus}`
-              : "No records yet"
+              : attendance.error ? "Could not load attendance" : "No records yet"
           }
           tone="teal"
         />

@@ -11,28 +11,40 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let profileRequest = 0;
     const unsubscribe = watchAuthState(async (firebaseUser) => {
+      const requestId = ++profileRequest;
       setError(null);
       setUser(firebaseUser);
+      setProfile(null);
+      setLoading(Boolean(firebaseUser));
 
       if (!firebaseUser) {
-        setProfile(null);
         setLoading(false);
         return;
       }
 
       try {
         const userProfile = await getUserProfile(firebaseUser.uid);
+        if (requestId !== profileRequest) return;
         setProfile(userProfile);
       } catch (err) {
+        if (requestId !== profileRequest) return;
         console.error("Failed to load user profile:", err);
-        setError("Couldn't load your profile. Please refresh.");
+        setError(err?.code === "resource-exhausted"
+          ? "Firebase reached its usage limit while loading your account profile. Check Firestore Usage in Firebase Console."
+          : err?.code === "permission-denied"
+            ? "Firebase denied access to your account profile. Check your user document and Firestore rules."
+            : `Couldn't load your profile: ${err?.message || "Please refresh."}`);
       } finally {
-        setLoading(false);
+        if (requestId === profileRequest) setLoading(false);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      profileRequest += 1;
+      unsubscribe();
+    };
   }, []);
 
   async function logout() {
@@ -46,11 +58,17 @@ export function AuthProvider({ children }) {
   // the new name/photo right away. Doesn't touch the auth session itself.
   async function refreshProfile() {
     if (!user) return;
+    setError(null);
     try {
       const userProfile = await getUserProfile(user.uid);
       setProfile(userProfile);
     } catch (err) {
       console.error("Failed to refresh user profile:", err);
+      setError(err?.code === "resource-exhausted"
+        ? "Firebase reached its usage limit while loading your account profile. Check Firestore Usage in Firebase Console."
+        : err?.code === "permission-denied"
+          ? "Firebase denied access to your account profile. Check your user document and Firestore rules."
+          : `Couldn't load your profile: ${err?.message || "Please refresh."}`);
     }
   }
 

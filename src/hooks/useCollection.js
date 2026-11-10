@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, limit as fbLimit, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { getDemoCollection, isDemoMode } from "../data/demoFixtures";
+import { readErrorMessage } from "../firebase/readErrorMessage";
+import { publishReadStatus } from "../firebase/readStatusEvents";
 
 /**
  * Real-time hook for a whole Firestore collection (used by Admin/Warden/
  * Security views that need to see every record, not just one student's).
- * Returns { data, loading, error, isEmpty } and NEVER falls back to mock
- * data — if the collection is empty or unreachable, `data` stays `[]` and
- * the page is responsible for rendering an <EmptyState /> / <ErrorState />.
+ * Returns { data, loading, error, isEmpty }. Normal mode reads only Firestore;
+ * the explicitly enabled `?demo=1` presentation mode supplies labeled local
+ * samples. In normal mode, an empty or unreachable collection stays empty and
+ * the page can render an <EmptyState /> / <ErrorState />.
  *
  * Uses onSnapshot so records written elsewhere (another tab, a CSV import,
  * a warden action) appear immediately without a manual refresh.
@@ -19,10 +23,16 @@ export function useCollection(collectionName, options = {}) {
   const depsKey = JSON.stringify({ collectionName, whereClauses, orderByField, orderByDirection, limitCount, skip });
 
   const [state, setState] = useState({ loading: !skip, data: [], error: "" });
+  const demo = isDemoMode();
 
   useEffect(() => {
     if (skip) {
       setState({ loading: false, data: [], error: "" });
+      return undefined;
+    }
+
+    if (demo) {
+      setState({ loading: false, data: getDemoCollection(collectionName, { where: whereClauses, orderByField, orderByDirection, limitCount }), error: "" });
       return undefined;
     }
 
@@ -34,20 +44,24 @@ export function useCollection(collectionName, options = {}) {
 
     const q = query(collection(db, collectionName), ...constraints);
 
+    const statusKey = `collection:${collectionName}:${depsKey}`;
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
+        publishReadStatus(statusKey, "", collectionName);
         setState({ loading: false, data: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" });
       },
       (err) => {
         console.error(`Failed to load ${collectionName}:`, err);
-        setState({ loading: false, data: [], error: "Couldn't load this from the database. Please refresh." });
+        const message = readErrorMessage(err);
+        publishReadStatus(statusKey, message, collectionName);
+        setState({ loading: false, data: [], error: message });
       }
     );
 
-    return unsubscribe;
+    return () => { unsubscribe(); publishReadStatus(statusKey, "", collectionName); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey]);
+  }, [depsKey, demo]);
 
   return { ...state, isEmpty: !state.loading && !state.error && state.data.length === 0 };
 }
@@ -66,16 +80,30 @@ export function useCollections(spec) {
     error: "",
     data: Object.fromEntries(keys.map((k) => [k, []])),
   });
+  const demo = isDemoMode();
 
   useEffect(() => {
+    if (demo) {
+      const data = Object.fromEntries(keys.map((k) => {
+        const { name, options = {} } = spec[k];
+        return [k, getDemoCollection(name, options)];
+      }));
+      setState({ loading: false, error: "", data });
+      return undefined;
+    }
+
     const loadedFlags = Object.fromEntries(keys.map((k) => [k, false]));
     const dataRef = Object.fromEntries(keys.map((k) => [k, []]));
     let errored = false;
+    let errorMessage = "";
 
     setState((s) => ({ ...s, loading: true, error: "" }));
 
+    const statusKeys = [];
     const unsubscribers = keys.map((k) => {
       const { name, options = {} } = spec[k];
+      const statusKey = `collections:${name}:${k}:${depsKey}`;
+      statusKeys.push(statusKey);
       const { where: whereClauses = [], orderByField, orderByDirection = "desc", limitCount } = options;
       const constraints = whereClauses.map(([field, op, value]) => where(field, op, value));
       if (orderByField) constraints.push(orderBy(orderByField, orderByDirection));
@@ -85,23 +113,30 @@ export function useCollections(spec) {
       return onSnapshot(
         q,
         (snap) => {
+          publishReadStatus(statusKey, "", name);
           dataRef[k] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           loadedFlags[k] = true;
           const allLoaded = keys.every((kk) => loadedFlags[kk]);
-          setState({ loading: !allLoaded, error: errored ? "Couldn't load this from the database. Please refresh." : "", data: { ...dataRef } });
+          setState({ loading: !allLoaded, error: errored ? errorMessage : "", data: { ...dataRef } });
         },
         (err) => {
           console.error(`Failed to load ${name}:`, err);
           errored = true;
           loadedFlags[k] = true;
-          setState((s) => ({ ...s, loading: false, error: "Couldn't load this from the database. Please refresh." }));
+          const message = readErrorMessage(err);
+          errorMessage = message;
+          publishReadStatus(statusKey, message, name);
+          setState((s) => ({ ...s, loading: false, error: message }));
         }
       );
     });
 
-    return () => unsubscribers.forEach((u) => u());
+    return () => {
+      unsubscribers.forEach((u) => u());
+      statusKeys.forEach((key, index) => publishReadStatus(key, "", spec[keys[index]].name));
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey]);
+  }, [depsKey, demo]);
 
   return state;
 }
