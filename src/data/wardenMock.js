@@ -3,6 +3,7 @@
 // This is UI-only sample data — nothing here talks to Firebase or any API.
 // Replace with real data fetching once the backend endpoints exist.
 // ---------------------------------------------------------------------------
+import { DEFAULT_EMERGENCY_CONTACTS } from "./emergencyContacts";
 
 // ---- Overview / analytics -------------------------------------------------
 export const hostelStats = {
@@ -224,12 +225,7 @@ export const incidentReports = [
   { id: "INC-88", wing: "A Wing", category: "Suspicious activity", description: "Unknown person loitering near A Wing gate around 11 PM.", date: "08 Aug 2026", severity: "Medium", status: "Resolved" },
 ];
 
-export const emergencyContactsDirectory = [
-  { role: "Chief Warden (you)", name: "Rajesh Kumar Naik", phone: "+91 98612 00002", email: "r.naik@gcek.ac.in" },
-  { role: "Hostel Office", name: "Front Desk", phone: "+91 674 250 1122", email: "hostel.office@gcek.ac.in" },
-  { role: "Medical / Ambulance", name: "Campus Health Centre", phone: "108", email: "" },
-  { role: "Local Police Station", name: "Keonjhar Town PS", phone: "100", email: "" },
-];
+export const emergencyContactsDirectory = DEFAULT_EMERGENCY_CONTACTS;
 
 // ---- AI feedback analysis ---------------------------------------------------
 export const feedbackEntries = [

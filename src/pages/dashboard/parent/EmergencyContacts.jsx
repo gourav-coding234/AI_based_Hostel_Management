@@ -1,7 +1,7 @@
 import { Card } from "../../../components/dashboard/student/ui";
-import { AsyncSection } from "../../../components/ui/DataState";
 import { ShieldIcon, PhoneIcon, MailIcon } from "../../../components/dashboard/parent/icons";
 import { useCollection } from "../../../hooks/useCollection";
+import { mergeEmergencyContacts } from "../../../data/emergencyContacts";
 
 // Builds a dial-safe value for the `tel:` target only (keeps a leading "+",
 // strips spaces, dashes, brackets, dots and other display formatting).
@@ -20,7 +20,8 @@ function clean(value) {
 // Read-only view: parents can view and tap published contacts, never edit them.
 // Only role, name, phone and email are read from each contact document.
 export default function EmergencyContacts() {
-  const contacts = useCollection("emergencyContacts");
+  const contactsQuery = useCollection("emergencyContacts", { limitCount: 100 });
+  const contacts = mergeEmergencyContacts(contactsQuery.data);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -36,16 +37,9 @@ export default function EmergencyContacts() {
         </div>
       </Card>
 
-      <AsyncSection
-        loading={contacts.loading}
-        error={contacts.error}
-        isEmpty={contacts.isEmpty}
-        emptyTitle="No emergency contacts published yet"
-        emptyDescription="The hostel office hasn't added any emergency contacts yet."
-        emptyIcon={<ShieldIcon />}
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {[...contacts.data].sort((a, b) => clean(a.role).localeCompare(clean(b.role))).map((c) => {
+      {contactsQuery.error && <p className="text-xs text-slate-500">Showing the saved hostel emergency numbers. Live contact updates are unavailable right now.</p>}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {contacts.map((c) => {
             const role = clean(c.role);
             const name = clean(c.name);
             const phone = clean(c.phone);
@@ -76,8 +70,7 @@ export default function EmergencyContacts() {
               </Card>
             );
           })}
-        </div>
-      </AsyncSection>
+      </div>
     </div>
   );
 }

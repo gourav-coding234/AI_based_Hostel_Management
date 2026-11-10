@@ -3,6 +3,7 @@
 // This is UI-only sample data — nothing here talks to Firebase or any API.
 // Replace with real data fetching once the backend endpoints exist.
 // ---------------------------------------------------------------------------
+import { DEFAULT_EMERGENCY_CONTACTS } from "./emergencyContacts";
 
 // A student-facing log of gate passes, as security would see it — pulled
 // from every student's passes, not just one. Verifying a pass here just
@@ -119,10 +120,4 @@ export const dutyRoster = [
   { shift: "Night (10 PM – 6 AM)", gate: "Back Gate", guard: "Ravi Toppo", day: "Today" },
 ];
 
-export const emergencyContacts = [
-  { role: "Chief Warden", name: "Rajesh Kumar Naik", phone: "+91 98612 00002", email: "r.naik@gcek.ac.in" },
-  { role: "Hostel Office", name: "Front Desk", phone: "+91 674 250 1122", email: "hostel.office@gcek.ac.in" },
-  { role: "Medical / Ambulance", name: "Campus Health Centre", phone: "108", email: "" },
-  { role: "Local Police Station", name: "Keonjhar Town PS", phone: "100", email: "" },
-  { role: "Fire Services", name: "Keonjhar Fire Station", phone: "101", email: "" },
-];
+export const emergencyContacts = DEFAULT_EMERGENCY_CONTACTS;

@@ -3,6 +3,7 @@ import { Card, Pill, StatCard } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { SirenIcon, PhoneIcon, MailIcon, AlertIcon, MegaphoneIcon, ArrowRightIcon } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { mergeEmergencyContacts } from "../../../data/emergencyContacts";
 
 export default function Safety() {
   const { data, loading } = useCollections({
@@ -10,7 +11,8 @@ export default function Safety() {
     incidents: { name: "incidents", options: { orderByField: "date" } },
     emergencyContacts: { name: "emergencyContacts" },
   });
-  const { sosAlerts, incidents, emergencyContacts } = data;
+  const { sosAlerts, incidents } = data;
+  const emergencyContacts = mergeEmergencyContacts(data.emergencyContacts);
 
   const activeSos = sosAlerts.filter((s) => s.status !== "Resolved").length;
   const openIncidents = incidents.filter((i) => i.status !== "Resolved").length;

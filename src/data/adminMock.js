@@ -4,6 +4,7 @@
 // Real numbers should eventually come from aggregating the `users`,
 // `complaints`, `fees`, etc. Firestore collections once those exist.
 // ---------------------------------------------------------------------------
+import { DEFAULT_EMERGENCY_CONTACTS } from "./emergencyContacts";
 
 // ---- Blocks / hostels ------------------------------------------------------
 export const blocks = [
@@ -132,13 +133,7 @@ export const incidentReportsAll = [
   { id: "INC-84", block: "Main Gate", category: "Gate malfunction", description: "Main gate boom barrier stuck open for ~20 minutes, maintenance informed.", date: "02 Aug 2026", severity: "Low", status: "Resolved" },
 ];
 
-export const emergencyContactsDirectory = [
-  { role: "Chief Warden", name: "Rajesh Kumar Naik", phone: "+91 98612 00002", email: "r.naik@gcek.ac.in" },
-  { role: "Hostel Office", name: "Front Desk", phone: "+91 674 250 1122", email: "hostel.office@gcek.ac.in" },
-  { role: "Medical / Ambulance", name: "Campus Health Centre", phone: "108", email: "" },
-  { role: "Local Police Station", name: "Keonjhar Town PS", phone: "100", email: "" },
-  { role: "Fire Services", name: "Keonjhar Fire Station", phone: "101", email: "" },
-];
+export const emergencyContactsDirectory = DEFAULT_EMERGENCY_CONTACTS;
 
 // ---- AI feedback analysis ----------------------------------------------------
 export const feedbackEntries = [

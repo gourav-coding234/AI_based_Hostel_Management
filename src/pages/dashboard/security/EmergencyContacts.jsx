@@ -1,7 +1,7 @@
 import { Card } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
 import { PhoneIcon, MailIcon, ShieldIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
+import { mergeEmergencyContacts } from "../../../data/emergencyContacts";
 
 // Builds a dial-safe value for the `tel:` target only (keeps a leading "+",
 // strips spaces, dashes, brackets, dots and any other display formatting).
@@ -21,9 +21,8 @@ function clean(value) {
 // Read-only view: Security can view and tap contacts, but never edit them.
 // Contacts are managed by admin/staff.
 export default function SecurityEmergencyContacts() {
-  const contactsQuery = useCollection("emergencyContacts");
-  // Sorted here rather than with orderBy so contacts without a role still show.
-  const contacts = [...contactsQuery.data].sort((a, b) => clean(a.role).localeCompare(clean(b.role)));
+  const contactsQuery = useCollection("emergencyContacts", { limitCount: 100 });
+  const contacts = mergeEmergencyContacts(contactsQuery.data);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -39,14 +38,8 @@ export default function SecurityEmergencyContacts() {
         </div>
       </Card>
 
-      {contactsQuery.loading ? (
-        <Card><p className="py-8 text-center text-sm text-slate-400">Loading…</p></Card>
-      ) : contactsQuery.isEmpty ? (
-        <Card>
-          <EmptyState icon={<ShieldIcon />} title="No emergency contacts published yet" description="Ask an admin to add contacts via Data Import." />
-        </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+      {contactsQuery.error && <p className="text-xs text-slate-500">Showing the saved hostel emergency numbers. Live contact updates are unavailable right now.</p>}
+      <div className="grid gap-4 sm:grid-cols-2">
           {contacts.map((c) => {
             const role = clean(c.role);
             const name = clean(c.name);
@@ -81,8 +74,7 @@ export default function SecurityEmergencyContacts() {
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
