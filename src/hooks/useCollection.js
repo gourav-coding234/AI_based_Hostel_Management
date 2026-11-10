@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, orderBy, limit as fbLimit, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { collection, query, where, orderBy, limit as fbLimit, onSnapshot, getDocs } from "firebase/firestore";
+import { auth, db } from "../firebase/config";
 import { getDemoCollection, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
 import { publishReadStatus } from "../firebase/readStatusEvents";
+
+const overviewCache = new Map();
 
 /**
  * Real-time hook for a whole Firestore collection (used by Admin/Warden/
@@ -72,9 +74,9 @@ export function useCollection(collectionName, options = {}) {
  * combined query; just bundles loading/error state from parallel listeners.
  * spec: { key: { name, options } }
  */
-export function useCollections(spec) {
+export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 } = {}) {
   const keys = Object.keys(spec);
-  const depsKey = JSON.stringify(spec);
+  const depsKey = JSON.stringify({ spec, live, maxDocs, uid: auth?.currentUser?.uid || "" });
   const [state, setState] = useState({
     loading: true,
     error: "",
@@ -90,6 +92,54 @@ export function useCollections(spec) {
       }));
       setState({ loading: false, error: "", data });
       return undefined;
+    }
+
+    if (!live) {
+      let cancelled = false;
+      const cacheKey = `overview:${depsKey}`;
+      const cached = overviewCache.get(cacheKey);
+      if (cached && Date.now() - cached.savedAt < cacheMs) {
+        setState(cached.state);
+        return undefined;
+      }
+
+      setState((s) => ({ ...s, loading: true, error: "" }));
+      const statusKeys = [];
+      Promise.all(keys.map(async (k) => {
+        const { name, options = {} } = spec[k];
+        const statusKey = `overview:${name}:${k}:${depsKey}`;
+        statusKeys.push(statusKey);
+        const { where: whereClauses = [], orderByField, orderByDirection = "desc", limitCount } = options;
+        const constraints = whereClauses.map(([field, op, value]) => where(field, op, value));
+        if (orderByField) constraints.push(orderBy(orderByField, orderByDirection));
+        constraints.push(fbLimit(Math.min(limitCount || maxDocs, maxDocs)));
+        try {
+          const snap = await getDocs(query(collection(db, name), ...constraints));
+          publishReadStatus(statusKey, "", name);
+          return { key: k, records: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" };
+        } catch (err) {
+          console.error(`Failed to load ${name}:`, err);
+          const message = readErrorMessage(err);
+          publishReadStatus(statusKey, message, name);
+          return { key: k, records: [], error: message };
+        }
+      })).then((results) => {
+        if (cancelled) return;
+        const data = Object.fromEntries(keys.map((k) => [k, []]));
+        let error = "";
+        results.forEach(({ key, records, error: itemError }) => {
+          data[key] = records;
+          if (!error && itemError) error = itemError;
+        });
+        const nextState = { loading: false, error, data };
+        overviewCache.set(cacheKey, { savedAt: Date.now(), state: nextState });
+        setState(nextState);
+      });
+
+      return () => {
+        cancelled = true;
+        statusKeys.forEach((key, index) => publishReadStatus(key, "", spec[keys[index]].name));
+      };
     }
 
     const loadedFlags = Object.fromEntries(keys.map((k) => [k, false]));
@@ -136,7 +186,7 @@ export function useCollections(spec) {
       statusKeys.forEach((key, index) => publishReadStatus(key, "", spec[keys[index]].name));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey, demo]);
+  }, [depsKey, demo, live, maxDocs, cacheMs]);
 
   return state;
 }

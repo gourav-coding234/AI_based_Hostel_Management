@@ -62,7 +62,9 @@ export function useNotifications(role) {
       notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
     };
     watch.forEach((w) => {
-      next[w.key] = { name: w.name };
+      // The badge is a lightweight overview signal, not a full register.
+      // Full history is available on the linked page.
+      next[w.key] = { name: w.name, options: { limitCount: 50 } };
     });
     return next;
   }, [watch]);

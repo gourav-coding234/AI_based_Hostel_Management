@@ -51,6 +51,9 @@ export default function ManageUsers() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState("");
+  const [parentLinkDrafts, setParentLinkDrafts] = useState({});
+  const [parentLinkSaving, setParentLinkSaving] = useState("");
+  const [parentLinkFeedback, setParentLinkFeedback] = useState({});
 
   // Blocks & students only — the "users" collection is already loaded above
   // via loadUsers(), so warden rows are derived from that same list instead
@@ -167,6 +170,23 @@ export default function ManageUsers() {
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
+    }
+  }
+
+  async function saveParentLink(parent) {
+    const linkedStudentId = parentLinkDrafts[parent.id] ?? parent.linkedStudentId ?? "";
+    setParentLinkSaving(parent.id);
+    setParentLinkFeedback((current) => ({ ...current, [parent.id]: "" }));
+    try {
+      await updateDocument("users", parent.id, { linkedStudentId });
+      setUsers((list) => list.map((u) => u.id === parent.id ? { ...u, linkedStudentId } : u));
+      setParentLinkFeedback((current) => ({ ...current, [parent.id]: linkedStudentId ? "Linked. Ask the parent to reload." : "Student link removed." }));
+      logAudit({ actor: profile?.name || currentUser?.email || "Admin", action: "Updated parent-student link", target: `${parent.email} → ${linkedStudentId || "unlinked"}` }).catch(() => {});
+    } catch (err) {
+      console.error("Failed to update parent-student link:", err);
+      setParentLinkFeedback((current) => ({ ...current, [parent.id]: "Couldn't save the link. Check Firestore permissions and try again." }));
+    } finally {
+      setParentLinkSaving("");
     }
   }
 
@@ -527,12 +547,42 @@ export default function ManageUsers() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink">{u.name || "—"}</p>
                       <p className="truncate text-xs text-slate-400">{u.email}</p>
+                      {u.role === "Parent" && (
+                        <p className="truncate text-xs text-slate-400">
+                          Linked student: {studentUsers.find((s) => s.id === (u.linkedStudentId || ""))?.name || (u.linkedStudentId ? "Student record unavailable" : "Not linked")}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 sm:shrink-0">
                     <Pill tone="General">{u.role}</Pill>
                     <span className="hidden text-xs text-slate-400 sm:inline">{u.hostelResidence || "—"}</span>
+
+                    {u.role === "Parent" && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          aria-label={`Link ${u.name || u.email} to a student`}
+                          value={parentLinkDrafts[u.id] ?? u.linkedStudentId ?? ""}
+                          onChange={(e) => setParentLinkDrafts((current) => ({ ...current, [u.id]: e.target.value }))}
+                          className="max-w-56 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none"
+                        >
+                          <option value="">Not linked</option>
+                          {studentUsers.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name || s.email}{s.hostelResidence ? ` — ${s.hostelResidence}` : ""}</option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          className="px-3 py-1.5 text-xs"
+                          disabled={parentLinkSaving === u.id || (parentLinkDrafts[u.id] ?? u.linkedStudentId ?? "") === (u.linkedStudentId || "")}
+                          onClick={() => saveParentLink(u)}
+                        >
+                          {parentLinkSaving === u.id ? "Saving…" : "Save link"}
+                        </Button>
+                        {parentLinkFeedback[u.id] && <span className="w-full text-xs text-slate-500">{parentLinkFeedback[u.id]}</span>}
+                      </div>
+                    )}
 
                     {isConfirming ? (
                       <div className="flex items-center gap-1.5">

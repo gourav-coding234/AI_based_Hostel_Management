@@ -14,7 +14,6 @@ import {
   ListIcon,
 } from "../../../components/dashboard/security/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 
 // Every target below is a route that SecurityDashboard.jsx actually mounts
 // (and that the Security sidebar links to).
@@ -58,21 +57,26 @@ function attendanceDateKey() {
 
 export default function SecurityOverview() {
   const attendanceDate = attendanceDateKey();
+  const todayStartDate = new Date();
+  todayStartDate.setHours(0, 0, 0, 0);
+  const todayStart = todayStartDate.toISOString();
 
   const { data, loading, error } = useCollections({
-    gatePasses: { name: "gatePasses" },
+    gatePasses: { name: "gatePasses", options: { where: [["status", "in", ["Approved", "journey_started"]]], limitCount: 100 } },
     // Approved leave students who physically left and have not returned.
     leaveLogs: { name: "leaveLogs", options: { where: [["status", "==", "Left"]] } },
     gateLogs: { name: "inOutLogs", options: { orderByField: "timeSort", limitCount: FEED_LIMIT } },
     // All visitors, not just the latest few — "currently inside" and
     // "visitors today" must be counted over the full log to be accurate.
-    visitors: { name: "visitors" },
-    incidents: { name: "incidents" },
+    visitors: { name: "visitors", options: { orderByField: "inTimeSort", limitCount: FEED_LIMIT } },
+    visitorsInside: { name: "visitors", options: { where: [["outTime", "==", ""]], limitCount: 500 } },
+    visitorsToday: { name: "visitors", options: { where: [["inTimeSort", ">=", todayStart]], orderByField: "inTimeSort", limitCount: 100 } },
+    incidents: { name: "incidents", options: { limitCount: 100 } },
     // Today's records only, from the same `attendance` collection the
     // Warden and Security Attendance pages write to.
-    attendance: { name: "attendance", options: { where: [["date", "==", attendanceDate]] } },
-  });
-  const { gatePasses, leaveLogs, gateLogs, visitors: rawVisitors, incidents, attendance } = data;
+    attendance: { name: "attendance", options: { where: [["date", "==", attendanceDate]], limitCount: 500 } },
+  }, { live: false, maxDocs: 500, cacheMs: 30_000 });
+  const { gatePasses, leaveLogs, gateLogs, visitors: rawVisitors, visitorsInside, visitorsToday, incidents, attendance } = data;
 
   // Newest check-in first. Sorted here (not via a Firestore orderBy, which
   // would silently drop records that lack the ordered field).
@@ -81,8 +85,6 @@ export default function SecurityOverview() {
   // Same Student Directory the Warden Attendance page uses. Only used here
   // to know WHO is on the roster (ids) so "Not marked" is real; no personal
   // details from it are rendered.
-  const { directory, loading: directoryLoading, error: directoryError } = useStudentDirectory();
-
   // Re-evaluate time-based numbers (overdue returns, "today") once a minute.
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -110,21 +112,19 @@ export default function SecurityOverview() {
 
     // --- Visitors ---
     const isToday = (v) => Boolean(visitorKey(v)) && localDateKey(new Date(visitorKey(v))) === todayKey;
-    const inside = visitors.filter((v) => !v.outTime);
+    const inside = visitorsInside;
     const insideFromEarlier = inside.filter((v) => !isToday(v)).length;
-    const visitorsToday = visitors.filter(isToday).length;
 
     // --- Incidents ---
     const open = incidents.filter((i) => i.status !== "Resolved");
     const openHigh = open.filter((i) => i.severity === "High").length;
 
-    // --- Attendance (today), restricted to students on the roster so the
-    // four buckets always add up to the roster size. "Pending" is UI-only
-    // and never stored, so anything without a record is "Not marked". ---
-    const rosterIds = new Set(directory.map((s) => s.id));
+    // Attendance is already queried by today's date; don't load the full
+    // academic register just to derive a roster-sized denominator here.
     const statusByStudent = new Map();
     attendance.forEach((a) => {
-      if (rosterIds.has(a.studentId)) statusByStudent.set(a.studentId, a.status);
+      if (!a.studentId) return;
+      statusByStudent.set(a.studentId, a.status);
     });
     let present = 0;
     let absent = 0;
@@ -134,7 +134,6 @@ export default function SecurityOverview() {
       else if (status === "Absent") absent += 1;
       else if (status === "Leave") leave += 1;
     });
-    const totalStudents = directory.length;
     const marked = present + absent + leave;
 
     return {
@@ -143,26 +142,26 @@ export default function SecurityOverview() {
       activePasses,
       inside: inside.length,
       insideFromEarlier,
-      visitorsToday,
+      visitorsToday: visitorsToday.length,
       openIncidents: open.length,
       openHigh,
       present,
       absent,
       leave,
       marked,
-      notMarked: Math.max(totalStudents - marked, 0),
-      totalStudents,
+      attendanceRecords: attendance.length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gatePasses, leaveLogs, visitors, incidents, attendance, directory, tick]);
+  }, [gatePasses, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
 
-  if (error || directoryError) return <ErrorState message={error || directoryError} />;
-  if (loading || directoryLoading) return <LoadingState label="Loading gate overview…" />;
+  if (error) return <ErrorState message={error} />;
+  if (loading) return <LoadingState label="Loading gate overview…" />;
 
   const recentVisitors = visitors.slice(0, FEED_LIMIT);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      <p className="-mt-3 text-xs text-slate-400">This overview loads only today's attendance, active passes, current visitors, and a short activity feed. Open each register for the full history.</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<QrIcon />}
@@ -198,33 +197,32 @@ export default function SecurityOverview() {
         <StatCard icon={<ListIcon />} label="Visitors today" value={stats.visitorsToday} sub={`${visitors.length} in the visitor log`} tone="teal" />
         <StatCard
           icon={<CheckSquareIcon />}
-          label="Today's attendance status"
-          value={`${stats.marked}/${stats.totalStudents}`}
-          sub={stats.marked === 0 ? "Not taken yet today" : `${stats.notMarked} still to be marked`}
+          label="Attendance records today"
+          value={stats.marked}
+          sub={stats.marked === 0 ? "Not taken yet today" : `${stats.present} present · ${stats.absent} absent · ${stats.leave} leave`}
           tone="navy"
         />
         <StatCard icon={<CalendarClockIcon />} label="Students on leave today" value={stats.leave} sub="Marked Leave in today's attendance" tone="amber" />
       </div>
 
       <Card title="Today's attendance" subtitle={`Same records the Warden and Security attendance pages use · ${attendanceDate}`}>
-        {stats.totalStudents === 0 ? (
+        {stats.attendanceRecords === 0 ? (
           <EmptyState
             icon={<CheckSquareIcon />}
-            title="No students in the directory yet"
-            description="Attendance will be summarised here once student accounts exist."
+            title="No attendance recorded today"
+            description="Attendance recorded today will appear here."
           />
         ) : (
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap gap-3">
               <Pill tone="Present">{stats.present} Present</Pill>
               <Pill tone="Absent">{stats.absent} Absent</Pill>
-              <Pill tone="Pending">{stats.notMarked} Not marked</Pill>
               {stats.leave > 0 && <Pill tone="Leave">{stats.leave} Leave</Pill>}
             </div>
             <div>
-              <ProgressBar value={stats.marked} max={stats.totalStudents} tone="teal" />
+              <ProgressBar value={stats.marked} max={stats.attendanceRecords} tone="teal" />
               <p className="mt-2 text-xs text-slate-400">
-                {stats.marked} of {stats.totalStudents} students marked
+                {stats.marked} of {stats.attendanceRecords} today's attendance records recognized
               </p>
             </div>
           </div>

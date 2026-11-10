@@ -50,7 +50,7 @@ export default function Overview() {
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
   // silently drop relevant notices behind irrelevant ones targeted at a
   // different wing.
-  const noticesQuery = useCollection("notices");
+  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const filteredNoticeData = noticesQuery.data
     .filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))

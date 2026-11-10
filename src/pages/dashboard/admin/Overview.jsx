@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, StatCard, ProgressBar } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
+import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import {
   UsersIcon,
   BuildingIcon,
@@ -32,26 +32,23 @@ export default function AdminOverview() {
   const { profile, user } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "Admin";
 
-  // One shared set of real-time listeners for the whole Overview page —
-  // every stat below is derived from these same collections rather than
-  // issuing extra Firestore reads.
-  const { data, loading } = useCollections({
+  // Keep the overview a lightweight snapshot: cap activity lists and reuse
+  // the result briefly instead of holding listeners open on every register.
+  const { data, loading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students" },
-    wardens: { name: "users", options: { where: [["role", "==", "Warden"]] } },
-    complaints: { name: "complaints" },
+    wardens: { name: "users", options: { where: [["role", "==", "Warden"]], orderByField: "name", limitCount: 100 } },
+    complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees" },
-    notices: { name: "notices" },
-    gatePasses: { name: "gatePasses" },
-    leaveRequests: { name: "leaveRequests" },
-    visitors: { name: "visitors" },
+    notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
+    gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
+    leaveRequests: { name: "leaveRequests", options: { orderByField: "from", limitCount: 100 } },
+    visitors: { name: "visitors", options: { where: [["outTime", "==", ""]], limitCount: 100 } },
     expenses: { name: "expenses" },
-    studentRegister: { name: "studentRegister" },
-    attendance: { name: "attendance" },
-    feedback: { name: "feedback" },
-  });
+    feedback: { name: "feedback", options: { limitCount: 100 } },
+  }, { live: false, maxDocs: 100, cacheMs: 60_000 });
 
-  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses, studentRegister, attendance, feedback } = data;
+  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses, feedback } = data;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
   const recentComplaints = recentByDate(complaints, "date");
   const recentGatePasses = recentByDate(gatePasses, "from");
@@ -82,7 +79,7 @@ export default function AdminOverview() {
   const pendingLeaveRequests = leaveRequests.filter((r) => r.status === "Pending").length;
 
   // Visitors currently inside
-  const visitorsInside = visitors.filter((v) => !v.outTime).length;
+  const visitorsInside = visitors.length;
 
   const enrollmentTrend = useMemo(() => {
     const months = [];
@@ -137,17 +134,20 @@ export default function AdminOverview() {
         </div>
       </Card>
 
+      <p className="-mt-3 text-xs text-slate-400">This overview uses a short snapshot (up to 100 records per collection) to keep loading light. Figures based on activity lists may be partial; open a register for the full current data.</p>
+      {overviewError && <ErrorState message={overviewError} />}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : students.length} sub={`${wardens.length} wardens on staff`} tone="teal" /></Link>
         <Link to="/dashboard/admin/blocks"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "No blocks recorded yet"} tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
-        <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints" value={openComplaints} sub={`${complaints.length} filed institute-wide`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
+        <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints in snapshot" value={openComplaints} sub={`${complaints.length} recent records loaded`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${gatePasses.length} requests total`} tone={pendingGatePasses > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/leave"><StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} /></Link>
-        <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub={`${visitors.length} logged total`} tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
+        <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub="Checked in and not yet checked out" tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub={`${blocks.length} blocks to manage`} tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<AlertIcon />} label="Students with dues" value={loading ? "…" : studentsWithDues} sub={totalPending ? `${inr(totalPending)} pending` : "No dues pending"} tone={studentsWithDues > 0 ? "rose" : "teal"} /></Link>
       </div>
@@ -157,10 +157,9 @@ export default function AdminOverview() {
         <Link to="/dashboard/admin/expenses"><StatCard icon={<WalletIcon />} label="Calculated available balance" value={loading ? "..." : inr(availableBalance)} sub="Collections minus recorded expenses; not a live bank balance" tone={availableBalance < 0 ? "rose" : "teal"} /></Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Academic registrations" value={loading ? "…" : studentRegister.length} sub={`${students.length} student accounts with roster data`} tone="navy" /></Link>
-        <Link to="/dashboard/admin/feedback"><StatCard icon={<MegaphoneIcon />} label="Student feedback" value={loading ? "…" : feedback.length} sub="Imported and submitted feedback records" tone="teal" /></Link>
-        <Link to="/dashboard/admin/reports"><StatCard icon={<ChartIcon />} label="Attendance records" value={loading ? "…" : attendance.length} sub="Records available for attendance reporting" tone="amber" /></Link>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Link to="/dashboard/admin/feedback"><StatCard icon={<MegaphoneIcon />} label="Student feedback" value={loading ? "…" : feedback.length} sub="Items loaded in this overview snapshot" tone="teal" /></Link>
+        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Academic student register" value="Open register" sub="Full roster loads only when you open it" tone="navy" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

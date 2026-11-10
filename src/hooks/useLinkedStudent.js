@@ -30,7 +30,7 @@ import { publishReadStatus } from "../firebase/readStatusEvents";
  *    (wing/room/bed/roommates)
  */
 export function useLinkedStudent() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading, error: authError } = useAuth();
   const linkedStudentId = profile?.linkedStudentId || "";
 
   const [state, setState] = useState({
@@ -53,6 +53,16 @@ export function useLinkedStudent() {
         notFound: false,
         error: "",
       });
+      return undefined;
+    }
+
+    if (authLoading) {
+      setState({ loading: true, studentUser: null, studentRecord: null, notFound: false, error: "" });
+      return undefined;
+    }
+
+    if (authError) {
+      setState({ loading: false, studentUser: null, studentRecord: null, notFound: false, error: authError });
       return undefined;
     }
 
@@ -123,7 +133,7 @@ export function useLinkedStudent() {
       cancelled = true;
       publishReadStatus(`linked-student:${linkedStudentId}`);
     };
-  }, [linkedStudentId]);
+  }, [linkedStudentId, authLoading, authError]);
 
   return {
     linkedStudentId,

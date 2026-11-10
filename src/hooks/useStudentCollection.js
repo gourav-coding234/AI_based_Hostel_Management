@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { auth, db } from "../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
 import { publishReadStatus } from "../firebase/readStatusEvents";
 import { dateKey } from "../utils/dateKey";
 
+const studentDataCache = new Map();
+const STUDENT_CACHE_MS = 20_000;
+
 /**
- * Real-time hook for a collection filtered to one student's documents (fees,
+ * Hook for a collection filtered to one student's documents (fees,
  * attendance, gatePasses, complaints, ...) via `where("studentId","==",studentId)`.
  * This is the query-side half of "parents/students only see their own
  * data" — the Firestore security rules are what actually enforce it, this
- * hook is just the client asking for the right slice, kept live via
- * onSnapshot so a new complaint/request appears the moment it's written.
+ * hook is just the client asking for the right slice. Dashboard reads are
+ * one-shot and briefly cached to avoid repeat reads while moving between pages.
  * Optional ordering is performed client-side to avoid requiring a separate
  * composite index for every student collection plus its sort field.
  *
@@ -42,10 +45,17 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
     const constraints = [where("studentId", "==", studentId)];
     const q = query(collection(db, collectionName), ...constraints);
 
-    const statusKey = `student-collection:${collectionName}:${studentId}`;
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
+    const statusKey = `student-collection:${auth?.currentUser?.uid || ""}:${collectionName}:${studentId}`;
+    const cached = studentDataCache.get(statusKey);
+    if (cached && Date.now() - cached.savedAt < STUDENT_CACHE_MS) {
+      setState({ loading: false, items: cached.items, error: "" });
+      return undefined;
+    }
+
+    let cancelled = false;
+    getDocs(q)
+      .then((snap) => {
+        if (cancelled) return;
         publishReadStatus(statusKey, "", collectionName);
         const items = snap.docs.map((d) => {
           const data = d.data();
@@ -61,17 +71,18 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
             return String(left ?? "").localeCompare(String(right ?? "")) * direction;
           });
         }
+        studentDataCache.set(statusKey, { savedAt: Date.now(), items });
         setState({ loading: false, items, error: "" });
-      },
-      (err) => {
+      })
+      .catch((err) => {
+        if (cancelled) return;
         console.error(`Failed to load ${collectionName}:`, err);
         const message = readErrorMessage(err, "Couldn't load this right now.");
         publishReadStatus(statusKey, message, collectionName);
         setState({ loading: false, items: [], error: message });
-      }
-    );
+      });
 
-    return () => { unsubscribe(); publishReadStatus(statusKey, "", collectionName); };
+    return () => { cancelled = true; publishReadStatus(statusKey, "", collectionName); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionName, studentId, orderByField, orderByDirection, demo]);
 

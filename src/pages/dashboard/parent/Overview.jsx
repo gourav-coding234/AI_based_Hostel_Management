@@ -47,7 +47,7 @@ export default function ParentOverview() {
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId);
   const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId);
-  const noticesQuery = useCollection("notices");
+  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const notifications = useParentNotifications();
 
   const status = <LinkedStudentStatus {...linked} />;
@@ -66,7 +66,7 @@ export default function ParentOverview() {
   const monthLog = attendance.items.filter((a) => a.date && a.date.slice(0, 7) === monthKey);
   const monthCounts = { Present: 0, Absent: 0, Leave: 0 };
   monthLog.forEach((a) => {
-    if (a.status in monthCounts) monthCounts[a.status] += 1;
+    if (Object.hasOwn(monthCounts, a.status)) monthCounts[a.status] += 1;
   });
   const attendancePct = monthLog.length ? Math.round((monthCounts.Present / monthLog.length) * 100) : null;
 

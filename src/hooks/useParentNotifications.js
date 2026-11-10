@@ -19,6 +19,7 @@ export function useParentNotifications() {
   const uid = user?.uid || "";
   const query = useCollection("parentNotifications", {
     where: [["parentId", "==", uid]],
+    limitCount: 20,
     skip: !uid,
   });
   const [markError, setMarkError] = useState("");

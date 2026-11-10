@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, StatCard, ProgressBar } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
+import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import {
   BedIcon,
   WalletIcon,
@@ -31,21 +31,22 @@ export default function WardenOverview() {
   const { profile, user } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "Warden";
   const myWing = profile?.block;
+  const today = new Date().toISOString().slice(0, 10);
 
-  const { data, loading } = useCollections({
+  const { data, loading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
-    students: { name: "students" },
-    complaints: { name: "complaints" },
-    fees: { name: "fees" },
-    attendance: { name: "attendance", options: { orderByField: "date", orderByDirection: "desc" } },
-    roomRequests: { name: "roomRequests" },
-    inventoryRequests: { name: "inventoryRequests" },
-    gatePasses: { name: "gatePasses" },
-    leaveRequests: { name: "leaveRequests" },
-    notices: { name: "notices" },
-    visitors: { name: "visitors" },
-    inventory: { name: "inventory" },
-  });
+    students: { name: "students", options: { limitCount: 100 } },
+    complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
+    fees: { name: "fees", options: { limitCount: 100 } },
+    attendance: { name: "attendance", options: { where: [["date", "==", today]], limitCount: 500 } },
+    roomRequests: { name: "roomRequests", options: { limitCount: 100 } },
+    inventoryRequests: { name: "inventoryRequests", options: { limitCount: 100 } },
+    gatePasses: { name: "gatePasses", options: { limitCount: 100 } },
+    leaveRequests: { name: "leaveRequests", options: { limitCount: 100 } },
+    notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
+    visitors: { name: "visitors", options: { limitCount: 100 } },
+    inventory: { name: "inventory", options: { limitCount: 100 } },
+  }, { live: false, maxDocs: 100, cacheMs: 60_000 });
   const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----
@@ -137,6 +138,9 @@ export default function WardenOverview() {
           </div>
         </div>
       </Card>
+
+      <p className="-mt-3 text-xs text-slate-400">This overview uses a short snapshot (up to 100 records per collection) to keep loading light. Figures based on activity lists may be partial; open a register for the full current data.</p>
+      {overviewError && <ErrorState message={overviewError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myWing ? `In ${myWing}` : "Across your hostel"} tone="navy" />
