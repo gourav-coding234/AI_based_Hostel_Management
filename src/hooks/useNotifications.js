@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ROLES } from "../roles";
+import { useAuth } from "../context/AuthContext";
 import { useCollections } from "./useCollection";
 
 function tsToMillis(ts) {
@@ -51,6 +52,8 @@ const NOTICES_PATH = {
 };
 
 export function useNotifications(role) {
+  const { user } = useAuth();
+  const uid = user?.uid || "";
   // ROLE_WATCH is a module-level constant, so the array identity is stable
   // per role — but the `|| []` fallback would allocate a fresh array on
   // every render and retrigger the memo below. Pinning it to one shared
@@ -64,10 +67,17 @@ export function useNotifications(role) {
     watch.forEach((w) => {
       // The badge is a lightweight overview signal, not a full register.
       // Full history is available on the linked page.
-      next[w.key] = { name: w.name, options: { limitCount: 50 } };
+      const options = { limitCount: 50 };
+      // Firestore rules cannot filter unauthorized complaint records out of
+      // an unscoped query. Match the student's own-record rule in the query.
+      if (role === ROLES.STUDENT && w.key === "complaints") {
+        if (!uid) return;
+        options.where = [["studentId", "==", uid]];
+      }
+      next[w.key] = { name: w.name, options };
     });
     return next;
-  }, [watch]);
+  }, [watch, role, uid]);
 
   const { data, loading } = useCollections(spec);
 
