@@ -159,7 +159,7 @@ export default function SecurityGateScan() {
     setLogging(true);
     setVerifyError("");
     try {
-      const guard = profile?.name || user?.email || "Security";
+      const guard = { name: profile?.name || user?.email || "Security", uid: user?.uid || "" };
       const updated = await recordGateMovement(searched.id, direction, guard, null);
       setSearched(updated);
       setJustLogged(direction);

@@ -54,7 +54,7 @@ export const NAVIGATION = {
     {
       section: "Hostel",
       items: [
-        { label: "Manage Users & Wardens", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
+        { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
         { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
         { label: "Blocks & Rooms", to: "/dashboard/admin/blocks", icon: <BuildingIcon /> },
       ],
@@ -110,6 +110,7 @@ export const NAVIGATION = {
       section: "Services",
       items: [
         { label: "Gate Pass", to: "/dashboard/student/gate-pass", icon: <StudentQrIcon /> },
+        { label: "Emergency Contacts", to: "/dashboard/student/emergency", icon: <ShieldIcon /> },
         { label: "Complaints", to: "/dashboard/student/complaints", icon: <StudentWrenchIcon /> },
         { label: "Leave Request", to: "/dashboard/student/leave", icon: <StudentAlertIcon /> },
         { label: "Notices", to: "/dashboard/student/notices", icon: <StudentMegaphoneIcon /> },

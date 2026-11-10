@@ -30,8 +30,15 @@ function qrPayload(pass) {
 
 function parseDate(v) {
   if (!v) return null;
+  const year = String(v).match(/^(\d{4,})-/)?.[1];
+  if (year && (year.length !== 4 || Number(year) < 2000 || Number(year) > 9999)) return null;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function displayDate(value) {
+  const parsed = parseDate(value);
+  return parsed ? parsed.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Date needs correction";
 }
 
 // Newest first, by the pass window's start; falls back to creation time.
@@ -103,6 +110,7 @@ function pickActivePass(approvedPasses, now) {
     // A student who is currently Out on this pass still needs its QR to
     // get back in, even if the return time has slipped past.
     if (p.tripState === "Out") return p;
+    if ((p.from && !from) || (p.to && !to)) continue;
     const isExpired = to && now > to;
     const isUpcoming = from && now < from;
     if (isExpired) continue;
@@ -145,6 +153,7 @@ export default function GatePass() {
   // Recomputed fresh from `passes` every render — nothing about which pass
   // is "active" is ever cached in state or localStorage.
   const activePass = useMemo(() => pickActivePass(passes.filter((p) => p.status === "Approved"), now), [passes, now]);
+  const journeyPass = passes.find((p) => p.status === "journey_started" || p.tripState === "Out");
   const pendingPass = passes.find((p) => p.status === "Pending");
 
   useEffect(() => {
@@ -161,6 +170,7 @@ export default function GatePass() {
         "gatePasses",
         {
           studentId,
+          registrationNo: studentRecord?.registrationNo || studentRecord?.regNo || "",
           studentName: profile?.name || user?.email,
           type,
           reason,
@@ -193,6 +203,13 @@ export default function GatePass() {
             <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
           ) : gatePasses.error ? (
             <p className="py-10 text-center text-sm text-rose-600">{gatePasses.error}</p>
+          ) : journeyPass ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <Pill tone="Pending">Journey Started</Pill>
+              <p className="font-display text-base font-semibold text-ink">{journeyPass.type} · {journeyPass.id}</p>
+              <p className="text-sm text-slate-500">Exit recorded {journeyPass.exitTime?.toDate ? journeyPass.exitTime.toDate().toLocaleString("en-IN") : "by security"}.</p>
+              <p className="max-w-sm text-xs text-slate-400">This pass has already been used for exit and its QR is disabled. Security will record your return at the gate.</p>
+            </div>
           ) : activePass ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               {qrFailed ? (
@@ -217,7 +234,7 @@ export default function GatePass() {
               <div>
                 <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
                 <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
-                <p className="mt-1 text-xs text-slate-400">{activePass.from} → {activePass.to}</p>
+                <p className="mt-1 text-xs text-slate-400">{displayDate(activePass.from)} → {displayDate(activePass.to)}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Pill tone={activePass.status}>{activePass.status}</Pill>

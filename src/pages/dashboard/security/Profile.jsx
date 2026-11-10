@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { updateUserProfile } from "../../../firebase/firestore";
-import { fileToResizedDataUrl } from "../../../utils/image";
+import { useProfilePhotoUpload } from "../../../hooks/useProfilePhotoUpload";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { CameraIcon } from "../../../components/dashboard/security/icons";
 
@@ -26,7 +26,6 @@ export default function SecurityProfile() {
   const { user, profile, refreshProfile } = useAuth();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const fileInputRef = useRef(null);
@@ -34,21 +33,14 @@ export default function SecurityProfile() {
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
+  const photoUpload = useProfilePhotoUpload(user, refreshProfile, (photoURL) => set("photoURL", photoURL), profile?.role);
 
   async function handlePhotoChange(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setError("");
-    setUploadingPhoto(true);
-    try {
-      const dataUrl = await fileToResizedDataUrl(file, { maxSize: 256, quality: 0.85 });
-      set("photoURL", dataUrl);
-    } catch (err) {
-      setError(err.message || "Couldn't process that photo.");
-    } finally {
-      setUploadingPhoto(false);
-    }
+    await photoUpload.upload(file);
   }
 
   async function handleSave(e) {
@@ -90,7 +82,7 @@ export default function SecurityProfile() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingPhoto}
+              disabled={photoUpload.uploading}
               className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-white shadow-md shadow-teal-900/30 transition-all duration-150 hover:scale-105 hover:bg-teal-400 disabled:opacity-60 disabled:hover:scale-100"
               aria-label="Change photo"
             >
@@ -106,7 +98,7 @@ export default function SecurityProfile() {
             </div>
           </div>
         </div>
-        {uploadingPhoto && <p className="relative mt-3 text-xs text-teal-300">Processing photo…</p>}
+        {photoUpload.uploading && <p className="relative mt-3 text-xs text-teal-300">Uploading photo… {photoUpload.progress}%</p>}
       </Card>
 
       <Card title="Edit your profile">
@@ -142,10 +134,10 @@ export default function SecurityProfile() {
             </Field>
           </div>
 
-          {error && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error}</p>}
+          {(error || photoUpload.error) && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error || photoUpload.error}</p>}
           {success && <p className="rounded-xl bg-teal-500/10 px-4 py-2.5 text-sm text-teal-700">{success}</p>}
 
-          <Button type="submit" disabled={saving || uploadingPhoto} className="w-full sm:w-auto">
+          <Button type="submit" disabled={saving || photoUpload.uploading} className="w-full sm:w-auto">
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </form>

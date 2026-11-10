@@ -9,6 +9,7 @@ import Complaints from "./student/Complaints";
 import Notices from "./student/Notices";
 import Profile from "./student/Profile";
 import Leave from "./student/Leave";
+import EmergencyContacts from "./parent/EmergencyContacts";
 
 export default function StudentDashboard() {
   return (
@@ -23,6 +24,7 @@ export default function StudentDashboard() {
         <Route path="complaints" element={<Complaints />} />
         <Route path="notices" element={<Notices />} />
         <Route path="leave" element={<Leave />} />
+        <Route path="emergency" element={<EmergencyContacts />} />
       </Routes>
     </DashboardLayout>
   );

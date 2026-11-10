@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getDocument } from "../firebase/firestore";
+import { getDocument, getCollection } from "../firebase/firestore";
 import { DEMO_STUDENT_ID, getDemoDocument, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
 import { publishReadStatus } from "../firebase/readStatusEvents";
@@ -65,7 +65,7 @@ export function useLinkedStudent() {
 
     const statusKey = `linked-student:${linkedStudentId}`;
     getDocument("students", linkedStudentId)
-      .then((studentRecord) => {
+      .then(async (studentRecord) => {
         if (cancelled) return;
         publishReadStatus(statusKey, "", "students (parent link)");
         if (!studentRecord) {
@@ -78,15 +78,29 @@ export function useLinkedStudent() {
           });
           return;
         }
+        let academic = null;
+        const registrationNo = studentRecord.registrationNo || studentRecord.regNo || "";
+        if (registrationNo) {
+          try {
+            academic = (await getCollection("studentRegister", { whereClauses: [["regNo", "==", registrationNo]], limitCount: 1 }))[0] || null;
+          } catch (err) {
+            console.warn("Could not load linked student's academic register details:", err);
+          }
+        }
+        const mergedRecord = { ...academic, ...studentRecord, registrationNo: registrationNo || academic?.regNo || "" };
         setState({
           loading: false,
           studentUser: {
             id: linkedStudentId,
-            name: studentRecord.name || "",
-            email: studentRecord.email || "",
-            hostelResidence: studentRecord.hostelResidence || studentRecord.wing || "",
+            name: mergedRecord.name || "",
+            email: mergedRecord.email || "",
+            photoURL: mergedRecord.photoURL || "",
+            registrationNo: mergedRecord.registrationNo,
+            branch: mergedRecord.branch || "",
+            year: mergedRecord.year || "",
+            hostelResidence: mergedRecord.hostelResidence || mergedRecord.wing || "",
           },
-          studentRecord,
+          studentRecord: mergedRecord,
           notFound: false,
           error: "",
         });

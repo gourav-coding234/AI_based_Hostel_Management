@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { UtensilsIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { updateDocument } from "../../../firebase/firestore";
+import { updateDocument, bulkUpsertMessMenu } from "../../../firebase/firestore";
+import { parseDataFile } from "../../../utils/fileImport";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const EMPTY_MEAL = { breakfast: "", lunch: "", dinner: "" };
@@ -19,6 +20,45 @@ export default function WardenMess() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(EMPTY_MEAL);
   const [saving, setSaving] = useState(false);
+  const fileRef = useRef(null);
+  const [upload, setUpload] = useState({ rows: [], errors: [], message: "", mode: "merge", busy: false });
+
+  async function chooseUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const parsed = await parseDataFile(file);
+      const rows = [];
+      const errors = [];
+      parsed.records.forEach((row, index) => {
+        const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.trim().toLowerCase(), String(value || "").trim()]));
+        const day = DAYS.find((d) => d.toLowerCase() === normalized.day?.toLowerCase());
+        if (!day) errors.push(`Row ${index + 2}: day must be a weekday name.`);
+        else if (![normalized.breakfast, normalized.lunch, normalized.dinner].some(Boolean)) errors.push(`Row ${index + 2}: add at least one meal.`);
+        else rows.push({ day, breakfast: normalized.breakfast, lunch: normalized.lunch, dinner: normalized.dinner });
+      });
+      const seen = new Set();
+      const unique = rows.filter((row) => {
+        if (seen.has(row.day)) { errors.push(`Repeated day: ${row.day}. Keep one row per day.`); return false; }
+        seen.add(row.day); return true;
+      });
+      setUpload((current) => ({ ...current, rows: unique, errors, message: file.name }));
+    } catch (error) {
+      setUpload((current) => ({ ...current, rows: [], errors: [error.message || "Could not read this file."], message: file.name }));
+    }
+  }
+
+  async function importMenu() {
+    setUpload((current) => ({ ...current, busy: true, errors: [] }));
+    try {
+      const count = await bulkUpsertMessMenu(upload.rows, upload.mode, { uid: user?.uid, name: profile?.name || user?.email });
+      setUpload((current) => ({ ...current, busy: false, rows: [], message: `Saved ${count} menu day${count === 1 ? "" : "s"}.` }));
+    } catch (error) {
+      console.error("Mess menu upload failed:", error);
+      setUpload((current) => ({ ...current, busy: false, errors: ["Could not save the timetable. Check Firestore rules and try again."] }));
+    }
+  }
 
   const currentMeal = menuByDay[activeDay] || EMPTY_MEAL;
 
@@ -67,6 +107,20 @@ export default function WardenMess() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      <Card title="Bulk upload timetable" subtitle="CSV, XLSX, or XLS. One row per weekday with day, breakfast, lunch, and dinner columns.">
+        <div className="flex flex-wrap items-center gap-3">
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={chooseUpload} />
+          <Button variant="outline" onClick={() => fileRef.current?.click()}>Choose file</Button>
+          <a className="text-sm font-medium text-teal-700 underline" href="/mess_menu_template.csv" download>Download sample template</a>
+          <label className="text-sm text-slate-600">Import mode <select className={`${inputCls} ml-2 w-auto`} value={upload.mode} onChange={(e) => setUpload((current) => ({ ...current, mode: e.target.value }))}><option value="merge">Merge / update</option><option value="replace">Replace timetable</option></select></label>
+        </div>
+        {upload.message && <p className="mt-3 text-sm text-slate-500">{upload.message}</p>}
+        {upload.errors.map((error) => <p key={error} className="mt-2 text-sm text-rose-600">{error}</p>)}
+        {upload.rows.length > 0 && <>
+          <div className="mt-3 max-h-48 overflow-auto rounded-lg border border-slate-200"><table className="w-full text-left text-xs"><thead><tr>{["Day", "Breakfast", "Lunch", "Dinner"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr></thead><tbody>{upload.rows.map((row) => <tr key={row.day} className="border-t border-slate-100"><td className="px-3 py-2">{row.day}</td><td className="px-3 py-2">{row.breakfast}</td><td className="px-3 py-2">{row.lunch}</td><td className="px-3 py-2">{row.dinner}</td></tr>)}</tbody></table></div>
+          <Button className="mt-3" onClick={importMenu} disabled={upload.busy || upload.rows.length === 0}>{upload.busy ? "Saving…" : `Import ${upload.rows.length} valid days`}</Button>
+        </>}
+      </Card>
       <Card
         title="Weekly menu"
         action={

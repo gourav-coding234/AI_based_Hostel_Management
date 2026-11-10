@@ -63,7 +63,7 @@ export default function SecurityOverview() {
     gatePasses: { name: "gatePasses" },
     // Approved leave students who physically left and have not returned.
     leaveLogs: { name: "leaveLogs", options: { where: [["status", "==", "Left"]] } },
-    gateLogs: { name: "gateLogs", options: { orderByField: "timeSort", limitCount: FEED_LIMIT } },
+    gateLogs: { name: "inOutLogs", options: { orderByField: "timeSort", limitCount: FEED_LIMIT } },
     // All visitors, not just the latest few — "currently inside" and
     // "visitors today" must be counted over the full log to be accurate.
     visitors: { name: "visitors" },
@@ -105,7 +105,7 @@ export default function SecurityOverview() {
     // Approved, not yet returned, and either already out or still inside
     // its valid window.
     const activePasses = gatePasses.filter(
-      (p) => p.status === "Approved" && p.tripState !== "Returned" && (p.tripState === "Out" || !p.to || p.to >= nowKey)
+      (p) => ["Approved", "journey_started"].includes(p.status) && p.tripState !== "Returned" && (p.tripState === "Out" || !p.to || p.to >= nowKey)
     ).length;
 
     // --- Visitors ---

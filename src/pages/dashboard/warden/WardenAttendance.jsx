@@ -42,6 +42,7 @@ export default function WardenAttendance() {
   const assignedWing = profile?.block && profile.block !== "Unassigned" ? profile.block : "";
 
   const { directory, loading: directoryLoading } = useStudentDirectory();
+  const wings = useMemo(() => [...new Set(directory.map((s) => s.wing).filter(Boolean))].sort(), [directory]);
   const { data: attendance, loading: attendanceLoading } = useCollection("attendance", {
     orderByField: "date",
     orderByDirection: "desc",
@@ -51,6 +52,11 @@ export default function WardenAttendance() {
 
   // ---- Take attendance: date picker + editable roster ----
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
+  const [selectedWing, setSelectedWing] = useState(assignedWing);
+  useEffect(() => {
+    if (assignedWing) setSelectedWing(assignedWing);
+    else if (!selectedWing && wings.length) setSelectedWing(wings[0]);
+  }, [assignedWing, selectedWing, wings]);
 
   // Existing attendance docs for the selected date, keyed by studentId —
   // this is what makes "save" an update-in-place instead of a duplicate,
@@ -64,8 +70,8 @@ export default function WardenAttendance() {
   }, [attendance, selectedDate]);
 
   const roster = useMemo(
-    () => directory.map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
-    [directory, existingForDate]
+    () => directory.filter((s) => selectedWing && s.wing === selectedWing).map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
+    [directory, existingForDate, selectedWing]
   );
 
   // Local edits for the visible date only — Firestore (via existingForDate
@@ -134,6 +140,7 @@ export default function WardenAttendance() {
 
     const records = marked.map((s) => ({
       studentId: s.id,
+      registrationNo: s.regNo || "",
       studentName: s.name,
       wing: s.wing,
       room: s.room,
@@ -159,7 +166,7 @@ export default function WardenAttendance() {
 
   const rosterColumns = [
     { key: "name", label: "Name", sortable: true },
-    { key: "id", label: "Student ID", render: (r) => <span className="font-mono text-xs">{r.id}</span> },
+    { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
     { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
     { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
     { key: "bed", label: "Bed", render: (r) => r.bed || "—" },
@@ -196,7 +203,7 @@ export default function WardenAttendance() {
 
   const EXCEL_COLUMNS = [
     { label: "Date", value: (r) => r.date },
-    { label: "Student ID", value: (r) => r.studentId },
+    { label: "Registration Number", value: (r) => r.registrationNo || r.studentId },
     { label: "Student Name", value: (r) => r.studentName },
     { label: "Wing/Block", value: (r) => r.wing || "" },
     { label: "Room", value: (r) => r.room || "" },
@@ -285,18 +292,24 @@ export default function WardenAttendance() {
 
       <Card
         title="Take attendance"
-        subtitle="Loaded from the Student Directory — room, bed and wing always match each student's current allocation."
+        subtitle="Select one wing, mark the whole roster, then adjust individual students before saving."
       >
         <div className="flex flex-col gap-4">
+          <Field label="Wing">
+            <select className={`${inputCls} sm:w-72`} value={selectedWing} onChange={(e) => setSelectedWing(e.target.value)} disabled={Boolean(assignedWing)}>
+              <option value="">Select a wing first</option>
+              {wings.map((wing) => <option key={wing} value={wing}>{wing}</option>)}
+            </select>
+          </Field>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {markedCount} of {roster.length} marked
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!selectedWing || saving}>
                 Mark all Present
               </Button>
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!selectedWing || saving}>
                 Mark all Absent
               </Button>
             </div>
@@ -306,8 +319,8 @@ export default function WardenAttendance() {
             columns={rosterColumns}
             rows={roster}
             loading={loading}
-            searchKeys={["name", "id", "room"]}
-            searchPlaceholder="Search by name, room, or ID…"
+            searchKeys={["name", "regNo", "room"]}
+            searchPlaceholder="Search by name, room, or registration number…"
             emptyTitle="No students in the directory yet"
             emptyDescription="Add Student accounts and room allocations first — see Student Directory."
             emptyIcon={<CheckSquareIcon />}
@@ -318,7 +331,7 @@ export default function WardenAttendance() {
           {saveMessage && <p className="text-sm text-teal-700">{saveMessage}</p>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSaveAttendance} disabled={saving || loading}>
+            <Button onClick={handleSaveAttendance} disabled={saving || loading || !selectedWing}>
               {saving ? "Saving…" : "Save attendance"}
             </Button>
             <Button

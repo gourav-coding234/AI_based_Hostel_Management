@@ -8,6 +8,7 @@ import { useCollection } from "../../../hooks/useCollection";
 import { getCollection, recordFeePayment, sendFeeReminder, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
 import { toCsvText } from "../../../utils/csv";
+import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -26,6 +27,8 @@ export default function WardenFees() {
     where: myWing ? [["block", "==", myWing]] : [],
     skip: authLoading,
   });
+  const { directory } = useStudentDirectory();
+  const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
 
   // Second layer: same block scoping the Warden overview uses. Status is
   // always recomputed (never trusted from the stored field) and the
@@ -35,9 +38,9 @@ export default function WardenFees() {
     return scoped.map((f) => {
       const total = Math.max(Number(f.total) || 0, 0);
       const paid = Math.max(Number(f.paid) || 0, 0);
-      return { ...f, total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
+      return { ...f, registrationNo: f.registrationNo || registrationByStudent.get(f.studentId) || "", total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
     });
-  }, [feesQuery.data, myWing]);
+  }, [feesQuery.data, myWing, registrationByStudent]);
 
   const [filter, setFilter] = useState("All");
 
@@ -147,7 +150,7 @@ export default function WardenFees() {
   // --- CSV of the currently filtered list -----------------------------
   const csvColumns = [
     { label: "Student", value: (f) => f.studentName || "" },
-    { label: "Student ID", value: (f) => f.studentId || "" },
+    { label: "Registration Number", value: (f) => f.registrationNo || "" },
     { label: "Block", value: (f) => f.block || "" },
     { label: "Room", value: (f) => f.room || "" },
     { label: "Semester", value: (f) => f.semester || "" },
@@ -264,7 +267,7 @@ export default function WardenFees() {
       >
         <DataTable
           columns={[
-            { key: "studentName", label: "Student", sortable: true },
+            { key: "studentName", label: "Student", sortable: true, render: (f) => <><p className="font-medium text-ink">{f.studentName || "—"}</p><p className="text-xs text-slate-400">{f.registrationNo || "Registration number unavailable"}</p></> },
             { key: "block", label: "Wing/Block", sortable: true, render: (s) => s.block || "—" },
             { key: "room", label: "Room", render: (s) => s.room || "—" },
             { key: "semester", label: "Semester", render: (s) => s.semester || "—" },
@@ -294,8 +297,8 @@ export default function WardenFees() {
           ]}
           rows={filtered}
           loading={feesQuery.loading}
-          searchKeys={["studentName", "studentId", "room", "block"]}
-          searchPlaceholder="Search students…"
+          searchKeys={["studentName", "registrationNo", "room", "block"]}
+          searchPlaceholder="Search name or registration number…"
           emptyTitle="No fee records yet"
           emptyDescription="Fee records imported by the admin office will show up here."
           emptyIcon={<WalletIcon />}

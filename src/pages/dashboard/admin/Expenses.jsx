@@ -4,7 +4,7 @@ import { Card, Button, Field, StatCard } from "../../../components/dashboard/stu
 import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import DataTable from "../../../components/ui/DataTable";
 import { WalletIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
-import { useCollections } from "../../../hooks/useCollection";
+import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, deleteDocument, logAudit, updateDocument } from "../../../firebase/firestore";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
 
@@ -15,7 +15,8 @@ function inr(value) { return `INR ${(Number(value) || 0).toLocaleString("en-IN")
 
 export default function Expenses() {
   const { profile, user } = useAuth();
-  const { data, loading, error } = useCollections({ fees: { name: "fees" }, expenses: { name: "expenses", options: { orderByField: "date", orderByDirection: "desc" } } });
+  const feesQuery = useCollection("fees");
+  const expensesQuery = useCollection("expenses", { orderByField: "date", orderByDirection: "desc" });
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -23,11 +24,13 @@ export default function Expenses() {
   const [confirmId, setConfirmId] = useState("");
   const [deletePhrase, setDeletePhrase] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const totalCollected = data.fees.reduce((sum, fee) => sum + (Number(fee.paid) || 0), 0);
-  const totalExpenses = data.expenses.reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
+  const totalCollected = feesQuery.data.reduce((sum, fee) => sum + (Number(fee.paid) || 0), 0);
+  const totalExpenses = expensesQuery.data.reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
   const balance = totalCollected - totalExpenses;
+  const loading = feesQuery.loading || expensesQuery.loading;
+  const error = expensesQuery.error;
 
-  const rows = useMemo(() => data.expenses.map((record) => ({ ...record, amount: Number(record.amount) || 0 })), [data.expenses]);
+  const rows = useMemo(() => expensesQuery.data.map((record) => ({ ...record, amount: Number(record.amount) || 0 })), [expensesQuery.data]);
 
   function updateField(event) { setForm((current) => ({ ...current, [event.target.name]: event.target.value })); }
 
@@ -101,7 +104,7 @@ export default function Expenses() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard icon={<WalletIcon />} label="Recorded collections" value={loading ? "..." : inr(totalCollected)} sub="Fee payments currently recorded" tone="teal" />
         <StatCard icon={<WalletIcon />} label="Recorded expenses" value={loading ? "..." : inr(totalExpenses)} sub={`${rows.length} expense entries`} tone="amber" />
-        <StatCard icon={<WalletIcon />} label="Calculated available balance" value={loading ? "..." : inr(balance)} sub="Recorded collections minus recorded expenses; not a live bank balance" tone={balance < 0 ? "rose" : "navy"} />
+        <StatCard icon={<WalletIcon />} label="Calculated available balance" value={loading ? "..." : feesQuery.error ? "Unavailable" : inr(balance)} sub={feesQuery.error ? "Fee collections could not be loaded" : "Recorded collections minus recorded expenses; not a live bank balance"} tone={feesQuery.error || balance < 0 ? "rose" : "navy"} />
       </div>
       <Card title={editingId ? "Edit expense" : "Record an expense"} subtitle="Only administrators can access this ledger. The available balance is a calculation from recorded data, not a live bank balance.">
         <form onSubmit={saveExpense} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

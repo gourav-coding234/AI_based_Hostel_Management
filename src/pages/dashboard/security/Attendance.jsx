@@ -42,7 +42,7 @@ function formatMarkedAtFull(ts) {
 
 const EXCEL_COLUMNS = [
   { label: "Date", value: (r) => r.date },
-  { label: "Student ID", value: (r) => r.studentId },
+  { label: "Registration Number", value: (r) => r.registrationNo || r.studentId },
   { label: "Student Name", value: (r) => r.studentName },
   { label: "Block/Wing", value: (r) => r.wing || "" },
   { label: "Room", value: (r) => r.room || "" },
@@ -59,7 +59,10 @@ export default function SecurityAttendance() {
   // left-joined). Security only reads room/bed/wing from it — nothing on
   // this page can edit them.
   const { directory, loading: directoryLoading } = useStudentDirectory();
+  const wings = useMemo(() => [...new Set(directory.map((s) => s.wing).filter(Boolean))].sort(), [directory]);
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
+  const [selectedWing, setSelectedWing] = useState("");
+  useEffect(() => { if (!selectedWing && wings.length) setSelectedWing(wings[0]); }, [selectedWing, wings]);
 
   // The selected date's records from the shared `attendance` collection
   // (live), whoever wrote them — Warden or Security.
@@ -76,8 +79,8 @@ export default function SecurityAttendance() {
   }, [attendance]);
 
   const roster = useMemo(
-    () => directory.map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
-    [directory, existingForDate]
+    () => directory.filter((s) => selectedWing && s.wing === selectedWing).map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
+    [directory, existingForDate, selectedWing]
   );
 
   // Only the guard's unsaved edits live here, keyed by studentId. A row shows
@@ -163,6 +166,7 @@ export default function SecurityAttendance() {
 
     const records = changed.map((s) => ({
       studentId: s.id,
+      registrationNo: s.regNo || "",
       studentName: s.name,
       wing: s.wing,
       room: s.room,
@@ -216,7 +220,7 @@ export default function SecurityAttendance() {
 
   const rosterColumns = [
     { key: "name", label: "Name", sortable: true },
-    { key: "id", label: "Student ID", render: (r) => <span className="font-mono text-xs">{r.id}</span> },
+    { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
     { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
     { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
     { key: "bed", label: "Bed", render: (r) => r.bed || "—" },
@@ -291,18 +295,24 @@ export default function SecurityAttendance() {
 
       <Card
         title="Take attendance"
-        subtitle="Loaded from the Student Directory — room, bed and wing always match each student's current allocation. If the Warden already marked a student for this date, saving here updates that same record instead of creating a duplicate."
+        subtitle="Select one wing, mark the whole roster, then adjust individual students. Existing records are updated without creating duplicates."
       >
         <div className="flex flex-col gap-4">
+          <Field label="Wing">
+            <select className={`${inputCls} sm:w-72`} value={selectedWing} onChange={(e) => setSelectedWing(e.target.value)}>
+              <option value="">Select a wing first</option>
+              {wings.map((wing) => <option key={wing} value={wing}>{wing}</option>)}
+            </select>
+          </Field>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {changed.length} unsaved change{changed.length === 1 ? "" : "s"}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!selectedWing || saving}>
                 Mark all Present
               </Button>
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!selectedWing || saving}>
                 Mark all Absent
               </Button>
             </div>
@@ -312,8 +322,8 @@ export default function SecurityAttendance() {
             columns={rosterColumns}
             rows={roster}
             loading={loading}
-            searchKeys={["name", "id", "room"]}
-            searchPlaceholder="Search by name, room, or ID…"
+            searchKeys={["name", "regNo", "room"]}
+            searchPlaceholder="Search by name, room, or registration number…"
             emptyTitle="No students in the directory yet"
             emptyDescription="Students will appear here once Wardens/Admins add accounts and room allocations."
             emptyIcon={<CheckSquareIcon />}
@@ -324,7 +334,7 @@ export default function SecurityAttendance() {
           {saveMessage && <p className="text-sm text-teal-700">{saveMessage}</p>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSaveAttendance} disabled={saving || loading || changed.length === 0}>
+            <Button onClick={handleSaveAttendance} disabled={saving || loading || !selectedWing || changed.length === 0}>
               {saving ? "Saving…" : "Save attendance"}
             </Button>
             <Button

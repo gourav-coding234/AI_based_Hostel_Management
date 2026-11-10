@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
@@ -10,9 +10,11 @@ import {
   updateInventoryItem,
   decideInventoryRequest,
   fulfillInventoryRequest,
+  bulkUpsertInventoryItems,
   normalizeInventory,
   logAudit,
 } from "../../../firebase/firestore";
+import { parseDataFile } from "../../../utils/fileImport";
 
 const CATEGORIES = ["Furniture", "Electrical", "Bedding", "Kitchen", "Plumbing", "Other"];
 const STATUSES = ["In Stock", "Low Stock", "Out of Stock", "Under Repair"];
@@ -46,6 +48,49 @@ export default function WardenInventory() {
     requests: { name: "inventoryRequests", options: { orderByField: "date" } },
   });
   const { requests } = data;
+  const fileRef = useRef(null);
+  const [bulk, setBulk] = useState({ rows: [], errors: [], message: "", busy: false });
+
+  async function chooseBulkFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const parsed = await parseDataFile(file);
+      const valid = [];
+      const errors = [];
+      const seen = new Set();
+      parsed.records.forEach((row, index) => {
+        const values = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.trim().toLowerCase().replace(/[^a-z0-9]/g, ""), String(value || "").trim()]));
+        const item = values.item || values.itemname || "";
+        const quantity = Number(values.quantity);
+        const damaged = Number(values.damaged || values.damagedquantity || 0);
+        if (!item) errors.push(`Row ${index + 2}: item name is required.`);
+        else if (!Number.isInteger(quantity) || quantity < 0) errors.push(`Row ${index + 2}: quantity must be a whole number of zero or more.`);
+        else if (!Number.isInteger(damaged) || damaged < 0 || damaged > quantity) errors.push(`Row ${index + 2}: damaged quantity must be between zero and quantity.`);
+        else {
+          const rowData = { item, category: values.category || "Other", quantity, damaged, location: values.location || "", roomBlock: values.roomblock || values.room || "", status: values.status || "" };
+          const key = `${item}|${rowData.location}|${rowData.roomBlock}`.toLowerCase();
+          if (seen.has(key)) errors.push(`Row ${index + 2}: duplicate item/location/room entry.`);
+          else { seen.add(key); valid.push(rowData); }
+        }
+      });
+      setBulk({ rows: valid, errors, message: file.name, busy: false });
+    } catch (error) {
+      setBulk({ rows: [], errors: [error.message || "Could not read this file."], message: file.name, busy: false });
+    }
+  }
+
+  async function importBulk() {
+    setBulk((current) => ({ ...current, busy: true }));
+    try {
+      const written = await bulkUpsertInventoryItems(bulk.rows, actor);
+      setBulk({ rows: [], errors: [], message: `Saved ${written} inventory item${written === 1 ? "" : "s"}.`, busy: false });
+    } catch (error) {
+      console.error("Bulk inventory upload failed:", error);
+      setBulk((current) => ({ ...current, busy: false, errors: ["Could not save the inventory upload. Check Firestore access and the row quantities, then retry."] }));
+    }
+  }
 
   // Every record with its normalized quantity/available/damaged, so legacy
   // imported rows (item/location/quantity only) display and update cleanly.
@@ -69,11 +114,13 @@ export default function WardenInventory() {
   const [form, setForm] = useState(emptyForm);
   const [panelError, setPanelError] = useState("");
   const [panelSaving, setPanelSaving] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
   const panelItem = panel?.id ? inventory.find((i) => i.id === panel.id) : null;
 
   function openPanel(mode, it) {
     setPanel({ mode, id: it?.id });
     setPanelError("");
+    setSaveNotice("");
     setForm(
       it
         ? {
@@ -121,10 +168,13 @@ export default function WardenInventory() {
         await updateInventoryItem(panel.id, { type: "details", category: form.category, location: form.location, roomBlock: form.roomBlock, status: form.status }, actor);
         logAudit({ actor: actor.name, action: "Updated inventory details", target: panelItem?.item || "" }).catch(() => {});
       }
+      setSaveNotice("Inventory changes saved.");
       closePanel();
     } catch (err) {
       console.error("Failed to save inventory:", err);
-      setPanelError(ERROR_TEXT[err?.message] || "Couldn't save this change. Please try again.");
+      setPanelError(ERROR_TEXT[err?.message] || (err?.code === "permission-denied"
+        ? "Firebase denied this write. Check the account role and deploy the current Firestore rules."
+        : "Couldn't save this change. Check your connection and try again."));
     } finally {
       setPanelSaving(false);
     }
@@ -221,6 +271,7 @@ export default function WardenInventory() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      {saveNotice && <p role="status" className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">{saveNotice}</p>}
       <Card title="Hostel-wide inventory levels">
         {loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
@@ -242,6 +293,21 @@ export default function WardenInventory() {
             ))}
           </div>
         )}
+      </Card>
+
+      <Card title="Bulk upload inventory" subtitle="CSV, XLSX, or XLS. Required columns: item, quantity. Optional columns: category, damaged, location, roomBlock, status.">
+        <div className="flex flex-wrap items-center gap-3">
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={chooseBulkFile} />
+          <Button variant="outline" onClick={() => fileRef.current?.click()}>Choose file</Button>
+          <a className="text-sm font-medium text-teal-700 underline" href="/inventory_template.csv" download>Download sample template</a>
+        </div>
+        {bulk.message && <p className="mt-3 text-sm text-slate-500">{bulk.message}</p>}
+        {bulk.errors.map((error) => <p key={error} className="mt-2 text-sm text-rose-600">{error}</p>)}
+        {bulk.rows.length > 0 && <>
+          <div className="mt-3 max-h-52 overflow-auto rounded-lg border border-slate-200"><table className="w-full text-left text-xs"><thead><tr>{["Item", "Category", "Quantity", "Damaged", "Location", "Room / Block"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr></thead><tbody>{bulk.rows.slice(0, 100).map((row, index) => <tr key={`${row.item}-${index}`} className="border-t border-slate-100"><td className="px-3 py-2">{row.item}</td><td className="px-3 py-2">{row.category}</td><td className="px-3 py-2">{row.quantity}</td><td className="px-3 py-2">{row.damaged}</td><td className="px-3 py-2">{row.location}</td><td className="px-3 py-2">{row.roomBlock}</td></tr>)}</tbody></table></div>
+          {bulk.rows.length > 100 && <p className="mt-2 text-xs text-slate-500">Showing first 100 of {bulk.rows.length} rows.</p>}
+          <Button className="mt-3" onClick={importBulk} disabled={bulk.busy}>{bulk.busy ? "Saving…" : `Import ${bulk.rows.length} rows`}</Button>
+        </>}
       </Card>
 
       {panel && (

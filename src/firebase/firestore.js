@@ -16,6 +16,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./config";
 import { computeFeeStatus } from "../utils/fees";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { storage } from "./config";
 
 /**
  * Fetches a user's profile document from the `users` collection.
@@ -46,6 +48,49 @@ export async function getDocument(collectionName, id) {
  */
 export async function updateUserProfile(uid, data) {
   await setDoc(doc(db, "users", uid), data, { merge: true });
+}
+
+/** Resize and upload a profile image to Storage, then persist its URL. */
+export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role = "") {
+  if (!uid || !file) throw new Error("Choose a photo before uploading.");
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowed.includes(file.type)) {
+    throw new Error(file.type === "image/heic" || file.type === "image/heif"
+      ? "This phone photo is HEIC/HEIF. Save or share it as JPG, PNG, or WebP, then try again."
+      : "Choose a JPG, PNG, or WebP image.");
+  }
+  if (file.size > 15 * 1024 * 1024) throw new Error("This image is larger than 15 MB.");
+
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) throw new Error("The selected image could not be opened. Try another JPG, PNG, or WebP file.");
+  const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Image processing is unavailable in this browser.");
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  let blob;
+  for (const quality of [0.86, 0.74, 0.62, 0.5, 0.38]) {
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (blob && blob.size <= 500 * 1024) break;
+  }
+  if (!blob) throw new Error("The selected image could not be processed.");
+  if (blob.size > 500 * 1024) throw new Error("This image could not be compressed below 500 KB. Choose a smaller photo.");
+
+  const task = uploadBytesResumable(ref(storage, `profilePhotos/${uid}.jpg`), blob, { contentType: "image/jpeg" });
+  await new Promise((resolve, reject) => {
+    task.on("state_changed", (snapshot) => {
+      onProgress(snapshot.totalBytes ? Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100) : 0);
+    }, reject, resolve);
+  });
+  const photoURL = await getDownloadURL(task.snapshot.ref);
+  await updateUserProfile(uid, { photoURL });
+  if (role === "Student") {
+    await setDoc(doc(db, "students", uid), { photoURL, updatedAt: serverTimestamp() }, { merge: true });
+  }
+  return photoURL;
 }
 
 /**
@@ -208,6 +253,7 @@ export async function saveAttendanceForDate(records, existingIdByStudentId, mark
         {
           studentId: r.studentId,
           studentName: r.studentName,
+          registrationNo: r.registrationNo || "",
           wing: r.wing || "",
           room: r.room || "",
           bed: r.bed || "",
@@ -286,6 +332,36 @@ export async function bulkUpsertStudentsByEmail(records, createdBy) {
   }
 
   return { written, failed };
+}
+
+/** Stores academic roster rows under the registration number and copies the
+ * parent-safe fields onto the linked students/{uid} record. */
+export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
+  const accounts = (await getCollection("users", { whereClauses: [["role", "==", "Student"]] }));
+  const uidByEmail = new Map(accounts.map((u) => [String(u.email || "").trim().toLowerCase(), u.id]));
+  let written = 0;
+  const CHUNK = 400;
+  for (let i = 0; i < records.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const row of records.slice(i, i + CHUNK)) {
+      const regNo = String(row.regNo || row.registrationNo || "").trim();
+      if (!regNo) continue;
+      const email = String(row.email || "").trim().toLowerCase();
+      batch.set(doc(db, "studentRegister", regNo), { ...row, regNo, email, importedBy: createdBy || null, updatedAt: serverTimestamp() }, { merge: true });
+      const uid = uidByEmail.get(email);
+      if (uid) batch.set(doc(db, "students", uid), {
+        name: row.name || "",
+        email,
+        registrationNo: regNo,
+        branch: row.branch || "",
+        year: row.year || "",
+        batch: row.batch || "",
+      }, { merge: true });
+      written += 1;
+    }
+    await batch.commit();
+  }
+  return { written, linked: records.filter((r) => uidByEmail.has(String(r.email || "").trim().toLowerCase())).length };
 }
 
 /**
@@ -514,6 +590,59 @@ export function inventoryDocId({ item, location, roomBlock }) {
   return `inv_${inventorySlug(item)}__${inventorySlug(location)}__${inventorySlug(roomBlock)}`;
 }
 
+/** Batch merge inventory spreadsheet rows into deterministic stock records. */
+export async function bulkUpsertInventoryItems(records, actor) {
+  let written = 0;
+  for (let i = 0; i < records.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const row of records.slice(i, i + 400)) {
+      const item = String(row.item || "").trim();
+      const location = String(row.location || "").trim();
+      const roomBlock = String(row.roomBlock || "").trim();
+      const quantity = Math.floor(Number(row.quantity));
+      const damaged = Math.floor(Number(row.damaged) || 0);
+      if (!item || !(quantity >= 0) || !(damaged >= 0) || damaged > quantity) throw new Error("INVALID_INVENTORY_IMPORT");
+      const available = quantity - damaged;
+      const id = inventoryDocId({ item, location, roomBlock });
+      batch.set(doc(db, "inventory", id), {
+        item, category: String(row.category || "Other").trim(), quantity, damaged, available,
+        location, roomBlock,
+        status: row.status || autoInventoryStatus({ quantity, available }),
+        updatedBy: actor?.name || "Warden", updatedByUid: actor?.uid || "", updatedAt: serverTimestamp(),
+        importedBy: actor?.uid || null,
+      }, { merge: true });
+      written += 1;
+    }
+    await batch.commit();
+  }
+  return written;
+}
+
+/** Batch-write the weekly menu; replace mode also clears omitted weekdays. */
+export async function bulkUpsertMessMenu(records, mode, actor) {
+  const days = new Set(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]);
+  if (records.some((row) => !days.has(row.day))) throw new Error("INVALID_MESS_DAY");
+  if (mode === "replace") {
+    const existing = await getCollection("messMenu");
+    const incoming = new Set(records.map((row) => row.day));
+    for (let i = 0; i < existing.length; i += 400) {
+      const batch = writeBatch(db);
+      existing.slice(i, i + 400).filter((row) => !incoming.has(row.id)).forEach((row) => batch.delete(doc(db, "messMenu", row.id)));
+      await batch.commit();
+    }
+  }
+  const batch = writeBatch(db);
+  records.forEach((row) => batch.set(doc(db, "messMenu", row.day), {
+    day: row.day,
+    breakfast: String(row.breakfast || "").trim(),
+    lunch: String(row.lunch || "").trim(),
+    dinner: String(row.dinner || "").trim(),
+    updatedBy: actor?.name || "Warden", updatedByUid: actor?.uid || "", updatedAt: serverTimestamp(),
+  }, { merge: mode !== "replace" }));
+  await batch.commit();
+  return records.length;
+}
+
 /** Creates a stock record; refuses (DUPLICATE_ITEM) if that item/location/room already exists. */
 export async function addInventoryItem(data, actor) {
   const quantity = Math.floor(Number(data.quantity));
@@ -686,41 +815,59 @@ export async function fulfillInventoryRequest(requestId, inventoryId, actor) {
  */
 export async function recordGateMovement(passId, direction, guard, expectedStudentId) {
   const passRef = doc(db, "gatePasses", passId);
-  const logRef = doc(collection(db, "gateLogs"));
+  const logRef = doc(collection(db, "inOutLogs"));
   const now = new Date();
+  const guardName = typeof guard === "string" ? guard : guard?.name || "Security";
+  const guardId = typeof guard === "object" ? guard?.uid || "" : "";
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(passRef);
     if (!snap.exists()) throw new Error("PASS_NOT_FOUND");
     const pass = snap.data();
+    const statusRef = doc(db, "inOutStatus", pass.studentId);
+    const studentRef = doc(db, "students", pass.studentId);
+    const studentSnap = await tx.get(studentRef);
+    const studentRecord = studentSnap.exists() ? studentSnap.data() : {};
+    const registrationNo = pass.registrationNo || pass.regNo || studentRecord.registrationNo || studentRecord.regNo || "";
 
     if (expectedStudentId && pass.studentId && pass.studentId !== expectedStudentId) {
       throw new Error("STUDENT_MISMATCH");
     }
-    if (pass.status !== "Approved") throw new Error("NOT_APPROVED");
-
     if (direction === "Out") {
+      if (pass.status !== "Approved") throw new Error("NOT_APPROVED");
       if (pass.tripState === "Out") throw new Error("ALREADY_OUT");
       if (pass.tripState === "Returned") throw new Error("ALREADY_RETURNED");
       const to = pass.to ? new Date(pass.to) : null;
       if (to && !Number.isNaN(to.getTime()) && now > to) throw new Error("EXPIRED");
     } else {
-      if (pass.tripState !== "Out") throw new Error("NOT_OUT_YET");
+      if (pass.status !== "journey_started" && pass.tripState !== "Out") throw new Error("NOT_OUT_YET");
     }
 
     const nextTripState = direction === "Out" ? "Out" : "Returned";
-    const passUpdate = { tripState: nextTripState };
+    const passUpdate = direction === "Out"
+      ? { status: "journey_started", tripState: nextTripState, exitTime: serverTimestamp(), scannedBy: guardName, scannedByUid: guardId }
+      : { status: "completed", tripState: nextTripState, entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: guardId };
     // A pass that has been out and is now returned is done — this is the
     // only place "Completed" ever gets set, so the status filter on the
     // admin/warden GatePasses pages actually has something to match.
-    if (nextTripState === "Returned") passUpdate.status = "Completed";
     tx.set(passRef, { ...passUpdate, updatedAt: serverTimestamp() }, { merge: true });
+    tx.set(statusRef, {
+      studentId: pass.studentId,
+      registrationNo,
+      status: direction === "Out" ? "OUT" : "IN",
+      updatedAt: serverTimestamp(),
+    });
 
     tx.set(logRef, {
       studentId: pass.studentId,
-      studentName: pass.studentName || "",
-      room: pass.room || "",
-      passId,
+      registrationNo,
+      studentName: pass.studentName || studentRecord.name || "",
+      room: pass.room || studentRecord.room || "",
+      wing: pass.wing || studentRecord.wing || studentRecord.hostelResidence || "",
+      gatePassId: passId,
+      type: direction.toUpperCase(),
+      method: "scan",
+      guardId,
       direction,
       // `time` stays a human-readable display string; `timeSort` is a real
       // sortable ISO timestamp — Firestore orderBy must use timeSort, never
@@ -728,12 +875,45 @@ export async function recordGateMovement(passId, direction, guard, expectedStude
       // more than one month (locale month names don't sort correctly).
       time: now.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }),
       timeSort: now.toISOString(),
-      guard,
+      guard: guardName,
       scannedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     });
 
     return { id: passId, ...pass, ...passUpdate };
+  });
+}
+
+/** Security's one-tap manual movement entry; the current in/out state and log
+ * are committed together so refreshes and concurrent guards cannot lose it. */
+export async function recordManualMovement(student, guard) {
+  if (!student?.id || !guard?.uid) throw new Error("STUDENT_OR_GUARD_REQUIRED");
+  const statusRef = doc(db, "inOutStatus", student.id);
+  const logRef = doc(collection(db, "inOutLogs"));
+  const now = new Date();
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(statusRef);
+    const previous = snap.exists() ? snap.data().status : "IN";
+    const type = previous === "OUT" ? "IN" : "OUT";
+    const entry = {
+      studentId: student.id,
+      registrationNo: student.regNo || "",
+      studentName: student.name || "",
+      room: student.room || "",
+      wing: student.wing || "",
+      type,
+      direction: type === "OUT" ? "Out" : "In",
+      method: "manual",
+      guardId: guard.uid,
+      guard: guard.name || "Security",
+      time: now.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }),
+      timeSort: now.toISOString(),
+      scannedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    };
+    tx.set(statusRef, { status: type, studentId: student.id, registrationNo: entry.registrationNo, updatedAt: serverTimestamp() });
+    tx.set(logRef, entry);
+    return entry;
   });
 }
 

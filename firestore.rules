@@ -36,6 +36,13 @@ service cloud.firestore {
       return signedIn() && userRole() == "Admin";
     }
 
+    // Admin console functions need access to every document, including
+    // collections added later. Specific match blocks below still define
+    // the role rules for all other users.
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+
     function isWarden() {
       return signedIn() && userRole() == "Warden";
     }
@@ -95,7 +102,10 @@ service cloud.firestore {
       // Room/roommate/allocation record for one student. Staff see everyone;
       // the student sees their own; a linked parent sees only their child's.
       allow read: if isStaff() || isSecurity() || isOwnRecord(studentId);
-      allow write: if isStaff();
+      allow create, delete: if isStaff();
+      allow update: if isStaff() ||
+        (isStudent() && request.auth.uid == studentId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'updatedAt']));
     }
 
     match /expenses/{expenseId} {
@@ -188,26 +198,22 @@ service cloud.firestore {
       // keeps blanket read — everyone else is scoped to their own record.
       allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
       allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
-      // Security may only log gate movement, and only these two transitions
-      // (exactly what recordGateMovement() writes):
-      //   OUT:    Approved pass with no trip yet   -> tripState 'Out'
-      //           (status must stay 'Approved')
-      //   RETURN: Approved pass currently 'Out'    -> tripState 'Returned'
-      //           and status 'Completed'
-      // Only tripState/status/updatedAt may change, so studentId, studentName,
-      // from, to, type, reason and approval metadata are immutable for Security.
-      // A Completed pass can never be re-opened, and Security can never
-      // approve/reject a pass.
+      // Security can perform one OUT then one IN movement. Pass identity and
+      // approval data are immutable during either transition.
       allow update: if isStaff() ||
         (isSecurity() &&
-         resource.data.status == 'Approved' &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tripState', 'status', 'updatedAt']) &&
-         ((!(resource.data.get('tripState', '') in ['Out', 'Returned']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tripState', 'status', 'updatedAt', 'exitTime', 'entryTime', 'returnedAt', 'scannedBy', 'scannedByUid', 'returnedByUid']) &&
+         ((resource.data.status == 'Approved' && !(resource.data.get('tripState', '') in ['Out', 'Returned']) &&
            request.resource.data.tripState == 'Out' &&
-           request.resource.data.status == 'Approved') ||
-          (resource.data.get('tripState', '') == 'Out' &&
+           request.resource.data.status == 'journey_started' &&
+           request.resource.data.exitTime == request.time &&
+           request.resource.data.scannedByUid == request.auth.uid) ||
+          ((resource.data.get('tripState', '') == 'Out' || resource.data.status == 'journey_started') &&
            request.resource.data.tripState == 'Returned' &&
-           request.resource.data.status == 'Completed')));
+           request.resource.data.status == 'completed' &&
+           request.resource.data.entryTime == request.time &&
+           request.resource.data.returnedAt == request.time &&
+           request.resource.data.returnedByUid == request.auth.uid)));
       allow delete: if isAdmin();
     }
 
@@ -363,6 +369,23 @@ service cloud.firestore {
       allow read: if isStaff() || isSecurity();
       allow create: if isSecurity() || isStaff();
       allow update, delete: if isAdmin();
+    }
+
+    match /inOutLogs/{logId} {
+      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow create: if (isSecurity() || isStaff()) &&
+        request.resource.data.guardId == request.auth.uid &&
+        request.resource.data.type in ['IN', 'OUT'];
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /inOutStatus/{studentId} {
+      allow read: if isStaff() || isSecurity() || isOwnRecord(studentId);
+      allow create, update: if (isSecurity() || isStaff()) &&
+        request.resource.data.studentId == studentId &&
+        request.resource.data.status in ['IN', 'OUT'];
+      allow delete: if isAdmin();
     }
 
     match /messMenu/{menuId} {

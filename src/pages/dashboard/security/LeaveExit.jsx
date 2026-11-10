@@ -8,6 +8,7 @@ import { CalendarClockIcon, LogOutIcon, LogInIcon } from "../../../components/da
 import { useCollection } from "../../../hooks/useCollection";
 import { markLeaveLeft, markLeaveReturned } from "../../../firebase/firestore";
 import { toCsvText } from "../../../utils/csv";
+import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 
 const FILTERS = ["All", "Not left", "Left", "Returned"];
 
@@ -44,6 +45,8 @@ export default function SecurityLeaveExit() {
   // Approved only — Security has no access to Pending/Rejected requests.
   const requestsQuery = useCollection("leaveRequests", { where: [["status", "==", "Approved"]] });
   const logsQuery = useCollection("leaveLogs");
+  const { directory } = useStudentDirectory();
+  const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
 
   const [filter, setFilter] = useState("All");
   const [confirming, setConfirming] = useState(null); // { row, action }
@@ -58,9 +61,9 @@ export default function SecurityLeaveExit() {
       .sort((a, b) => String(b.from || "").localeCompare(String(a.from || "")))
       .map((r) => {
         const log = logById.get(r.id);
-        return { ...r, log, movement: log ? log.status : "Not left" };
+        return { ...r, registrationNo: r.registrationNo || registrationByStudent.get(r.studentId) || "", log, movement: log ? log.status : "Not left" };
       });
-  }, [requestsQuery.data, logById]);
+  }, [requestsQuery.data, logById, registrationByStudent]);
 
   const today = localDateKey();
   const leftToday = logsQuery.data.filter((l) => l.leftDate === today).length;
@@ -102,7 +105,7 @@ export default function SecurityLeaveExit() {
   // Only the fields Security needs for a hostel register — no reasons,
   // parent details, approval metadata or account identifiers.
   const csvColumns = [
-    { label: "Student ID", value: (l) => l.studentId },
+    { label: "Registration Number", value: (l) => l.registrationNo || registrationByStudent.get(l.studentId) || "" },
     { label: "Student Name", value: (l) => l.studentName },
     { label: "Block/Wing", value: (l) => l.block },
     { label: "Room", value: (l) => l.room },
@@ -128,7 +131,7 @@ export default function SecurityLeaveExit() {
       render: (r) => (
         <>
           <span className="font-medium text-ink">{r.studentName}</span>
-          <p className="text-xs text-slate-400">{r.studentId}</p>
+          <p className="text-xs text-slate-400">{r.registrationNo || "Registration number unavailable"}</p>
         </>
       ),
     },

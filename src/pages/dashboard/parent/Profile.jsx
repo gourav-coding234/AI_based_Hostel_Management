@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { updateUserProfile } from "../../../firebase/firestore";
-import { fileToResizedDataUrl } from "../../../utils/image";
+import { useProfilePhotoUpload } from "../../../hooks/useProfilePhotoUpload";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { CameraIcon } from "../../../components/dashboard/parent/icons";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
@@ -28,7 +28,6 @@ export default function ParentProfile() {
   const { studentUser, studentRecord, notLinked, loading: linkLoading, error: linkError } = useLinkedStudent();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const fileInputRef = useRef(null);
@@ -36,21 +35,14 @@ export default function ParentProfile() {
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
+  const photoUpload = useProfilePhotoUpload(user, refreshProfile, (photoURL) => set("photoURL", photoURL), profile?.role);
 
   async function handlePhotoChange(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setError("");
-    setUploadingPhoto(true);
-    try {
-      const dataUrl = await fileToResizedDataUrl(file, { maxSize: 256, quality: 0.85 });
-      set("photoURL", dataUrl);
-    } catch (err) {
-      setError(err.message || "Couldn't process that photo.");
-    } finally {
-      setUploadingPhoto(false);
-    }
+    await photoUpload.upload(file);
   }
 
   async function handleSave(e) {
@@ -92,7 +84,7 @@ export default function ParentProfile() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingPhoto}
+              disabled={photoUpload.uploading}
               className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-white shadow-md transition-colors hover:bg-teal-400 disabled:opacity-60"
               aria-label="Change photo"
             >
@@ -109,7 +101,7 @@ export default function ParentProfile() {
             </div>
           </div>
         </div>
-        {uploadingPhoto && <p className="mt-3 text-xs text-teal-300">Processing photo…</p>}
+        {photoUpload.uploading && <p className="mt-3 text-xs text-teal-300">Uploading photo… {photoUpload.progress}%</p>}
       </Card>
 
       <Card title="Edit your profile">
@@ -147,10 +139,10 @@ export default function ParentProfile() {
             />
           </Field>
 
-          {error && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error}</p>}
+          {(error || photoUpload.error) && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error || photoUpload.error}</p>}
           {success && <p className="rounded-xl bg-teal-500/10 px-4 py-2.5 text-sm text-teal-700">{success}</p>}
 
-          <Button type="submit" disabled={saving || uploadingPhoto} className="w-full sm:w-auto">
+          <Button type="submit" disabled={saving || photoUpload.uploading} className="w-full sm:w-auto">
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </form>

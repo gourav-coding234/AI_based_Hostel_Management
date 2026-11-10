@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkDeleteDocuments, bulkUpdateDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, bulkUpdateDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { useCollection } from "../../../hooks/useCollection";
 import { isDemoMode } from "../../../data/demoFixtures";
@@ -336,8 +336,8 @@ async function importRecords(target, records, createdBy) {
   }
   if (target.key === "studentRegister") {
     const accountResult = await ensureStudentAccounts(records.filter((record) => record.email), target.onProgress);
-    const written = await bulkAddDocuments(target.collection, records, createdBy);
-    return { written, createdAccounts: accountResult.createdAccounts, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
+    const { written, linked } = await bulkUpsertStudentAcademicRecords(records, createdBy);
+    return { written, linked, createdAccounts: accountResult.createdAccounts, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
   }
   if (target.key === "visitors") {
     const withSortableTime = records.map((record) => {

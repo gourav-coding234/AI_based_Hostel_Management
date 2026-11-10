@@ -133,7 +133,7 @@ export default function ParentAttendance() {
   async function downloadChildRecords() {
     const rows = (log.length ? log : [{}]).map((record) => ({
       studentName: studentUser?.name || "",
-      studentId: linkedStudentId,
+      studentId: studentUser?.registrationNo || "",
       block: studentRecord?.hostelResidence || "",
       floor: studentRecord?.floor || "",
       wing: studentRecord?.wing || "",
@@ -144,7 +144,7 @@ export default function ParentAttendance() {
     }));
     await downloadXlsxFile(rows, [
       { label: "Student Name", value: (row) => row.studentName },
-      { label: "Student ID", value: (row) => row.studentId },
+      { label: "Registration Number", value: (row) => row.studentId },
       { label: "Block", value: (row) => row.block },
       { label: "Floor", value: (row) => row.floor },
       { label: "Wing", value: (row) => row.wing },

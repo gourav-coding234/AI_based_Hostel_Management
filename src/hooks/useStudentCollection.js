@@ -4,6 +4,7 @@ import { db } from "../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
 import { publishReadStatus } from "../firebase/readStatusEvents";
+import { dateKey } from "../utils/dateKey";
 
 /**
  * Real-time hook for a collection filtered to one student's documents (fees,
@@ -46,7 +47,10 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
       q,
       (snap) => {
         publishReadStatus(statusKey, "", collectionName);
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const items = snap.docs.map((d) => {
+          const data = d.data();
+          return { id: d.id, ...data, ...(data.date ? { date: dateKey(data.date) || data.date } : {}) };
+        });
         if (orderByField) {
           const sortValue = (value) => value?.toDate ? value.toDate().getTime() : value;
           const direction = orderByDirection === "asc" ? 1 : -1;

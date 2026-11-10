@@ -29,7 +29,7 @@ export default function ParentFees() {
   async function exportFees() {
     await downloadXlsxFile(records, [
       { label: "Student Name", value: () => studentUser?.name || "" },
-      { label: "Student ID", value: () => linkedStudentId },
+      { label: "Registration Number", value: () => linked.studentUser?.registrationNo || "" },
       { label: "Fee Category", value: (row) => row.category || row.type || "Hostel and mess" },
       { label: "Due Date", value: (row) => row.dueDate },
       { label: "Total", value: (row) => feeRow(row).total },

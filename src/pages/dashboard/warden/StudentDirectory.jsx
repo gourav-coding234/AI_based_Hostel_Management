@@ -12,13 +12,12 @@ import { parseAndValidateHostelCsv } from "../../../utils/wardenDirectoryImport"
 
 const COLUMNS = [
   { key: "name", label: "Name", sortable: true },
-  { key: "id", label: "Student ID", render: (r) => <span className="font-mono text-xs">{r.id}</span> },
+  { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
   { key: "email", label: "Email", render: (r) => r.email || "—" },
   { key: "phone", label: "Phone", render: (r) => r.phone || "—" },
   { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
   { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
   { key: "bed", label: "Bed", render: (r) => r.bed || "—" },
-  { key: "regNo", label: "Reg. No", render: (r) => r.regNo || "—" },
   { key: "branch", label: "Branch", render: (r) => r.branch || "—" },
   { key: "year", label: "Year", render: (r) => r.year || "—" },
   {
@@ -29,7 +28,7 @@ const COLUMNS = [
 ];
 
 const CSV_EXPORT_COLUMNS = [
-  { label: "Student ID", value: (r) => r.id },
+  { label: "Registration Number", value: (r) => r.regNo || "" },
   { label: "Name", value: (r) => r.name },
   { label: "Email", value: (r) => r.email },
   { label: "Phone", value: (r) => r.phone },
@@ -90,10 +89,16 @@ export default function StudentDirectory() {
     () => ["All", ...Array.from(new Set(wingScoped.map((s) => s.wing).filter(Boolean)))],
     [wingScoped]
   );
+  const [branchFilter, setBranchFilter] = useState("All");
+  const [blockFilter, setBlockFilter] = useState("All");
+  const [yearFilter, setYearFilter] = useState("All");
+  const branches = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.branch).filter(Boolean))], [wingScoped]);
+  const blocks = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.hostelResidence).filter(Boolean))], [wingScoped]);
+  const years = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.year).filter(Boolean))], [wingScoped]);
 
   const scoped = useMemo(
-    () => (wingFilter === "All" ? wingScoped : wingScoped.filter((s) => s.wing === wingFilter)),
-    [wingScoped, wingFilter]
+    () => wingScoped.filter((s) => (wingFilter === "All" || s.wing === wingFilter) && (branchFilter === "All" || s.branch === branchFilter) && (blockFilter === "All" || s.hostelResidence === blockFilter) && (yearFilter === "All" || s.year === yearFilter)),
+    [wingScoped, wingFilter, branchFilter, blockFilter, yearFilter]
   );
 
   function handleDownload() {
@@ -180,6 +185,9 @@ export default function StudentDirectory() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <select aria-label="Filter by branch" className={`${inputCls} sm:w-44`} value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>{branches.map((v) => <option key={v} value={v}>{v === "All" ? "All branches" : v}</option>)}</select>
+            <select aria-label="Filter by hostel block" className={`${inputCls} sm:w-44`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>{blocks.map((v) => <option key={v} value={v}>{v === "All" ? "All blocks" : v}</option>)}</select>
+            <select aria-label="Filter by year" className={`${inputCls} sm:w-36`} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>{years.map((v) => <option key={v} value={v}>{v === "All" ? "All years" : v}</option>)}</select>
             <select className={`${inputCls} sm:w-44`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
               {wings.map((w) => (
                 <option key={w} value={w}>{w}</option>
@@ -208,8 +216,8 @@ export default function StudentDirectory() {
           rows={scoped}
           loading={loading}
           error={error}
-          searchKeys={["name", "id", "email", "room", "regNo"]}
-          searchPlaceholder="Search by name, room, or ID…"
+          searchKeys={["name", "regNo", "email", "room", "branch", "year"]}
+          searchPlaceholder="Search by name, registration number, or room…"
           emptyTitle="No students yet"
           emptyDescription="Student accounts and room allocations will show up here."
           emptyIcon={<UsersIcon />}

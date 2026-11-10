@@ -26,27 +26,36 @@ export function useStudentDirectory() {
   const { data, loading, error } = useCollections({
     students: { name: "students" },
     users: { name: "users", options: { where: [["role", "==", "Student"]] } },
+    register: { name: "studentRegister" },
   });
 
   const studentsById = useMemo(() => Object.fromEntries(data.students.map((s) => [s.id, s])), [data.students]);
+  const registerByEmail = useMemo(() => Object.fromEntries(data.register
+    .filter((r) => r.email)
+    .map((r) => [r.email.trim().toLowerCase(), r])), [data.register]);
 
   const directory = useMemo(() => {
     const rows = data.users.map((u) => {
       const s = studentsById[u.id] || {};
+      const academic = registerByEmail[(u.email || "").trim().toLowerCase()] || {};
       return {
         id: u.id,
         name: s.name || u.name || "",
         email: u.email || "",
         phone: u.phone || "",
         wing: studentWing(s) || u.hostelResidence || "",
+        hostelResidence: s.hostelResidence || u.hostelResidence || "",
         room: s.room || "",
         bed: s.bed || "",
         status: u.status || "Active",
+        regNo: s.registrationNo || s.regNo || academic.regNo || academic.registrationNo || "",
+        branch: s.branch || academic.branch || "",
+        year: s.year || academic.year || "",
       };
     });
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [data.users, studentsById]);
+  }, [data.users, studentsById, registerByEmail]);
 
   return { directory, loading, error };
 }

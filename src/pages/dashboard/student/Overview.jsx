@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, StatCard, Button } from "../../../components/dashboard/student/ui";
 import { EmptyState, ErrorState } from "../../../components/ui/DataState";
 import {
   BedIcon,
@@ -17,7 +16,6 @@ import {
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
-import { addDocument } from "../../../firebase/firestore";
 import { noticeAppliesTo } from "../../../utils/notices";
 import { computeFeeStatus } from "../../../utils/fees";
 
@@ -97,37 +95,6 @@ export default function Overview() {
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
   const activePass = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find((p) => p.status === "Approved");
 
-  const [sosSending, setSosSending] = useState(false);
-  const [sosSent, setSosSent] = useState(false);
-  const [sosNote, setSosNote] = useState("");
-  const [showSosForm, setShowSosForm] = useState(false);
-
-  async function raiseSos(e) {
-    e?.preventDefault();
-    setSosSending(true);
-    try {
-      const now = new Date();
-      await addDocument("sosAlerts", {
-        studentId,
-        studentName: profile?.name || user?.email,
-        block: profile?.hostelResidence || studentRecord?.wing || "",
-        room: studentRecord?.room || "",
-        note: sosNote.trim() || "SOS raised from dashboard — no additional details given.",
-        status: "Active",
-        time: now.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }),
-        timeSort: now.toISOString(),
-      });
-      setSosSent(true);
-      setSosNote("");
-      setShowSosForm(false);
-      setTimeout(() => setSosSent(false), 6000);
-    } catch (err) {
-      console.error("Failed to raise SOS alert:", err);
-    } finally {
-      setSosSending(false);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
@@ -163,50 +130,6 @@ export default function Overview() {
       {(studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error) && (
         <ErrorState message={studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error} />
       )}
-
-      <Card className={sosSent ? "border-teal-300 bg-teal-50" : "border-rose-200"}>
-        {sosSent ? (
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/15 text-teal-600">
-              <AlertIcon />
-            </span>
-            <p className="text-sm font-medium text-teal-800">
-              Your SOS alert has been sent to the warden and security desk. Stay where you are if it's safe to do so.
-            </p>
-          </div>
-        ) : showSosForm ? (
-          <form onSubmit={raiseSos} className="flex flex-col gap-3">
-            <p className="text-sm font-semibold text-ink">What's happening? (optional, but helps security respond faster)</p>
-            <textarea
-              className={`${inputCls} min-h-[70px] resize-none`}
-              placeholder="e.g. Medical emergency in Room B-204…"
-              value={sosNote}
-              onChange={(e) => setSosNote(e.target.value)}
-            />
-            <div className="flex gap-2">
-              <Button type="submit" disabled={sosSending} className="bg-rose-600 hover:bg-rose-500">
-                {sosSending ? "Sending…" : "Send SOS now"}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowSosForm(false)}>Cancel</Button>
-            </div>
-          </form>
-        ) : (
-          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600">
-                <AlertIcon />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-ink">In an emergency?</p>
-                <p className="text-xs text-slate-500">This alerts the warden and security desk immediately with your room location.</p>
-              </div>
-            </div>
-            <Button onClick={() => setShowSosForm(true)} className="w-full bg-rose-600 hover:bg-rose-500 sm:w-auto">
-              Raise SOS
-            </Button>
-          </div>
-        )}
-      </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard

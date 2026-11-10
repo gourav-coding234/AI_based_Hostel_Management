@@ -89,13 +89,18 @@ export default function ParentOverview() {
           className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
         />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-500/20 font-display text-xl font-semibold text-teal-200 ring-4 ring-white/10">
-            {initials(studentUser?.name || "Child")}
-          </span>
+          {studentUser?.photoURL ? (
+            <img src={studentUser.photoURL} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-white/10" />
+          ) : (
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-500/20 font-display text-xl font-semibold text-teal-200 ring-4 ring-white/10">
+              {initials(studentUser?.name || "Child")}
+            </span>
+          )}
           <div>
             <p className="text-sm text-slate-300">Keeping an eye on</p>
             <h2 className="font-display text-xl font-semibold">{childName}</h2>
             {studentUser?.email && <p className="mt-0.5 text-sm text-slate-300">{studentUser.email}</p>}
+            <p className="mt-1 text-xs text-slate-300">{studentUser?.registrationNo || "Registration number unavailable"}{studentUser?.branch ? ` · ${studentUser.branch}` : ""}{studentUser?.year ? ` · ${studentUser.year}` : ""}</p>
             {room?.room ? (
               <p className="mt-0.5 text-xs text-slate-400">
                 {room.wing} · {room.room}, {room.bed}

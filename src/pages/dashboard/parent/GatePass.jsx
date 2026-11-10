@@ -19,12 +19,12 @@ export default function ParentGatePass() {
   if (status) return status;
 
   const passList = gatePasses.items;
-  const activePass = passList.find((p) => p.status === "Approved");
+  const activePass = passList.find((p) => ["Approved", "journey_started"].includes(p.status));
   async function exportGatePasses() {
     await downloadXlsxFile(passList, [
       { label: "Gate Pass ID", value: (row) => row.id },
       { label: "Student Name", value: () => studentUser?.name || "" },
-      { label: "Student ID", value: () => linkedStudentId },
+      { label: "Registration Number", value: () => studentUser?.registrationNo || "" },
       { label: "Type", value: (row) => row.type },
       { label: "Reason", value: (row) => row.reason },
       { label: "Destination", value: (row) => row.destination },
@@ -48,6 +48,7 @@ export default function ParentGatePass() {
               <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
               <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
               <p className="mt-1 text-xs text-slate-400">{activePass.from} → {activePass.to}</p>
+              {activePass.exitTime?.toDate && <p className="mt-1 text-xs text-slate-500">Exit recorded {activePass.exitTime.toDate().toLocaleString("en-IN")}</p>}
             </div>
             <div className="flex items-center gap-2">
               <Pill tone={activePass.status}>{activePass.status}</Pill>
