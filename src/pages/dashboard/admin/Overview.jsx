@@ -37,7 +37,8 @@ export default function AdminOverview() {
   const { data, loading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students" },
-    wardens: { name: "users", options: { where: [["role", "==", "Warden"]], orderByField: "name", limitCount: 100 } },
+    // Overview only needs the count; avoid role + orderBy composite index.
+    wardens: { name: "users", options: { where: [["role", "==", "Warden"]], limitCount: 100 } },
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees" },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
