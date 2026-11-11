@@ -14,7 +14,7 @@ import {
   addDoc,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "./config";
+import { db, firebaseConfig } from "./config";
 import { computeFeeStatus } from "../utils/fees";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { storage } from "./config";
@@ -51,8 +51,11 @@ export async function updateUserProfile(uid, data) {
 }
 
 /** Resize and upload a profile image to Storage, then persist its URL. */
-export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role = "") {
+export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role = "", onStage = () => {}) {
   if (!uid || !file) throw new Error("Choose a photo before uploading.");
+  if (!storage || !firebaseConfig.storageBucket) {
+    throw new Error("Firebase Storage is not configured. Set VITE_FIREBASE_STORAGE_BUCKET in the deployment environment.");
+  }
   const allowed = ["image/jpeg", "image/png", "image/webp"];
   if (!allowed.includes(file.type)) {
     throw new Error(file.type === "image/heic" || file.type === "image/heif"
@@ -79,16 +82,37 @@ export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role 
   if (!blob) throw new Error("The selected image could not be processed.");
   if (blob.size > 500 * 1024) throw new Error("This image could not be compressed below 500 KB. Choose a smaller photo.");
 
+  onStage("Uploading photo");
   const task = uploadBytesResumable(ref(storage, `profilePhotos/${uid}.jpg`), blob, { contentType: "image/jpeg" });
   await new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback(value);
+    };
+    const timeout = setTimeout(() => {
+      finish(reject, new Error("Firebase Storage did not respond within 60 seconds. Check that Storage is enabled, the bucket name is correct, and storage.rules are published."));
+      task.cancel();
+    }, 60_000);
     task.on("state_changed", (snapshot) => {
       onProgress(snapshot.totalBytes ? Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100) : 0);
-    }, reject, resolve);
+    }, (error) => finish(reject, error), () => finish(resolve));
   });
   const photoURL = await getDownloadURL(task.snapshot.ref);
-  await updateUserProfile(uid, { photoURL });
+  onStage("Saving profile photo");
+  try {
+    await updateUserProfile(uid, { photoURL });
+  } catch (error) {
+    throw new Error("The photo uploaded, but Firebase could not save its URL to your profile. Check Firestore profile permissions and try again.", { cause: error });
+  }
   if (role === "Student") {
-    await setDoc(doc(db, "students", uid), { photoURL, updatedAt: serverTimestamp() }, { merge: true });
+    try {
+      await setDoc(doc(db, "students", uid), { photoURL, updatedAt: serverTimestamp() }, { merge: true });
+    } catch (error) {
+      throw new Error("The photo is saved to your profile, but the student room profile could not be updated. Check the students document rules.", { cause: error });
+    }
   }
   return photoURL;
 }

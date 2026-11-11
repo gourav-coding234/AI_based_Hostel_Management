@@ -15,8 +15,7 @@ export default function ParentFees() {
   // the CSV import schema, not a separate list of payment line-items.
   const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
 
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   if (fees.loading) return <LoadingState label="Loading fees…" />;
   if (fees.error) return <ErrorState message={fees.error} />;

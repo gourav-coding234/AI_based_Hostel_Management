@@ -154,8 +154,7 @@ export default function ParentAttendance() {
       { label: "Attendance Status", value: (row) => row.attendanceStatus },
     ], "child-attendance-room.xlsx", "Attendance & Room");
   }
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">

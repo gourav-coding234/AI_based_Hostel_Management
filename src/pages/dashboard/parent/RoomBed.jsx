@@ -8,8 +8,7 @@ export default function ParentRoomBed() {
   const linked = useLinkedStudent();
   const { studentRecord } = linked;
 
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   const room = studentRecord;
 

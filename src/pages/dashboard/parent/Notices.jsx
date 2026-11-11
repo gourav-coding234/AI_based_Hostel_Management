@@ -56,8 +56,7 @@ export default function ParentNotices() {
   const notifications = useParentNotifications();
   const [openId, setOpenId] = useState(null);
 
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   const filteredNotices = [
     ...notifications.data.map(notificationToNotice),

@@ -16,8 +16,7 @@ export default function ParentGatePass() {
   // as every other Parent query; the rules give parents no write access here.
   const leaves = useStudentCollection("leaveRequests", linkedStudentId, { orderByField: "from" });
 
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   const passList = gatePasses.items;
   const activePass = passList.find(isPassActive);

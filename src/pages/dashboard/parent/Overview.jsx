@@ -52,8 +52,7 @@ export default function ParentOverview() {
   const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const notifications = useParentNotifications();
 
-  const status = <LinkedStudentStatus {...linked} />;
-  if (status) return status;
+  if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   // Only real data, straight from Firestore, scoped to the linked child.
   const room = studentRecord;

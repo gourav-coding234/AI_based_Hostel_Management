@@ -98,7 +98,7 @@ export default function SecurityProfile() {
             </div>
           </div>
         </div>
-        {photoUpload.uploading && <p className="relative mt-3 text-xs text-teal-300">Uploading photo… {photoUpload.progress}%</p>}
+        {photoUpload.uploading && <p role="status" className="relative mt-3 text-xs text-teal-300">{photoUpload.stage === "Uploading photo" ? `Uploading photo… ${photoUpload.progress}%` : `${photoUpload.stage}…`}</p>}
       </Card>
 
       <Card title="Edit your profile">
