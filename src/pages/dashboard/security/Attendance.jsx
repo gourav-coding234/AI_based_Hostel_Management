@@ -75,7 +75,7 @@ export default function SecurityAttendance() {
     return map;
   }, [attendance]);
 
-  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal } = useAttendanceRoster(directory, existingForDate);
+  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal, unlinkedCount } = useAttendanceRoster(directory, existingForDate);
 
   // Only the guard's unsaved edits live here, keyed by studentId. A row shows
   // `edits[id] ?? saved status ?? Not Marked`, so saved data (including what
@@ -301,6 +301,7 @@ export default function SecurityAttendance() {
             {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
           </p>
           <p className="text-xs text-slate-500">Roster total: {rosterTotal}. Students without a recorded gender appear under Unspecified.</p>
+          {unlinkedCount > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{unlinkedCount} imported student record{unlinkedCount === 1 ? "" : "s"} appear in the directory but have no Student login yet, so attendance cannot be linked to their dashboard until an Admin creates or repairs the account.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {changed.length} unsaved change{changed.length === 1 ? "" : "s"}

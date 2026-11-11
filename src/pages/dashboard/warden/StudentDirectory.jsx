@@ -4,7 +4,6 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { UsersIcon, DownloadIcon, UploadIcon } from "../../../components/dashboard/warden/icons";
-import { useCollections } from "../../../hooks/useCollection";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 import { bulkUpsertHostelAssignments, logAudit } from "../../../firebase/firestore";
 import { toCsvText } from "../../../utils/csv";
@@ -23,7 +22,7 @@ const COLUMNS = [
   {
     key: "status",
     label: "Status",
-    render: (r) => <Pill tone={r.status === "Inactive" ? "Pending" : "Approved"}>{r.status || "Active"}</Pill>,
+    render: (r) => <Pill tone={r.status === "Inactive" || r.status === "Account needed" ? "Pending" : "Approved"}>{r.status || "Active"}</Pill>,
   },
 ];
 
@@ -35,7 +34,7 @@ const CSV_EXPORT_COLUMNS = [
   { label: "Wing/Block", value: (r) => r.wing },
   { label: "Room", value: (r) => r.room },
   { label: "Bed", value: (r) => r.bed },
-  { label: "Registration Number", value: (r) => r.regNo },
+  { label: "Gender", value: (r) => r.gender },
   { label: "Branch/Course", value: (r) => r.branch },
   { label: "Year", value: (r) => r.year },
   { label: "Status", value: (r) => r.status },
@@ -45,42 +44,16 @@ export default function StudentDirectory() {
   const { profile } = useAuth();
   const assignedWing = profile?.block && profile.block !== "Unassigned" ? profile.block : "";
 
-  // The base roster (name/email/phone/wing/room/bed) is the shared
-  // Student Directory join — also used by the Attendance take-attendance
-  // workflow, so both pages always agree on the same students and the
-  // same room/bed. This page additionally enriches it with the academic
-  // register below.
-  const { directory: baseDirectory, loading, error } = useStudentDirectory();
-
-  const { data } = useCollections({
-    register: { name: "studentRegister" },
-  });
-
-  const registerByEmail = useMemo(() => {
-    const map = {};
-    data.register.forEach((r) => {
-      if (r.email) map[r.email.trim().toLowerCase()] = r;
-    });
-    return map;
-  }, [data.register]);
-
-  const directory = useMemo(() => {
-    return baseDirectory.map((s) => {
-      const reg = s.email ? registerByEmail[s.email.trim().toLowerCase()] : null;
-      return {
-        ...s,
-        regNo: reg?.regNo || "",
-        branch: reg?.branch || "",
-        year: reg?.year || "",
-      };
-    });
-  }, [baseDirectory, registerByEmail]);
+  // Shared source with attendance, including academic-register rows that
+  // don't have a portal account yet. Those are visibly marked as needing an
+  // account rather than silently omitted.
+  const { directory, loading, error } = useStudentDirectory();
 
   // A warden assigned to a specific block (users/{uid}.block, the same
   // field Admin → Manage Users sets and Warden Overview scopes by) only
   // manages that wing's roster — mirrors Overview's exact `myWing` pattern.
   const wingScoped = useMemo(
-    () => (assignedWing ? directory.filter((s) => s.wing === assignedWing) : directory),
+    () => (assignedWing ? directory.filter((s) => !s.wing || s.wing === assignedWing) : directory),
     [directory, assignedWing]
   );
 
@@ -179,8 +152,8 @@ export default function StudentDirectory() {
             <div>
               <p className="font-display text-base font-semibold text-ink">Student directory</p>
               <p className="text-sm text-slate-500">
-                {scoped.length} resident{scoped.length === 1 ? "" : "s"}
-                {assignedWing ? ` in ${assignedWing}` : " across the hostel"}
+                {scoped.length} student{scoped.length === 1 ? "" : "s"}
+                {assignedWing ? ` in ${assignedWing} or awaiting wing assignment` : " across the hostel"}
               </p>
             </div>
           </div>

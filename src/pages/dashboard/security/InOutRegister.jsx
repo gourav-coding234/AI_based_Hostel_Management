@@ -50,6 +50,7 @@ export default function SecurityInOutRegister() {
   const statusQuery = useCollection("inOutStatus", { limitCount: 1000 });
   const passesQuery = useCollection("gatePasses", { limitCount: 1000 });
   const { directory, loading: directoryLoading } = useStudentDirectory();
+  const accountDirectory = useMemo(() => directory.filter((student) => student.hasPortalAccount !== false), [directory]);
   const [filter, setFilter] = useState("All");
   const [genderFilter, setGenderFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -57,7 +58,7 @@ export default function SecurityInOutRegister() {
   const [actionError, setActionError] = useState("");
   const actor = { uid: user?.uid || "", name: profile?.name || user?.email || "Security" };
 
-  const studentById = useMemo(() => new Map(directory.map((student) => [student.id, student])), [directory]);
+  const studentById = useMemo(() => new Map(accountDirectory.map((student) => [student.id, student])), [accountDirectory]);
   const allLogs = useMemo(() => [
     ...logsQuery.data,
     ...oldLogsQuery.data.map((l) => ({ ...l, gatePassId: l.passId, type: String(l.direction || "").toUpperCase() })),
@@ -67,8 +68,8 @@ export default function SecurityInOutRegister() {
   }), [logsQuery.data, oldLogsQuery.data, studentById]);
   const statusByStudent = useMemo(() => new Map(statusQuery.data.map((entry) => [entry.studentId || entry.id, entry.status])), [statusQuery.data]);
   const activePassByStudent = useMemo(() => new Map(passesQuery.data.filter(isPassOut).map((pass) => [pass.studentId, pass])), [passesQuery.data]);
-  const matchedStudents = directory.filter((s) => `${s.name} ${s.regNo} ${s.room}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 8);
-  const currentlyOut = directory.filter((student) => statusByStudent.get(student.id) === "OUT");
+  const matchedStudents = accountDirectory.filter((s) => `${s.name} ${s.regNo} ${s.room}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 8);
+  const currentlyOut = accountDirectory.filter((student) => statusByStudent.get(student.id) === "OUT");
   const outByGender = useMemo(() => ({
     Male: currentlyOut.filter((student) => normalizeGender(student.gender) === "Male").length,
     Female: currentlyOut.filter((student) => normalizeGender(student.gender) === "Female").length,

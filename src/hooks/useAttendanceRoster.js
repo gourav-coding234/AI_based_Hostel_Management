@@ -16,9 +16,10 @@ export function normalizeGender(value) {
 /** Shared sex grouping and side-scoped attendance roster for both staff panels. */
 export function useAttendanceRoster(directory, existingForDate, assignedWing = "") {
   const [selectedGender, setSelectedGender] = useState("Male");
+  const attendanceDirectory = useMemo(() => directory.filter((student) => student.hasPortalAccount !== false), [directory]);
   const groups = useMemo(() => {
     const result = Object.fromEntries(ATTENDANCE_GENDER_GROUPS.map(({ id }) => [id, { total: 0, present: 0, absent: 0, leave: 0 }]));
-    directory.forEach((student) => {
+    attendanceDirectory.forEach((student) => {
       if (assignedWing && student.wing !== assignedWing) return;
       const group = result[normalizeGender(student.gender)];
       group.total += 1;
@@ -28,11 +29,11 @@ export function useAttendanceRoster(directory, existingForDate, assignedWing = "
       else if (status === "Leave") group.leave += 1;
     });
     return result;
-  }, [directory, existingForDate, assignedWing]);
-  const roster = useMemo(() => directory
+  }, [attendanceDirectory, existingForDate, assignedWing]);
+  const roster = useMemo(() => attendanceDirectory
     .filter((student) => (!assignedWing || student.wing === assignedWing) && normalizeGender(student.gender) === selectedGender)
     .map((student) => ({ ...student, existing: existingForDate.get(student.id) || null })),
-  [directory, existingForDate, assignedWing, selectedGender]);
+  [attendanceDirectory, existingForDate, assignedWing, selectedGender]);
   const total = Object.values(groups).reduce((count, group) => count + group.total, 0);
-  return { groups, roster, selectedGender, setSelectedGender, total };
+  return { groups, roster, selectedGender, setSelectedGender, total, unlinkedCount: directory.length - attendanceDirectory.length };
 }
