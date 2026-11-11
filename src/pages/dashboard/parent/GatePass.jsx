@@ -6,11 +6,12 @@ import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
 import { formatDate } from "./parentData";
+import { isPassActive, passStatus } from "../../../utils/gatePass";
 
 export default function ParentGatePass() {
   const linked = useLinkedStudent();
   const { studentUser, linkedStudentId } = linked;
-  const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from" });
+  const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from", live: true });
   // Read-only. Queried by studentId so it satisfies the same own-record rule
   // as every other Parent query; the rules give parents no write access here.
   const leaves = useStudentCollection("leaveRequests", linkedStudentId, { orderByField: "from" });
@@ -19,7 +20,7 @@ export default function ParentGatePass() {
   if (status) return status;
 
   const passList = gatePasses.items;
-  const activePass = passList.find((p) => ["Approved", "journey_started"].includes(p.status));
+  const activePass = passList.find(isPassActive);
   async function exportGatePasses() {
     await downloadXlsxFile(passList, [
       { label: "Gate Pass ID", value: (row) => row.id },
@@ -51,7 +52,7 @@ export default function ParentGatePass() {
               {activePass.exitTime?.toDate && <p className="mt-1 text-xs text-slate-500">Exit recorded {activePass.exitTime.toDate().toLocaleString("en-IN")}</p>}
             </div>
             <div className="flex items-center gap-2">
-              <Pill tone={activePass.status}>{activePass.status}</Pill>
+              <Pill tone={passStatus(activePass)}>{passStatus(activePass)}</Pill>
               {activePass.tripState && (
                 <Pill tone={activePass.tripState === "Out" ? "Pending" : activePass.tripState === "Returned" ? "Resolved" : "Normal"}>
                   {activePass.tripState}

@@ -8,6 +8,7 @@ import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
 import { useParentNotifications } from "../../../hooks/useParentNotifications";
 import { noticeAppliesTo } from "../../../utils/notices";
+import { isPassActive } from "../../../utils/gatePass";
 import { inr, feeTone, summarizeChildFees, notificationToNotice } from "./parentData";
 
 function initials(name) {
@@ -32,7 +33,8 @@ function parseDate(v) {
 function currentPass(passes) {
   const now = new Date();
   const live = passes.find((p) => {
-    if (p.status !== "Approved") return false;
+    if (!isPassActive(p)) return false;
+    if (p.tripState === "Out" || p.status === "Out" || p.status === "journey_started") return true;
     const to = parseDate(p.to);
     return !to || now <= to;
   });
@@ -45,7 +47,7 @@ export default function ParentOverview() {
 
   const fees = useStudentCollection("fees", linkedStudentId);
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
-  const gatePasses = useStudentCollection("gatePasses", linkedStudentId);
+  const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId);
   const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const notifications = useParentNotifications();

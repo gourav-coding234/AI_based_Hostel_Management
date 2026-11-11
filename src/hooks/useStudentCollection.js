@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
+import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
@@ -8,6 +8,11 @@ import { dateKey } from "../utils/dateKey";
 
 const studentDataCache = new Map();
 const STUDENT_CACHE_MS = 20_000;
+export function clearStudentCollectionCache(studentId = "") {
+  for (const key of studentDataCache.keys()) {
+    if (!studentId || key.endsWith(`:${studentId}`)) studentDataCache.delete(key);
+  }
+}
 
 /**
  * Hook for a collection filtered to one student's documents (fees,
@@ -22,9 +27,10 @@ const STUDENT_CACHE_MS = 20_000;
  * Pass studentId = "" (not yet known / not linked) to skip fetching.
  */
 export function useStudentCollection(collectionName, studentId, options = {}) {
-  const { orderByField, orderByDirection = "desc" } = options;
+  const { orderByField, orderByDirection = "desc", live = false } = options;
   const [state, setState] = useState({ loading: Boolean(studentId), items: [], error: "" });
   const demo = isDemoMode();
+  const previousStudentId = useRef("");
 
   useEffect(() => {
     if (demo) {
@@ -32,10 +38,15 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
       return undefined;
     }
     if (!studentId) {
+      previousStudentId.current = "";
       setState({ loading: false, items: [], error: "" });
       return undefined;
     }
 
+    if (previousStudentId.current !== studentId) {
+      clearStudentCollectionCache(studentId);
+      previousStudentId.current = studentId;
+    }
     setState((s) => ({ ...s, loading: true, error: "" }));
 
     // Student scoped compound queries (studentId + date/from/dueDate) need
@@ -47,12 +58,39 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
 
     const statusKey = `student-collection:${auth?.currentUser?.uid || ""}:${collectionName}:${studentId}`;
     const cached = studentDataCache.get(statusKey);
-    if (cached && Date.now() - cached.savedAt < STUDENT_CACHE_MS) {
+    if (!live && cached && Date.now() - cached.savedAt < STUDENT_CACHE_MS) {
       setState({ loading: false, items: cached.items, error: "" });
       return undefined;
     }
 
     let cancelled = false;
+    if (live) {
+      const unsubscribe = onSnapshot(q, (snap) => {
+        if (cancelled) return;
+        publishReadStatus(statusKey, "", collectionName);
+        const items = snap.docs.map((d) => {
+          const data = d.data();
+          return { id: d.id, ...data, ...(data.date ? { date: dateKey(data.date) || data.date } : {}) };
+        });
+        if (orderByField) {
+          const sortValue = (value) => value?.toDate ? value.toDate().getTime() : value;
+          const direction = orderByDirection === "asc" ? 1 : -1;
+          items.sort((a, b) => {
+            const left = sortValue(a[orderByField]); const right = sortValue(b[orderByField]);
+            if (typeof left === "number" && typeof right === "number") return (left - right) * direction;
+            return String(left ?? "").localeCompare(String(right ?? "")) * direction;
+          });
+        }
+        setState({ loading: false, items, error: "" });
+      }, (err) => {
+        if (cancelled) return;
+        console.error(`Failed to load ${collectionName}:`, err);
+        const message = readErrorMessage(err, "Couldn't load this right now.");
+        publishReadStatus(statusKey, message, collectionName);
+        setState({ loading: false, items: [], error: message });
+      });
+      return () => { cancelled = true; unsubscribe(); publishReadStatus(statusKey, "", collectionName); };
+    }
     getDocs(q)
       .then((snap) => {
         if (cancelled) return;
@@ -71,7 +109,7 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
             return String(left ?? "").localeCompare(String(right ?? "")) * direction;
           });
         }
-        studentDataCache.set(statusKey, { savedAt: Date.now(), items });
+        if (items.length) studentDataCache.set(statusKey, { savedAt: Date.now(), items });
         setState({ loading: false, items, error: "" });
       })
       .catch((err) => {
@@ -84,7 +122,7 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
 
     return () => { cancelled = true; publishReadStatus(statusKey, "", collectionName); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionName, studentId, orderByField, orderByDirection, demo]);
+  }, [collectionName, studentId, orderByField, orderByDirection, demo, live]);
 
   return state;
 }

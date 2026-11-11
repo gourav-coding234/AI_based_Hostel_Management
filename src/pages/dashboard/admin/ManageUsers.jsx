@@ -173,14 +173,35 @@ export default function ManageUsers() {
     }
   }
 
-  async function saveParentLink(parent) {
-    const linkedStudentId = parentLinkDrafts[parent.id] ?? parent.linkedStudentId ?? "";
+  async function saveParentLink(parent, repair = false) {
+    const linkedStudentId = String(parentLinkDrafts[parent.id] ?? parent.linkedStudentId ?? "").trim();
+    const student = studentUsers.find((candidate) => candidate.id === linkedStudentId);
+    if (linkedStudentId && (!student || student.role !== "Student")) {
+      setParentLinkFeedback((current) => ({ ...current, [parent.id]: "Choose an existing Student account. The link must use that account's user ID." }));
+      return;
+    }
     setParentLinkSaving(parent.id);
     setParentLinkFeedback((current) => ({ ...current, [parent.id]: "" }));
     try {
+      if (linkedStudentId) {
+        const allocation = refData.students.find((record) => record.id === linkedStudentId) || {};
+        await updateDocument("students", linkedStudentId, {
+          name: allocation.name || student.name || "",
+          email: allocation.email || student.email || "",
+          ...(allocation.registrationNo || allocation.regNo || student.registrationNo || student.regNo
+            ? { registrationNo: allocation.registrationNo || allocation.regNo || student.registrationNo || student.regNo }
+            : {}),
+          ...(allocation.gender || student.gender ? { gender: allocation.gender || student.gender } : {}),
+          ...(allocation.branch || student.branch ? { branch: allocation.branch || student.branch } : {}),
+          ...(allocation.year || student.year ? { year: allocation.year || student.year } : {}),
+          ...(allocation.hostelResidence || allocation.wing || student.hostelResidence
+            ? { hostelResidence: allocation.hostelResidence || allocation.wing || student.hostelResidence }
+            : {}),
+        });
+      }
       await updateDocument("users", parent.id, { linkedStudentId });
       setUsers((list) => list.map((u) => u.id === parent.id ? { ...u, linkedStudentId } : u));
-      setParentLinkFeedback((current) => ({ ...current, [parent.id]: linkedStudentId ? "Linked. Ask the parent to reload." : "Student link removed." }));
+      setParentLinkFeedback((current) => ({ ...current, [parent.id]: linkedStudentId ? (repair ? "Student profile repaired and link saved. Ask the parent to reload." : "Student profile is ready and link saved. Ask the parent to reload.") : "Student link removed." }));
       logAudit({ actor: profile?.name || currentUser?.email || "Admin", action: "Updated parent-student link", target: `${parent.email} → ${linkedStudentId || "unlinked"}` }).catch(() => {});
     } catch (err) {
       console.error("Failed to update parent-student link:", err);
@@ -580,6 +601,11 @@ export default function ManageUsers() {
                         >
                           {parentLinkSaving === u.id ? "Saving…" : "Save link"}
                         </Button>
+                        {u.linkedStudentId && (
+                          <Button variant="outline" className="px-3 py-1.5 text-xs" disabled={parentLinkSaving === u.id} onClick={() => saveParentLink(u, true)}>
+                            Repair student profile
+                          </Button>
+                        )}
                         {parentLinkFeedback[u.id] && <span className="w-full text-xs text-slate-500">{parentLinkFeedback[u.id]}</span>}
                       </div>
                     )}

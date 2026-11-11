@@ -18,6 +18,7 @@ import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
 import { noticeAppliesTo } from "../../../utils/notices";
 import { computeFeeStatus } from "../../../utils/fees";
+import { isPassActive } from "../../../utils/gatePass";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -44,7 +45,7 @@ export default function Overview() {
   const fees = useStudentCollection("fees", studentId);
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
   const complaints = useStudentCollection("complaints", studentId);
-  const gatePasses = useStudentCollection("gatePasses", studentId);
+  const gatePasses = useStudentCollection("gatePasses", studentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", studentId);
   // Fetch a bit more than we display — filtering by wing happens client-side
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
@@ -93,7 +94,7 @@ export default function Overview() {
 
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
-  const activePass = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find((p) => p.status === "Approved");
+  const activePass = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find(isPassActive);
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">

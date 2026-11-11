@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getDocument, getCollection } from "../firebase/firestore";
 import { DEMO_STUDENT_ID, getDemoDocument, isDemoMode } from "../data/demoFixtures";
@@ -30,8 +30,13 @@ import { publishReadStatus } from "../firebase/readStatusEvents";
  *    (wing/room/bed/roommates)
  */
 export function useLinkedStudent() {
-  const { profile, loading: authLoading, error: authError } = useAuth();
+  const { profile, loading: authLoading, error: authError, refreshProfile } = useAuth();
   const linkedStudentId = profile?.linkedStudentId || "";
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(async () => {
+    await refreshProfile();
+    setRefreshKey((key) => key + 1);
+  }, [refreshProfile]);
 
   const [state, setState] = useState({
     loading: Boolean(linkedStudentId),
@@ -79,12 +84,43 @@ export function useLinkedStudent() {
         if (cancelled) return;
         publishReadStatus(statusKey, "", "students (parent link)");
         if (!studentRecord) {
+          // Older/imported student accounts may not have a room-allocation
+          // document yet. Keep the parent link usable and recover the name
+          // from the child's own rows, which are rule-scoped by studentId.
+          let fallback = {};
+          for (const collectionName of ["attendance", "fees", "gatePasses"]) {
+            try {
+              const rows = await getCollection(collectionName, { whereClauses: [["studentId", "==", linkedStudentId]], limitCount: 1 });
+              if (rows[0]) { fallback = rows[0]; break; }
+            } catch (lookupError) {
+              console.warn(`Could not use ${collectionName} for the linked student profile fallback:`, lookupError);
+            }
+          }
+          const registrationNo = fallback.registrationNo || fallback.regNo || "";
+          let academic = null;
+          if (registrationNo) {
+            try {
+              academic = await getDocument("studentRegister", registrationNo);
+              if (!academic) academic = (await getCollection("studentRegister", { whereClauses: [["regNo", "==", registrationNo]], limitCount: 1 }))[0] || null;
+            } catch (lookupError) {
+              console.warn("Could not load linked student's academic register fallback:", lookupError);
+            }
+          }
+          const recovered = { ...academic, ...fallback, name: fallback.studentName || academic?.name || academic?.studentName || "", registrationNo };
           setState({
             loading: false,
-            studentUser: null,
-            studentRecord: null,
-            notFound: true,
-            error: "We couldn't find the student record your account is linked to. Contact the hostel office.",
+            studentUser: {
+              id: linkedStudentId,
+              name: recovered.name,
+              email: recovered.email || "",
+              registrationNo,
+              branch: recovered.branch || "",
+              year: recovered.year || "",
+              hostelResidence: recovered.hostelResidence || recovered.wing || "",
+            },
+            studentRecord: recovered,
+            notFound: false,
+            error: "",
           });
           return;
         }
@@ -133,11 +169,12 @@ export function useLinkedStudent() {
       cancelled = true;
       publishReadStatus(`linked-student:${linkedStudentId}`);
     };
-  }, [linkedStudentId, authLoading, authError]);
+  }, [linkedStudentId, authLoading, authError, refreshKey]);
 
   return {
     linkedStudentId,
     notLinked: !linkedStudentId,
+    refresh,
     ...state,
   };
 }

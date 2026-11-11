@@ -4,6 +4,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { ScanIcon, CameraIcon, LogInIcon, LogOutIcon } from "../../../components/dashboard/security/icons";
 import { getDocument, recordGateMovement } from "../../../firebase/firestore";
+import { isPassOut, passStatus } from "../../../utils/gatePass";
 
 const QR_READER_ID = "gate-scan-reader";
 
@@ -222,7 +223,7 @@ export default function SecurityGateScan() {
       )}
 
       {searched && (
-        <Card title={`${searched.type} — ${searched.studentName}`} action={<Pill tone={searched.status}>{searched.status}</Pill>}>
+        <Card title={`${searched.type} — ${searched.studentName}`} action={<Pill tone={passStatus(searched)}>{passStatus(searched)}</Pill>}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Student</p>
@@ -238,7 +239,7 @@ export default function SecurityGateScan() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current trip status</p>
-              <p className="mt-1 text-sm text-ink">{searched.tripState}</p>
+              <p className="mt-1 text-sm text-ink">{searched.tripState || "Not started"}</p>
             </div>
           </div>
 
@@ -246,29 +247,27 @@ export default function SecurityGateScan() {
             <p className="mt-5 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{verifyError}</p>
           )}
 
-          {searched.status !== "Approved" ? (
-            <p className="mt-5 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
-              {searched.status === "Completed"
-                ? gateErrorMessage("ALREADY_RETURNED")
-                : "This pass is not currently approved — do not allow exit/entry on it."}
-            </p>
-          ) : (
+          {passStatus(searched) === "Approved" ? (
             <div className="mt-5 flex flex-wrap gap-3">
               <Button
                 variant="outline"
                 onClick={() => logDirection("Out")}
-                disabled={logging || searched.tripState === "Out" || searched.tripState === "Returned" || isExpired}
+                disabled={logging || isExpired}
               >
                 <LogOutIcon /> Log exit
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => logDirection("In")}
-                disabled={logging || searched.tripState !== "Out"}
-              >
-                <LogInIcon /> Log entry
-              </Button>
             </div>
+          ) : isPassOut(searched) ? (
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={() => logDirection("In")} disabled={logging}>
+                <LogInIcon /> {logging ? "Saving…" : "End journey / Log entry"}
+              </Button>
+              <span className="text-sm text-slate-500">Student is currently OUT. You can record return even if the pass window has expired.</span>
+            </div>
+          ) : (
+            <p className="mt-5 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
+              {passStatus(searched) === "Completed" ? gateErrorMessage("ALREADY_RETURNED") : `This pass is ${passStatus(searched).toLowerCase()} and cannot be used to log movement.`}
+            </p>
           )}
 
           {justLogged && (

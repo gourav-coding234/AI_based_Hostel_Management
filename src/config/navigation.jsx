@@ -43,7 +43,7 @@ import {
 } from "../components/dashboard/student/icons";
 
 import { ShieldIcon } from "../components/dashboard/parent/icons";
-import { ScanIcon, ListIcon } from "../components/dashboard/security/icons";
+import { ScanIcon } from "../components/dashboard/security/icons";
 
 export const NAVIGATION = {
   [ROLES.ADMIN]: [
@@ -187,8 +187,7 @@ export const NAVIGATION = {
     {
       section: "Gate Desk",
       items: [
-        { label: "Gate Scan", to: "/dashboard/security/gate-scan", icon: <ScanIcon /> },
-        { label: "In & Out Register", to: "/dashboard/security/in-out", icon: <ListIcon /> },
+        { label: "Gate Desk", to: "/dashboard/security/gate-desk", icon: <ScanIcon /> },
         { label: "Attendance", to: "/dashboard/security/attendance", icon: <CheckSquareIcon /> },
         { label: "Visitor Log", to: "/dashboard/security/visitors", icon: <UserPlusIcon /> },
       ],

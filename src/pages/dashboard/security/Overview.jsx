@@ -13,13 +13,13 @@ import {
   CalendarClockIcon,
   ListIcon,
 } from "../../../components/dashboard/security/icons";
-import { useCollections } from "../../../hooks/useCollection";
+import { useCollection, useCollections } from "../../../hooks/useCollection";
+import { isPassActive, isPassOut } from "../../../utils/gatePass";
 
 // Every target below is a route that SecurityDashboard.jsx actually mounts
 // (and that the Security sidebar links to).
 const QUICK_ACTIONS = [
-  { label: "Scan Gate Pass", to: "/dashboard/security/gate-scan" },
-  { label: "In/Out Register", to: "/dashboard/security/in-out" },
+  { label: "Gate Desk", to: "/dashboard/security/gate-desk" },
   { label: "Visitor Log", to: "/dashboard/security/visitors" },
   { label: "Incident Reports", to: "/dashboard/security/incidents" },
   { label: "Attendance", to: "/dashboard/security/attendance" },
@@ -62,7 +62,6 @@ export default function SecurityOverview() {
   const todayStart = todayStartDate.toISOString();
 
   const { data, loading, error } = useCollections({
-    gatePasses: { name: "gatePasses", options: { where: [["status", "in", ["Approved", "journey_started"]]], limitCount: 100 } },
     // Approved leave students who physically left and have not returned.
     leaveLogs: { name: "leaveLogs", options: { where: [["status", "==", "Left"]] } },
     gateLogs: { name: "inOutLogs", options: { orderByField: "timeSort", limitCount: FEED_LIMIT } },
@@ -76,7 +75,10 @@ export default function SecurityOverview() {
     // Warden and Security Attendance pages write to.
     attendance: { name: "attendance", options: { where: [["date", "==", attendanceDate]], limitCount: 500 } },
   }, { live: false, maxDocs: 500, cacheMs: 30_000 });
-  const { gatePasses, leaveLogs, gateLogs, visitors: rawVisitors, visitorsInside, visitorsToday, incidents, attendance } = data;
+  const passesQuery = useCollection("gatePasses", { where: [["status", "in", ["Approved", "Out", "journey_started"]]], limitCount: 500 });
+  const movementQuery = useCollection("inOutStatus", { limitCount: 1000 });
+  const gatePasses = passesQuery.data;
+  const { leaveLogs, gateLogs, visitors: rawVisitors, visitorsInside, visitorsToday, incidents, attendance } = data;
 
   // Newest check-in first. Sorted here (not via a Firestore orderBy, which
   // would silently drop records that lack the ordered field).
@@ -98,7 +100,7 @@ export default function SecurityOverview() {
     const todayKey = localDateKey(now);
 
     // --- Gate passes ---
-    const passesOut = gatePasses.filter((p) => p.tripState === "Out");
+    const passesOut = gatePasses.filter(isPassOut);
     const overdue = passesOut.filter((p) => p.to && p.to < nowKey).length;
     // A student is "outside" if they are out on a gate pass OR marked Left on
     // approved leave; counted once per student even if both apply.
@@ -106,9 +108,9 @@ export default function SecurityOverview() {
     leaveLogs.forEach((l) => outIds.add(l.studentId || `leave:${l.id}`));
     // Approved, not yet returned, and either already out or still inside
     // its valid window.
-    const activePasses = gatePasses.filter(
-      (p) => ["Approved", "journey_started"].includes(p.status) && p.tripState !== "Returned" && (p.tripState === "Out" || !p.to || p.to >= nowKey)
-    ).length;
+    const activePasses = gatePasses.filter((p) => isPassActive(p) && (isPassOut(p) || !p.to || p.to >= nowKey)).length;
+    const movementOut = movementQuery.data.filter((movement) => movement.status === "OUT").map((movement) => movement.studentId || movement.id);
+    movementOut.forEach((id) => outIds.add(id));
 
     // --- Visitors ---
     const isToday = (v) => Boolean(visitorKey(v)) && localDateKey(new Date(visitorKey(v))) === todayKey;
@@ -152,10 +154,10 @@ export default function SecurityOverview() {
       attendanceRecords: attendance.length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gatePasses, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
+  }, [gatePasses, movementQuery.data, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
 
-  if (error) return <ErrorState message={error} />;
-  if (loading) return <LoadingState label="Loading gate overview…" />;
+  if (error || passesQuery.error || movementQuery.error) return <ErrorState message={error || passesQuery.error || movementQuery.error} />;
+  if (loading || passesQuery.loading || movementQuery.loading) return <LoadingState label="Loading gate overview…" />;
 
   const recentVisitors = visitors.slice(0, FEED_LIMIT);
 

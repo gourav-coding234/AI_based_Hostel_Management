@@ -7,6 +7,7 @@ import { addDocument } from "../../../firebase/firestore";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../../../data/demoFixtures";
+import { isPassActive, isPassOut, passStatus } from "../../../utils/gatePass";
 
 const GATE_PASS_TYPES = ["Outing", "Home Visit", "Medical", "Other"];
 
@@ -152,8 +153,8 @@ export default function GatePass() {
   }, []);
   // Recomputed fresh from `passes` every render — nothing about which pass
   // is "active" is ever cached in state or localStorage.
-  const activePass = useMemo(() => pickActivePass(passes.filter((p) => p.status === "Approved"), now), [passes, now]);
-  const journeyPass = passes.find((p) => p.status === "journey_started" || p.tripState === "Out");
+  const activePass = useMemo(() => pickActivePass(passes.filter((p) => isPassActive(p) && !isPassOut(p)), now), [passes, now]);
+  const journeyPass = passes.find(isPassOut);
   const pendingPass = passes.find((p) => p.status === "Pending");
 
   useEffect(() => {
@@ -205,7 +206,7 @@ export default function GatePass() {
             <p className="py-10 text-center text-sm text-rose-600">{gatePasses.error}</p>
           ) : journeyPass ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <Pill tone="Pending">Journey Started</Pill>
+                <Pill tone={passStatus(journeyPass)}>{passStatus(journeyPass)}</Pill>
               <p className="font-display text-base font-semibold text-ink">{journeyPass.type} · {journeyPass.id}</p>
               <p className="text-sm text-slate-500">Exit recorded {journeyPass.exitTime?.toDate ? journeyPass.exitTime.toDate().toLocaleString("en-IN") : "by security"}.</p>
               <p className="max-w-sm text-xs text-slate-400">This pass has already been used for exit and its QR is disabled. Security will record your return at the gate.</p>
@@ -321,7 +322,7 @@ export default function GatePass() {
                     <td className="py-2.5 text-slate-400">{p.id}</td>
                     <td className="py-2.5 font-medium text-ink">{p.type}</td>
                     <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>
-                    <td className="py-2.5"><Pill tone={p.status}>{p.status}</Pill></td>
+                      <td className="py-2.5"><Pill tone={passStatus(p)}>{passStatus(p)}</Pill></td>
                     <td className="py-2.5 pr-0 text-right text-slate-500">{p.tripState}</td>
                   </tr>
                 ))}

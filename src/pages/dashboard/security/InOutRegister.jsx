@@ -8,7 +8,9 @@ import LeaveExit from "./LeaveExit";
 import { toCsvText } from "../../../utils/csv";
 import { useAuth } from "../../../context/AuthContext";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
-import { recordManualMovement } from "../../../firebase/firestore";
+import { recordManualMovement, recordGateMovement } from "../../../firebase/firestore";
+import { isPassOut } from "../../../utils/gatePass";
+import { normalizeGender } from "../../../hooks/useAttendanceRoster";
 
 const FILTERS = ["All", "In", "Out"];
 
@@ -16,6 +18,7 @@ const columns = [
   { key: "studentName", label: "Student", sortable: true },
   { key: "room", label: "Room", render: (l) => l.room || "—" },
   { key: "registrationNo", label: "Registration No", render: (l) => l.registrationNo || "—" },
+  { key: "gender", label: "Gender", render: (l) => l.gender || "Unspecified" },
   { key: "gatePassId", label: "Pass ID", render: (l) => l.gatePassId || "Manual" },
   { key: "direction", label: "Direction", render: (l) => <Pill tone={l.direction === "Out" || l.type === "OUT" ? "Pending" : "Approved"}>{l.direction || l.type}</Pill> },
   { key: "method", label: "Method", render: (l) => l.method || "Scan" },
@@ -42,27 +45,35 @@ function chronoKey(l) {
 
 export default function SecurityInOutRegister() {
   const { user, profile } = useAuth();
-  const logsQuery = useCollection("inOutLogs", { orderByField: "timeSort" });
-  const oldLogsQuery = useCollection("gateLogs", { orderByField: "timeSort" });
-  const statusQuery = useCollection("inOutStatus");
+  const logsQuery = useCollection("inOutLogs", { orderByField: "timeSort", limitCount: 500 });
+  const oldLogsQuery = useCollection("gateLogs", { orderByField: "timeSort", limitCount: 500 });
+  const statusQuery = useCollection("inOutStatus", { limitCount: 1000 });
+  const passesQuery = useCollection("gatePasses", { limitCount: 1000 });
   const { directory, loading: directoryLoading } = useStudentDirectory();
-  // gateLogs don't store a wing, so it is looked up from the student's
-  // allocation record (same fallback the rest of the app uses).
-  const studentsQuery = useCollection("students");
   const [filter, setFilter] = useState("All");
+  const [genderFilter, setGenderFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const actor = { uid: user?.uid || "", name: profile?.name || user?.email || "Security" };
 
-  const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
+  const studentById = useMemo(() => new Map(directory.map((student) => [student.id, student])), [directory]);
   const allLogs = useMemo(() => [
     ...logsQuery.data,
     ...oldLogsQuery.data.map((l) => ({ ...l, gatePassId: l.passId, type: String(l.direction || "").toUpperCase() })),
-  ].map((log) => ({ ...log, registrationNo: log.registrationNo || registrationByStudent.get(log.studentId) || "" })), [logsQuery.data, oldLogsQuery.data, registrationByStudent]);
+  ].map((log) => {
+    const student = studentById.get(log.studentId) || {};
+    return { ...log, registrationNo: log.registrationNo || student.regNo || "", gender: log.gender || student.gender || "Unspecified", wing: log.wing || student.wing || "" };
+  }), [logsQuery.data, oldLogsQuery.data, studentById]);
   const statusByStudent = useMemo(() => new Map(statusQuery.data.map((entry) => [entry.studentId || entry.id, entry.status])), [statusQuery.data]);
+  const activePassByStudent = useMemo(() => new Map(passesQuery.data.filter(isPassOut).map((pass) => [pass.studentId, pass])), [passesQuery.data]);
   const matchedStudents = directory.filter((s) => `${s.name} ${s.regNo} ${s.room}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 8);
-  const outCount = directory.filter((student) => statusByStudent.get(student.id) === "OUT").length;
+  const currentlyOut = directory.filter((student) => statusByStudent.get(student.id) === "OUT");
+  const outByGender = useMemo(() => ({
+    Male: currentlyOut.filter((student) => normalizeGender(student.gender) === "Male").length,
+    Female: currentlyOut.filter((student) => normalizeGender(student.gender) === "Female").length,
+    Unspecified: currentlyOut.filter((student) => normalizeGender(student.gender) === "Unspecified").length,
+  }), [currentlyOut]);
 
   async function markManual(student) {
     if (busy) return;
@@ -73,14 +84,26 @@ export default function SecurityInOutRegister() {
     finally { setBusy(""); }
   }
 
-  const rows = useMemo(() => {
-    return allLogs.filter((l) => filter === "All" || (l.direction || (l.type === "OUT" ? "Out" : "In")) === filter);
-  }, [allLogs, filter]);
+  async function endJourney(student) {
+    if (busy) return;
+    setBusy(student.id);
+    setActionError("");
+    try {
+      const activePass = activePassByStudent.get(student.id);
+      if (activePass) await recordGateMovement(activePass.id, "In", actor, student.id);
+      else await recordManualMovement(student, actor);
+    } catch (err) {
+      console.error("Failed to end the student's journey:", err);
+      setActionError("Could not record the student's return. Refresh the register and try again.");
+    } finally {
+      setBusy("");
+    }
+  }
 
-  const wingByStudent = useMemo(
-    () => new Map(studentsQuery.data.map((st) => [st.id, st.wing || st.hostelResidence || ""])),
-    [studentsQuery.data]
-  );
+  const rows = useMemo(() => {
+    return allLogs.filter((l) => (filter === "All" || (l.direction || (l.type === "OUT" ? "Out" : "In")) === filter)
+      && (genderFilter === "All" || normalizeGender(l.gender) === genderFilter));
+  }, [allLogs, filter, genderFilter]);
 
   // Export the WHOLE filtered dataset from the live gateLogs query — not the
   // paginated slice the table shows — oldest first.
@@ -93,7 +116,8 @@ export default function SecurityInOutRegister() {
     { label: "Registration No", value: (l) => l.registrationNo || l.studentId },
     { label: "Student Name", value: (l) => l.studentName },
     { label: "Room", value: (l) => l.room },
-    { label: "Block/Wing", value: (l) => l.wing || wingByStudent.get(l.studentId) || "" },
+    { label: "Block/Wing", value: (l) => l.wing || "" },
+    { label: "Gender", value: (l) => l.gender || "Unspecified" },
     { label: "Gate Pass ID", value: (l) => l.gatePassId || l.passId || "Manual" },
     { label: "Direction", value: (l) => l.direction || l.type },
     { label: "Method", value: (l) => l.method || "scan" },
@@ -117,8 +141,8 @@ export default function SecurityInOutRegister() {
           </Button>
         }
       >
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          {[["Total", directory.length], ["In", Math.max(directory.length - outCount, 0)], ["Out", outCount]].map(([label, count]) => <div key={label} className="rounded-xl border border-slate-200 p-3 text-center"><p className="font-display text-xl font-semibold text-ink">{count}</p><p className="text-xs text-slate-500">{label}</p></div>)}
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[["Total", directory.length], ["In", Math.max(directory.length - currentlyOut.length, 0)], ["Out", currentlyOut.length], ["Out · Boys / Girls / Unspecified", `${outByGender.Male} / ${outByGender.Female} / ${outByGender.Unspecified}`]].map(([label, count]) => <div key={label} className="rounded-xl border border-slate-200 p-3 text-center"><p className="font-display text-xl font-semibold text-ink">{count}</p><p className="text-xs text-slate-500">{label}</p></div>)}
         </div>
         <div className="mb-6 rounded-xl border border-slate-200 p-4">
           <h3 className="font-display font-semibold text-ink">Manual in / out</h3>
@@ -127,12 +151,25 @@ export default function SecurityInOutRegister() {
           {actionError && <p role="alert" className="mt-2 text-sm text-rose-600">{actionError}</p>}
           {search.trim() && <ul className="mt-3 divide-y divide-slate-100">{matchedStudents.map((student) => {
             const status = statusByStudent.get(student.id) || "IN";
+            const activePass = activePassByStudent.get(student.id);
             return <li key={student.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
               <span className="text-sm text-ink">{student.name} · {student.regNo || "No registration number"} · {student.room || "No room"}</span>
-              <div className="flex items-center gap-2"><Pill tone={status === "OUT" ? "Pending" : "Approved"}>{status}</Pill><Button className="px-3 py-1 text-xs" disabled={Boolean(busy) || directoryLoading} onClick={() => markManual(student)}>{busy === student.id ? "Saving…" : `Mark ${status === "OUT" ? "IN" : "OUT"}`}</Button></div>
+              <div className="flex items-center gap-2"><Pill tone={status === "OUT" ? "Pending" : "Approved"}>{status}</Pill><Button className="px-3 py-1 text-xs" disabled={Boolean(busy) || directoryLoading} onClick={() => status === "OUT" ? endJourney(student) : markManual(student)}>{busy === student.id ? "Saving…" : status === "OUT" ? "End journey / Mark IN" : "Mark OUT"}</Button></div>
+              {status === "OUT" && <p className="w-full text-xs text-slate-500">{activePass ? `${activePass.type || "Pass"}: ${activePass.reason || "No reason"} · Exit ${activePass.exitTime?.toDate ? activePass.exitTime.toDate().toLocaleString("en-IN") : "time unavailable"}` : "Manual exit · no active gate pass"}</p>}
             </li>;
           })}</ul>}
         </div>
+        {currentlyOut.length > 0 && <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+          <h3 className="font-display font-semibold text-ink">Currently out · {currentlyOut.length}</h3>
+          <ul className="mt-2 divide-y divide-amber-100">{currentlyOut.map((student) => {
+            const activePass = activePassByStudent.get(student.id);
+            return <li key={student.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <span className="text-sm text-ink">{student.name} · {student.gender || "Unspecified"} · {student.wing || "No wing"}</span>
+              <Button className="px-3 py-1 text-xs" disabled={Boolean(busy)} onClick={() => endJourney(student)}>{busy === student.id ? "Saving…" : activePass ? "End journey / Mark IN" : "Mark IN"}</Button>
+              <p className="w-full text-xs text-slate-500">{activePass ? `${activePass.type || "Pass"}: ${activePass.reason || "No reason"} · Exit ${activePass.exitTime?.toDate ? activePass.exitTime.toDate().toLocaleString("en-IN") : "time unavailable"}` : "Manual exit · no active gate pass"}</p>
+            </li>;
+          })}</ul>
+        </div>}
         <div className="mb-4 flex gap-2 rounded-full border border-slate-200 bg-slate-50/60 p-1 w-fit">
           {FILTERS.map((f) => (
             <button
@@ -147,12 +184,15 @@ export default function SecurityInOutRegister() {
             </button>
           ))}
         </div>
+        <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter gate activity by gender">
+          {["All", "Male", "Female", "Unspecified"].map((gender) => <button key={gender} type="button" onClick={() => setGenderFilter(gender)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${genderFilter === gender ? "bg-teal-700 text-white" : "border border-slate-200 text-slate-600"}`}>{gender === "Male" ? "Boys" : gender === "Female" ? "Girls" : gender === "All" ? "All genders" : gender}</button>)}
+        </div>
 
         <DataTable
           columns={columns}
           rows={rows}
-          loading={logsQuery.loading || oldLogsQuery.loading}
-          searchKeys={["studentName", "registrationNo", "room", "gatePassId", "passId", "guard"]}
+          loading={logsQuery.loading || oldLogsQuery.loading || passesQuery.loading || statusQuery.loading}
+          searchKeys={["studentName", "registrationNo", "wing", "gender", "gatePassId", "passId", "guard"]}
           searchPlaceholder="Search by student name or registration number…"
           emptyTitle="No gate activity logged yet"
           emptyDescription="Entries logged from Gate Scan will show up here."

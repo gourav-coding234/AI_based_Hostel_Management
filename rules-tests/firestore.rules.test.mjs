@@ -1,7 +1,7 @@
 // Run:  npm i -D @firebase/rules-unit-testing firebase vitest   (or use node:test as below)
 //       firebase emulators:exec --only firestore "node --test rules-tests/"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { before, after, describe, it } from "node:test";
 
@@ -57,6 +57,10 @@ describe("attendance", () => {
   it("student/parent see only own/linked child", async () => {
     await assertSucceeds(getDoc(doc(db("stu1"), "attendance", "stu1_2026-09-28")));
     await assertSucceeds(getDoc(doc(db("par1"), "attendance", "stu1_2026-09-28")));
+    await assertSucceeds(getDocs(query(collection(db("par1"), "attendance"), where("studentId", "==", "stu1"))));
+    await assertSucceeds(getDocs(query(collection(db("par1"), "fees"), where("studentId", "==", "stu1"))));
+    await assertSucceeds(getDocs(query(collection(db("par1"), "gatePasses"), where("studentId", "==", "stu1"))));
+    await assertSucceeds(getDocs(query(collection(db("par1"), "leaveRequests"), where("studentId", "==", "stu1"))));
     await assertFails(getDoc(doc(db("stu2"), "attendance", "stu1_2026-09-28")));
     await assertFails(getDoc(doc(db("par2"), "attendance", "stu1_2026-09-28")));
   });
@@ -66,12 +70,12 @@ describe("gate passes", () => {
   const p = (id) => doc(db("sec"), "gatePasses", id);
   it("security reads", () => assertSucceeds(getDoc(p("fresh"))));
   it("OUT ok; RETURN ok", async () => {
-    await assertSucceeds(updateDoc(p("fresh"), { tripState: "Out", updatedAt: serverTimestamp() }));
-    await assertSucceeds(updateDoc(p("out"), { tripState: "Returned", status: "Completed", updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(p("fresh"), { status: "Out", tripState: "Out", exitTime: serverTimestamp(), scannedBy: "Guard", scannedByUid: "sec", updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(p("out"), { tripState: "Returned", status: "Completed", entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: "sec", updatedAt: serverTimestamp() }));
   });
   it("cannot touch protected fields, even with a valid transition", async () => {
     for (const extra of [{ studentId: "x" }, { studentName: "x" }, { from: "x" }, { to: "x" }, { type: "x" }, { reason: "x" }, { approvedBy: "x" }])
-      await assertFails(updateDoc(doc(db("sec"), "gatePasses", "out"), { tripState: "Returned", status: "Completed", ...extra }));
+      await assertFails(updateDoc(doc(db("sec"), "gatePasses", "out"), { tripState: "Returned", status: "Completed", entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: "sec", ...extra }));
   });
   it("cannot approve/reject/reopen", async () => {
     await assertFails(updateDoc(p("pending"), { status: "Approved" }));
@@ -115,7 +119,7 @@ describe("logs, visitors, incidents", () => {
 
 describe("other collections", () => {
   it("emergencyContacts & notices: read for Security/Parent, write staff only", async () => {
-    for (const uid of ["sec", "par1"]) {
+    for (const uid of ["sec", "par1", "stu1"]) {
       await assertSucceeds(getDoc(doc(db(uid), "emergencyContacts", "e1")));
       await assertSucceeds(getDoc(doc(db(uid), "notices", "n1")));
       await assertFails(setDoc(doc(db(uid), "emergencyContacts", "e9"), { name: "x" }));

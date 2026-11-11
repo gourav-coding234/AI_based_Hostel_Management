@@ -1,4 +1,4 @@
-import { EmptyState } from "../student/ui";
+import { Button, EmptyState } from "../student/ui";
 import { UserIcon } from "./icons";
 
 /**
@@ -11,24 +11,23 @@ import { UserIcon } from "./icons";
  *   if (status) return status;
  *   // ...render real content using linked.studentUser / linked.studentRecord
  */
-export default function LinkedStudentStatus({ loading, notLinked, notFound, error }) {
+export default function LinkedStudentStatus({ loading, notLinked, notFound, error, refresh }) {
   if (loading) {
     return <p className="py-10 text-center text-sm text-slate-400">Loading your child's info…</p>;
   }
   if (notLinked) {
     return (
-      <EmptyState
-        icon={<UserIcon />}
-        title="Your account isn't linked to a student yet"
-        description="Contact the hostel office. They'll link your account to your child's student record."
-      />
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <EmptyState icon={<UserIcon />} title="Your account isn't linked to a student yet" description="Contact the hostel office. They'll link your account to your child's student record." />
+        {refresh && <Button variant="outline" onClick={refresh}>Refresh link</Button>}
+      </div>
     );
   }
   if (notFound) {
-    return <EmptyState icon={<UserIcon />} title="Linked student record not found" description={error} />;
+    return <div className="flex flex-col items-center gap-3 py-8"><EmptyState icon={<UserIcon />} title="Linked student profile unavailable" description={error || "Your linked child has no room profile yet. Ask the hostel office to repair the link."} />{refresh && <Button variant="outline" onClick={refresh}>Refresh student link</Button>}</div>;
   }
   if (error) {
-    return <EmptyState icon={<UserIcon />} title="Couldn't load your child's info" description={error} />;
+    return <div className="flex flex-col items-center gap-3 py-8"><EmptyState icon={<UserIcon />} title="Couldn't load your child's info" description={error} />{refresh && <Button variant="outline" onClick={refresh}>Retry</Button>}</div>;
   }
   return null;
 }

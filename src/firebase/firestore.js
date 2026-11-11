@@ -235,7 +235,9 @@ export async function bulkUpdateDocuments(collectionName, records) {
  * same records instead of creating duplicates.
  */
 export async function saveAttendanceForDate(records, existingIdByStudentId, markedBy) {
-  const CHUNK = 450;
+  // Gender backfill adds a second student-document write for each attendance
+  // row, so keep those batches under Firestore's 500-write limit.
+  const CHUNK = markedBy?.persistStudentGender ? 240 : 450;
   let written = 0;
 
   for (let i = 0; i < records.length; i += CHUNK) {
@@ -255,8 +257,7 @@ export async function saveAttendanceForDate(records, existingIdByStudentId, mark
           studentName: r.studentName,
           registrationNo: r.registrationNo || "",
           wing: r.wing || "",
-          room: r.room || "",
-          bed: r.bed || "",
+          ...(r.gender ? { gender: r.gender } : {}),
           date: r.date,
           status: r.status,
           markedBy: markedBy?.uid || null,
@@ -265,6 +266,9 @@ export async function saveAttendanceForDate(records, existingIdByStudentId, mark
         },
         { merge: true }
       );
+      if (markedBy?.persistStudentGender && ["Male", "Female"].includes(r.gender)) {
+        batch.set(doc(db, "students", r.studentId), { gender: r.gender, updatedAt: serverTimestamp() }, { merge: true });
+      }
       written += 1;
     }
     await batch.commit();
@@ -828,25 +832,28 @@ export async function recordGateMovement(passId, direction, guard, expectedStude
     const studentRef = doc(db, "students", pass.studentId);
     const studentSnap = await tx.get(studentRef);
     const studentRecord = studentSnap.exists() ? studentSnap.data() : {};
+    const movementSnap = await tx.get(statusRef);
+    const movementStatus = movementSnap.exists() ? movementSnap.data().status : "IN";
     const registrationNo = pass.registrationNo || pass.regNo || studentRecord.registrationNo || studentRecord.regNo || "";
 
     if (expectedStudentId && pass.studentId && pass.studentId !== expectedStudentId) {
       throw new Error("STUDENT_MISMATCH");
     }
     if (direction === "Out") {
+      if (movementStatus === "OUT") throw new Error("ALREADY_OUT");
       if (pass.status !== "Approved") throw new Error("NOT_APPROVED");
       if (pass.tripState === "Out") throw new Error("ALREADY_OUT");
       if (pass.tripState === "Returned") throw new Error("ALREADY_RETURNED");
       const to = pass.to ? new Date(pass.to) : null;
       if (to && !Number.isNaN(to.getTime()) && now > to) throw new Error("EXPIRED");
     } else {
-      if (pass.status !== "journey_started" && pass.tripState !== "Out") throw new Error("NOT_OUT_YET");
+      if (pass.status !== "Out" && pass.status !== "journey_started" && pass.tripState !== "Out") throw new Error("NOT_OUT_YET");
     }
 
     const nextTripState = direction === "Out" ? "Out" : "Returned";
     const passUpdate = direction === "Out"
-      ? { status: "journey_started", tripState: nextTripState, exitTime: serverTimestamp(), scannedBy: guardName, scannedByUid: guardId }
-      : { status: "completed", tripState: nextTripState, entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: guardId };
+      ? { status: "Out", tripState: nextTripState, exitTime: serverTimestamp(), scannedBy: guardName, scannedByUid: guardId }
+      : { status: "Completed", tripState: nextTripState, entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: guardId };
     // A pass that has been out and is now returned is done — this is the
     // only place "Completed" ever gets set, so the status filter on the
     // admin/warden GatePasses pages actually has something to match.
@@ -864,6 +871,7 @@ export async function recordGateMovement(passId, direction, guard, expectedStude
       studentName: pass.studentName || studentRecord.name || "",
       room: pass.room || studentRecord.room || "",
       wing: pass.wing || studentRecord.wing || studentRecord.hostelResidence || "",
+      gender: pass.gender || studentRecord.gender || "Unspecified",
       gatePassId: passId,
       type: direction.toUpperCase(),
       method: "scan",
@@ -901,6 +909,7 @@ export async function recordManualMovement(student, guard) {
       studentName: student.name || "",
       room: student.room || "",
       wing: student.wing || "",
+      gender: student.gender || "Unspecified",
       type,
       direction: type === "OUT" ? "Out" : "In",
       method: "manual",

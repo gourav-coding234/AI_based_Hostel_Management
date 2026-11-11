@@ -5,6 +5,7 @@ import DataTable from "../../../components/ui/DataTable";
 import { CheckSquareIcon } from "../../../components/dashboard/security/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
+import { ATTENDANCE_GENDER_GROUPS, normalizeGender, useAttendanceRoster } from "../../../hooks/useAttendanceRoster";
 import { saveAttendanceForDate, getCollection } from "../../../firebase/firestore";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
 
@@ -45,8 +46,7 @@ const EXCEL_COLUMNS = [
   { label: "Registration Number", value: (r) => r.registrationNo || r.studentId },
   { label: "Student Name", value: (r) => r.studentName },
   { label: "Block/Wing", value: (r) => r.wing || "" },
-  { label: "Room", value: (r) => r.room || "" },
-  { label: "Bed", value: (r) => r.bed || "" },
+  { label: "Gender", value: (r) => r.gender || "Unspecified" },
   { label: "Status", value: (r) => r.status },
   { label: "Marked By", value: (r) => r.markedByName || "" },
   { label: "Marked At", value: (r) => formatMarkedAtFull(r.markedAt) },
@@ -59,10 +59,7 @@ export default function SecurityAttendance() {
   // left-joined). Security only reads room/bed/wing from it — nothing on
   // this page can edit them.
   const { directory, loading: directoryLoading } = useStudentDirectory();
-  const wings = useMemo(() => [...new Set(directory.map((s) => s.wing).filter(Boolean))].sort(), [directory]);
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
-  const [selectedWing, setSelectedWing] = useState("");
-  useEffect(() => { if (!selectedWing && wings.length) setSelectedWing(wings[0]); }, [selectedWing, wings]);
 
   // The selected date's records from the shared `attendance` collection
   // (live), whoever wrote them — Warden or Security.
@@ -78,10 +75,7 @@ export default function SecurityAttendance() {
     return map;
   }, [attendance]);
 
-  const roster = useMemo(
-    () => directory.filter((s) => selectedWing && s.wing === selectedWing).map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
-    [directory, existingForDate, selectedWing]
-  );
+  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal } = useAttendanceRoster(directory, existingForDate);
 
   // Only the guard's unsaved edits live here, keyed by studentId. A row shows
   // `edits[id] ?? saved status ?? Not Marked`, so saved data (including what
@@ -169,8 +163,7 @@ export default function SecurityAttendance() {
       registrationNo: s.regNo || "",
       studentName: s.name,
       wing: s.wing,
-      room: s.room,
-      bed: s.bed,
+      gender: normalizeGender(s.gender),
       date: selectedDate,
       status: edits[s.id],
     }));
@@ -222,8 +215,6 @@ export default function SecurityAttendance() {
     { key: "name", label: "Name", sortable: true },
     { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
     { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
-    { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
-    { key: "bed", label: "Bed", render: (r) => r.bed || "—" },
     {
       key: "status",
       label: "Attendance",
@@ -298,21 +289,27 @@ export default function SecurityAttendance() {
         subtitle="Select one wing, mark the whole roster, then adjust individual students. Existing records are updated without creating duplicates."
       >
         <div className="flex flex-col gap-4">
-          <Field label="Wing">
-            <select className={`${inputCls} sm:w-72`} value={selectedWing} onChange={(e) => setSelectedWing(e.target.value)}>
-              <option value="">Select a wing first</option>
-              {wings.map((wing) => <option key={wing} value={wing}>{wing}</option>)}
-            </select>
-          </Field>
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Attendance hostel gender">
+            {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => (
+              <button key={id} type="button" role="tab" aria-selected={selectedGender === id} onClick={() => setSelectedGender(id)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedGender === id ? "bg-navy-950 text-white" : "border border-slate-200 text-slate-600 hover:border-teal-400"}`}>
+                {label} · {genderCounts[id].total}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">
+            {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
+          </p>
+          <p className="text-xs text-slate-500">Roster total: {rosterTotal}. Students without a recorded gender appear under Unspecified.</p>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {changed.length} unsaved change{changed.length === 1 ? "" : "s"}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!selectedWing || saving}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!roster.length || saving}>
                 Mark all Present
               </Button>
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!selectedWing || saving}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!roster.length || saving}>
                 Mark all Absent
               </Button>
             </div>
@@ -322,8 +319,8 @@ export default function SecurityAttendance() {
             columns={rosterColumns}
             rows={roster}
             loading={loading}
-            searchKeys={["name", "regNo", "room"]}
-            searchPlaceholder="Search by name, room, or registration number…"
+            searchKeys={["name", "regNo", "wing"]}
+            searchPlaceholder="Search by name, wing, or registration number…"
             emptyTitle="No students in the directory yet"
             emptyDescription="Students will appear here once Wardens/Admins add accounts and room allocations."
             emptyIcon={<CheckSquareIcon />}
@@ -334,7 +331,7 @@ export default function SecurityAttendance() {
           {saveMessage && <p className="text-sm text-teal-700">{saveMessage}</p>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSaveAttendance} disabled={saving || loading || !selectedWing || changed.length === 0}>
+            <Button onClick={handleSaveAttendance} disabled={saving || loading || !roster.length || changed.length === 0}>
               {saving ? "Saving…" : "Save attendance"}
             </Button>
             <Button

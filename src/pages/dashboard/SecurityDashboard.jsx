@@ -1,8 +1,7 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import Overview from "./security/Overview";
-import GateScan from "./security/GateScan";
-import InOutRegister from "./security/InOutRegister";
+import GateDesk from "./security/GateDesk";
 import Attendance from "./security/Attendance";
 import VisitorLog from "./security/VisitorLog";
 import IncidentReports from "./security/IncidentReports";
@@ -16,8 +15,9 @@ export default function SecurityDashboard() {
       <Routes>
         <Route index element={<Overview />} />
         <Route path="profile" element={<Profile />} />
-        <Route path="gate-scan" element={<GateScan />} />
-        <Route path="in-out" element={<InOutRegister />} />
+        <Route path="gate-desk" element={<GateDesk />} />
+        <Route path="gate-scan" element={<Navigate to="/dashboard/security/gate-desk" replace />} />
+        <Route path="in-out" element={<Navigate to="/dashboard/security/gate-desk" replace />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="visitors" element={<VisitorLog />} />
         <Route path="incidents" element={<IncidentReports />} />

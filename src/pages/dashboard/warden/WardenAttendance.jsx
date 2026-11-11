@@ -6,6 +6,7 @@ import DataTable from "../../../components/ui/DataTable";
 import { CheckSquareIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
+import { ATTENDANCE_GENDER_GROUPS, normalizeGender, useAttendanceRoster } from "../../../hooks/useAttendanceRoster";
 import { saveAttendanceForDate } from "../../../firebase/firestore";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
 
@@ -42,7 +43,6 @@ export default function WardenAttendance() {
   const assignedWing = profile?.block && profile.block !== "Unassigned" ? profile.block : "";
 
   const { directory, loading: directoryLoading } = useStudentDirectory();
-  const wings = useMemo(() => [...new Set(directory.map((s) => s.wing).filter(Boolean))].sort(), [directory]);
   const { data: attendance, loading: attendanceLoading } = useCollection("attendance", {
     orderByField: "date",
     orderByDirection: "desc",
@@ -52,11 +52,6 @@ export default function WardenAttendance() {
 
   // ---- Take attendance: date picker + editable roster ----
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
-  const [selectedWing, setSelectedWing] = useState(assignedWing);
-  useEffect(() => {
-    if (assignedWing) setSelectedWing(assignedWing);
-    else if (!selectedWing && wings.length) setSelectedWing(wings[0]);
-  }, [assignedWing, selectedWing, wings]);
 
   // Existing attendance docs for the selected date, keyed by studentId —
   // this is what makes "save" an update-in-place instead of a duplicate,
@@ -69,10 +64,7 @@ export default function WardenAttendance() {
     return map;
   }, [attendance, selectedDate]);
 
-  const roster = useMemo(
-    () => directory.filter((s) => selectedWing && s.wing === selectedWing).map((s) => ({ ...s, existing: existingForDate.get(s.id) || null })),
-    [directory, existingForDate, selectedWing]
-  );
+  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal } = useAttendanceRoster(directory, existingForDate, assignedWing);
 
   // Local edits for the visible date only — Firestore (via existingForDate
   // above) is what the draft is seeded from and what "after a refresh"
@@ -87,7 +79,7 @@ export default function WardenAttendance() {
     });
     setDraftStatus(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, directoryLoading]);
+  }, [selectedDate, directoryLoading, attendanceLoading]);
 
   function setStatus(studentId, status) {
     setDraftStatus((d) => ({ ...d, [studentId]: status }));
@@ -143,8 +135,7 @@ export default function WardenAttendance() {
       registrationNo: s.regNo || "",
       studentName: s.name,
       wing: s.wing,
-      room: s.room,
-      bed: s.bed,
+      gender: normalizeGender(s.gender),
       date: selectedDate,
       status: draftStatus[s.id],
     }));
@@ -154,6 +145,7 @@ export default function WardenAttendance() {
       const written = await saveAttendanceForDate(records, existingIdByStudentId, {
         uid: user?.uid,
         name: profile?.name || user?.email || "Warden",
+        persistStudentGender: true,
       });
       setSaveMessage(`Saved attendance for ${written} student${written === 1 ? "" : "s"} on ${selectedDate}.`);
     } catch (err) {
@@ -168,8 +160,6 @@ export default function WardenAttendance() {
     { key: "name", label: "Name", sortable: true },
     { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
     { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
-    { key: "room", label: "Room", sortable: true, render: (r) => r.room || "—" },
-    { key: "bed", label: "Bed", render: (r) => r.bed || "—" },
     {
       key: "status",
       label: "Attendance",
@@ -197,8 +187,9 @@ export default function WardenAttendance() {
   // selected date (not the in-progress `draftStatus` edits above), scoped
   // to the warden's assigned wing when they have one.
   const exportRecords = useMemo(
-    () => (assignedWing ? todayRecords.filter((a) => (a.wing || wingByStudentId[a.studentId]) === assignedWing) : todayRecords),
-    [todayRecords, assignedWing, wingByStudentId]
+    () => todayRecords.filter((a) => normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) === selectedGender)
+      .filter((a) => !assignedWing || (a.wing || wingByStudentId[a.studentId]) === assignedWing),
+    [todayRecords, assignedWing, wingByStudentId, selectedGender, directory]
   );
 
   const EXCEL_COLUMNS = [
@@ -206,8 +197,7 @@ export default function WardenAttendance() {
     { label: "Registration Number", value: (r) => r.registrationNo || r.studentId },
     { label: "Student Name", value: (r) => r.studentName },
     { label: "Wing/Block", value: (r) => r.wing || "" },
-    { label: "Room", value: (r) => r.room || "" },
-    { label: "Bed", value: (r) => r.bed || "" },
+    { label: "Gender", value: (r) => r.gender || "Unspecified" },
     { label: "Status", value: (r) => r.status },
     { label: "Marked By", value: (r) => r.markedByName || "" },
     { label: "Marked At", value: (r) => formatMarkedAt(r.markedAt) },
@@ -221,6 +211,8 @@ export default function WardenAttendance() {
   const byWing = useMemo(() => {
     const map = new Map();
     todayRecords.forEach((a) => {
+      if (normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) !== selectedGender) return;
+      if (assignedWing && (a.wing || wingByStudentId[a.studentId]) !== assignedWing) return;
       const wing = a.wing || wingByStudentId[a.studentId] || "Unassigned";
       if (!map.has(wing)) map.set(wing, { present: 0, total: 0 });
       const entry = map.get(wing);
@@ -228,7 +220,7 @@ export default function WardenAttendance() {
       if (a.status === "Present") entry.present += 1;
     });
     return Array.from(map.entries()).map(([wing, v]) => ({ wing, ...v }));
-  }, [todayRecords, wingByStudentId]);
+  }, [todayRecords, wingByStudentId, selectedGender, directory, assignedWing]);
 
   const totalPresent = todayRecords.filter((a) => a.status === "Present").length;
   const totalAbsent = todayRecords.filter((a) => a.status === "Absent").length;
@@ -236,20 +228,20 @@ export default function WardenAttendance() {
   const overallPct = totalMarked ? Math.round((totalPresent / totalMarked) * 100) : 0;
 
   const trend = useMemo(() => {
-    const dates = Array.from(new Set(attendance.map((a) => a.date))).sort().slice(-7);
+    const dates = Array.from(new Set(attendance.filter((a) => normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) === selectedGender).map((a) => a.date))).sort().slice(-7);
     return dates.map((date) => {
-      const dayRecords = attendance.filter((a) => a.date === date);
+      const dayRecords = attendance.filter((a) => a.date === date && normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) === selectedGender);
       const present = dayRecords.filter((a) => a.status === "Present").length;
       return { day: date, pct: dayRecords.length ? Math.round((present / dayRecords.length) * 100) : 0 };
     });
-  }, [attendance]);
+  }, [attendance, directory, selectedGender]);
 
   const repeatAbsentees = useMemo(() => {
     const counts = new Map();
     attendance.forEach((a) => {
-      if (a.status !== "Absent") return;
+      if (a.status !== "Absent" || normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) !== selectedGender) return;
       const key = a.studentId;
-      if (!counts.has(key)) counts.set(key, { id: key, name: a.studentName, room: a.room, absences: 0, lastAbsent: a.date });
+      if (!counts.has(key)) counts.set(key, { id: key, name: a.studentName, absences: 0, lastAbsent: a.date });
       const entry = counts.get(key);
       entry.absences += 1;
       if (a.date > entry.lastAbsent) entry.lastAbsent = a.date;
@@ -257,7 +249,7 @@ export default function WardenAttendance() {
     return Array.from(counts.values())
       .filter((e) => e.absences >= 3)
       .sort((a, b) => b.absences - a.absences);
-  }, [attendance]);
+  }, [attendance, directory, selectedGender]);
 
   const loading = directoryLoading || attendanceLoading;
 
@@ -295,21 +287,27 @@ export default function WardenAttendance() {
         subtitle="Select one wing, mark the whole roster, then adjust individual students before saving."
       >
         <div className="flex flex-col gap-4">
-          <Field label="Wing">
-            <select className={`${inputCls} sm:w-72`} value={selectedWing} onChange={(e) => setSelectedWing(e.target.value)} disabled={Boolean(assignedWing)}>
-              <option value="">Select a wing first</option>
-              {wings.map((wing) => <option key={wing} value={wing}>{wing}</option>)}
-            </select>
-          </Field>
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Attendance hostel gender">
+            {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => (
+              <button key={id} type="button" role="tab" aria-selected={selectedGender === id} onClick={() => setSelectedGender(id)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedGender === id ? "bg-navy-950 text-white" : "border border-slate-200 text-slate-600 hover:border-teal-400"}`}>
+                {label} · {genderCounts[id].total}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">
+            {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
+          </p>
+          <p className="text-xs text-slate-500">Roster total: {rosterTotal}{assignedWing ? ` in ${assignedWing}` : " hostel-wide"}. Students without a recorded gender appear under Unspecified.</p>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {markedCount} of {roster.length} marked
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!selectedWing || saving}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Present")} disabled={!roster.length || saving}>
                 Mark all Present
               </Button>
-              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!selectedWing || saving}>
+              <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => markAll("Absent")} disabled={!roster.length || saving}>
                 Mark all Absent
               </Button>
             </div>
@@ -319,8 +317,8 @@ export default function WardenAttendance() {
             columns={rosterColumns}
             rows={roster}
             loading={loading}
-            searchKeys={["name", "regNo", "room"]}
-            searchPlaceholder="Search by name, room, or registration number…"
+            searchKeys={["name", "regNo", "wing"]}
+            searchPlaceholder="Search by name, wing, or registration number…"
             emptyTitle="No students in the directory yet"
             emptyDescription="Add Student accounts and room allocations first — see Student Directory."
             emptyIcon={<CheckSquareIcon />}
@@ -331,7 +329,7 @@ export default function WardenAttendance() {
           {saveMessage && <p className="text-sm text-teal-700">{saveMessage}</p>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSaveAttendance} disabled={saving || loading || !selectedWing}>
+          <Button onClick={handleSaveAttendance} disabled={saving || loading || !roster.length}>
               {saving ? "Saving…" : "Save attendance"}
             </Button>
             <Button
@@ -398,12 +396,11 @@ export default function WardenAttendance() {
             <DataTable
               columns={[
                 { key: "name", label: "Student", sortable: true },
-                { key: "room", label: "Room", sortable: true, render: (s) => s.room || "—" },
                 { key: "lastAbsent", label: "Last absent", sortable: true },
                 { key: "absences", label: "Absences", sortable: true, render: (s) => <Pill tone="High">{s.absences} absences</Pill> },
               ]}
               rows={repeatAbsentees}
-              searchKeys={["name", "room"]}
+              searchKeys={["name"]}
               searchPlaceholder="Search students…"
               emptyTitle="No students flagged"
               emptyDescription="Students absent 3 or more times will show up here."

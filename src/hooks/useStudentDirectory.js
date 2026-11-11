@@ -26,13 +26,20 @@ export function useStudentDirectory() {
   const { data, loading, error } = useCollections({
     students: { name: "students" },
     users: { name: "users", options: { where: [["role", "==", "Student"]] } },
-  }, { live: false, maxDocs: 1000, cacheMs: 10_000 });
+    studentRegister: { name: "studentRegister" },
+  }, { live: false, maxDocs: 2000, cacheMs: 10_000 });
 
   const studentsById = useMemo(() => Object.fromEntries(data.students.map((s) => [s.id, s])), [data.students]);
+  const registerByRegNo = useMemo(() => Object.fromEntries(data.studentRegister.map((row) => {
+    const registrationNo = String(row.regNo || row.registrationNo || row.id || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+    return [registrationNo, row];
+  }).filter(([key]) => key)), [data.studentRegister]);
 
   const directory = useMemo(() => {
     const rows = data.users.map((u) => {
       const s = studentsById[u.id] || {};
+      const regNo = s.registrationNo || s.regNo || u.registrationNo || u.regNo || "";
+      const registerRecord = registerByRegNo[String(regNo).replace(/[^a-z0-9]/gi, "").toUpperCase()] || {};
       return {
         id: u.id,
         name: s.name || u.name || "",
@@ -43,14 +50,15 @@ export function useStudentDirectory() {
         room: s.room || "",
         bed: s.bed || "",
         status: u.status || "Active",
-        regNo: s.registrationNo || s.regNo || "",
+        regNo,
+        gender: s.gender || u.gender || registerRecord.gender || "",
         branch: s.branch || "",
         year: s.year || "",
       };
     });
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [data.users, studentsById]);
+  }, [data.users, studentsById, registerByRegNo]);
 
   return { directory, loading, error };
 }

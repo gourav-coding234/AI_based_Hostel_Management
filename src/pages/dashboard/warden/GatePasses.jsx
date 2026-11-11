@@ -6,8 +6,9 @@ import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { updateDocument } from "../../../firebase/firestore";
+import { isPassOut, passStatus } from "../../../utils/gatePass";
 
-const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected", "Completed"];
+const statusFilters = ["All Statuses", "Pending", "Approved", "Out", "Rejected", "Completed"];
 const validityFilters = ["Any date", "Active now", "Upcoming", "Expired"];
 
 function parseDate(v) {
@@ -44,14 +45,14 @@ export default function GatePasses() {
     const now = new Date();
     return passes.filter((p) => {
       const wingOk = wingFilter === "All Wings" || p.wing === wingFilter;
-      const statusOk = statusFilter === "All Statuses" || p.status === statusFilter;
+      const statusOk = statusFilter === "All Statuses" || passStatus(p) === statusFilter;
       const validityOk = validityFilter === "Any date" || getValidity(p, now) === validityFilter;
       return wingOk && statusOk && validityOk;
     });
   }, [passes, wingFilter, statusFilter, validityFilter]);
 
   const pendingCount = passes.filter((p) => p.status === "Pending").length;
-  const outCount = passes.filter((p) => p.tripState === "Out").length;
+  const outCount = passes.filter(isPassOut).length;
 
   // Ids currently being written — guards against a double-click firing two
   // writes for the same pass before the first one's snapshot comes back,
@@ -118,7 +119,7 @@ export default function GatePasses() {
         const busy = processingIds.has(p.id);
         return (
           <div className="flex items-center gap-2">
-            <Pill tone={p.status}>{p.status}</Pill>
+            <Pill tone={passStatus(p)}>{passStatus(p)}</Pill>
             {p.status === "Pending" && (
               <>
                 <Button variant="outline" className="px-2.5 py-1 text-xs" onClick={() => decide(p, "Approved")} disabled={busy}>

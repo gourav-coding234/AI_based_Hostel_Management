@@ -13,7 +13,7 @@ import {
   PackageIcon,
   ArrowRightIcon,
 } from "../../../components/dashboard/warden/icons";
-import { useCollections } from "../../../hooks/useCollection";
+import { useCollection, useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
 
 function inr(n) {
@@ -33,7 +33,7 @@ export default function WardenOverview() {
   const myWing = profile?.block;
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, loading, error: overviewError } = useCollections({
+  const { data, loading: snapshotLoading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students", options: { limitCount: 100 } },
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
@@ -41,12 +41,17 @@ export default function WardenOverview() {
     attendance: { name: "attendance", options: { where: [["date", "==", today]], limitCount: 500 } },
     roomRequests: { name: "roomRequests", options: { limitCount: 100 } },
     inventoryRequests: { name: "inventoryRequests", options: { limitCount: 100 } },
-    gatePasses: { name: "gatePasses", options: { limitCount: 100 } },
     leaveRequests: { name: "leaveRequests", options: { limitCount: 100 } },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
-    visitors: { name: "visitors", options: { limitCount: 100 } },
     inventory: { name: "inventory", options: { limitCount: 100 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
+  const gatePassesQuery = useCollection("gatePasses", { limitCount: 200 });
+  const visitorsQuery = useCollection("visitors", { limitCount: 100 });
+  const movementQuery = useCollection("inOutStatus", { limitCount: 1000 });
+  const loading = snapshotLoading || gatePassesQuery.loading || visitorsQuery.loading || movementQuery.loading;
+  const gatePasses = gatePassesQuery.data;
+  const visitors = visitorsQuery.data;
+  const studentsOut = movementQuery.data.filter((row) => row.status === "OUT").length;
   const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----
@@ -82,7 +87,7 @@ export default function WardenOverview() {
 
   // ---- Gate passes (records carry `wing`, same scoping as Warden Gate
   // Passes page) ----
-  const myGatePasses = myWing ? data.gatePasses.filter((p) => (p.block || p.hostelResidence || p.wing) === myWing) : data.gatePasses;
+  const myGatePasses = myWing ? gatePasses.filter((p) => (p.block || p.hostelResidence || p.wing) === myWing) : gatePasses;
   const pendingGatePasses = myGatePasses.filter((p) => p.status === "Pending").length;
   const approvedGatePasses = myGatePasses.filter((p) => p.status === "Approved").length;
 
@@ -150,7 +155,7 @@ export default function WardenOverview() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${myGatePasses.length} total`} tone={pendingGatePasses > 0 ? "amber" : "teal"} />
+        <StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${myGatePasses.length} total · ${studentsOut} students out`} tone={pendingGatePasses > 0 ? "amber" : "teal"} />
         <StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeave} sub={`${myLeaveRequests.length} total`} tone={pendingLeave > 0 ? "amber" : "teal"} />
         <StatCard icon={<WrenchIcon />} label="Open complaints" value={loading ? "…" : openComplaints} sub={`${complaints.length} total filed`} tone={openComplaints > 0 ? "rose" : "teal"} />
         <StatCard icon={<PackageIcon />} label="Pending inventory requests" value={loading ? "…" : pendingInventoryRequests} sub={`${data.inventoryRequests.length} total`} tone={pendingInventoryRequests > 0 ? "amber" : "teal"} />
@@ -158,7 +163,7 @@ export default function WardenOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Link to="/dashboard/warden/inventory"><StatCard icon={<PackageIcon />} label="Inventory records" value={loading ? "…" : data.inventory.length} sub="Items currently recorded for the hostel" tone="navy" /></Link>
-        <Link to="/dashboard/warden/visitors"><StatCard icon={<UsersIcon />} label="Visitor records" value={loading ? "…" : data.visitors.length} sub={`${data.visitors.filter((v) => !v.outTime).length} currently inside`} tone="teal" /></Link>
+        <Link to="/dashboard/warden/visitors"><StatCard icon={<UsersIcon />} label="Visitor records" value={loading ? "…" : visitors.length} sub={`${visitors.filter((v) => !v.outTime).length} currently inside`} tone="teal" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

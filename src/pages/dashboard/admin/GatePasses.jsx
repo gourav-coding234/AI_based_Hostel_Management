@@ -4,6 +4,7 @@ import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dash
 import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { isPassOut, passStatus } from "../../../utils/gatePass";
 
 function toCsv(headers, rows) {
   const lines = [headers.map((h) => h.label).join(",")];
@@ -13,7 +14,7 @@ function toCsv(headers, rows) {
   return lines.join("\n");
 }
 
-const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected", "Completed"];
+const statusFilters = ["All Statuses", "Pending", "Approved", "Out", "Rejected", "Completed"];
 
 export default function GatePasses() {
   const { data, loading } = useCollections({
@@ -29,13 +30,13 @@ export default function GatePasses() {
   const filtered = useMemo(() => {
     return passes.filter((p) => {
       const blockOk = blockFilter === "All Blocks" || p.block === blockFilter;
-      const statusOk = statusFilter === "All Statuses" || p.status === statusFilter;
+      const statusOk = statusFilter === "All Statuses" || passStatus(p) === statusFilter;
       return blockOk && statusOk;
     });
   }, [passes, blockFilter, statusFilter]);
 
   const pendingCount = passes.filter((p) => p.status === "Pending").length;
-  const outCount = passes.filter((p) => p.tripState === "Out").length;
+  const outCount = passes.filter(isPassOut).length;
 
   const gatePassCsvHeaders = [
     { label: "Student", value: (p) => p.studentName },
@@ -46,7 +47,7 @@ export default function GatePasses() {
     { label: "From", value: (p) => p.from },
     { label: "To", value: (p) => p.to },
     { label: "Trip State", value: (p) => p.tripState },
-    { label: "Status", value: (p) => p.status },
+    { label: "Status", value: (p) => passStatus(p) },
   ];
 
   function downloadGatePasses() {
@@ -80,7 +81,7 @@ export default function GatePasses() {
     {
       key: "status",
       label: "Status",
-      render: (p) => <Pill tone={p.status}>{p.status}</Pill>,
+      render: (p) => <Pill tone={passStatus(p)}>{passStatus(p)}</Pill>,
     },
   ];
 
