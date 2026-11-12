@@ -302,7 +302,6 @@ export default function SecurityAttendance() {
             {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
           </p>
           <p className="text-xs text-slate-500">Residents: {rosterTotal} · with account: {withAccountCount} · without account: {unlinkedCount}. Students without recorded gender appear under Unspecified.</p>
-          {unlinkedCount > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Attendance can be recorded for all residents. {unlinkedCount} without accounts will be linked automatically when their Student accounts are created.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {changed.length} unsaved change{changed.length === 1 ? "" : "s"}

@@ -299,7 +299,7 @@ export async function reconcileStudentRecordsForAccount(registrationNo, uid) {
 
   const result = { attendance: 0, fees: 0, gatePasses: 0, leaveRequests: 0 };
   const attendanceRows = (await findLegacyStudentRecords("attendance", regNo))
-    .filter((record) => record.date && record.id !== `${uid}_${record.date}`);
+    .filter((record) => record.date && record.studentId !== uid && record.id !== `${uid}_${record.date}`);
   const byDate = new Map();
   attendanceRows.forEach((record) => {
     const current = byDate.get(record.date);
@@ -320,8 +320,12 @@ export async function reconcileStudentRecordsForAccount(registrationNo, uid) {
     const targetRef = doc(db, "attendance", targetId);
     const { id: sourceId, ...sourceData } = source;
     const targetSnap = await getDoc(targetRef);
+    const targetData = targetSnap.exists() ? targetSnap.data() : null;
+    const sourceMarkedAt = sourceData.markedAt?.toMillis?.() || 0;
+    const targetMarkedAt = targetData?.markedAt?.toMillis?.() || 0;
+    const canonicalData = targetData && targetMarkedAt > sourceMarkedAt ? targetData : sourceData;
     batch.set(targetRef, {
-      ...(targetSnap.exists() ? targetSnap.data() : sourceData),
+      ...canonicalData,
       studentId: uid,
       registrationNo: regNo,
       studentName: sourceData.studentName || "",
