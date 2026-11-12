@@ -4,6 +4,7 @@ import collegeLogo from "../../assets/college-logo-circle.png";
 
 const NAV_LINKS = [
   { label: "Home", href: "#home" },
+  { label: "Leadership", href: "#leadership" },
   { label: "Notices", href: "#notices" },
   { label: "Facilities", href: "#facilities" },
   { label: "Gallery", href: "#gallery" },

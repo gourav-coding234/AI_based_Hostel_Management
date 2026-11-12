@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { dashboardPathForRole } from "../roles";
 import { ErrorState } from "../components/ui/DataState";
+import PortalLoader from "../components/ui/PortalLoader";
 
 /**
  * Wrap a route element with this to require sign-in.
@@ -14,14 +15,7 @@ export default function ProtectedRoute({ children, allowedRole }) {
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex items-center gap-3 text-navy-800">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-navy-800/20 border-t-teal-500" />
-          <span className="font-medium">Loading your session…</span>
-        </div>
-      </div>
-    );
+    return <PortalLoader label="Checking your secure session…" />;
   }
 
   if (isAuthenticated && error) {

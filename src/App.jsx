@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import AIChatWidget from "./components/AIChatWidget";
+import PortalLoader from "./components/ui/PortalLoader";
 import { ROLES } from "./roles";
 
 // Each role's dashboard pulls in ~15-20 pages. Loading all five eagerly
@@ -19,12 +20,7 @@ const ParentDashboard = lazy(() => import("./pages/dashboard/ParentDashboard"));
 const SecurityDashboard = lazy(() => import("./pages/dashboard/SecurityDashboard"));
 
 function RouteFallback() {
-  return (
-    <div className="route-fallback">
-      <span className="route-spinner" aria-hidden="true" />
-      <span>Loading…</span>
-    </div>
-  );
+  return <PortalLoader />;
 }
 
 function Guarded({ role, children }) {

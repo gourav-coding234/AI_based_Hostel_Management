@@ -1,5 +1,6 @@
 import Navbar from "../components/landing/Navbar";
 import Hero from "../components/landing/Hero";
+import Leadership from "../components/landing/Leadership";
 import NoticeBoard from "../components/landing/NoticeBoard";
 import Facilities from "../components/landing/Facilities";
 import Gallery from "../components/landing/Gallery";
@@ -12,6 +13,7 @@ export default function Landing() {
       <Navbar />
       <main>
         <Hero />
+        <Leadership />
         <NoticeBoard />
         <Facilities />
         <Gallery />

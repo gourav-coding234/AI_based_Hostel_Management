@@ -100,7 +100,7 @@ export default function Overview() {
   const movementStatus = movement.items[0];
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="student-overview flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
         <div
           aria-hidden="true"

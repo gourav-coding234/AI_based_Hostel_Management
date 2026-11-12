@@ -103,7 +103,7 @@ export default function DashboardLayout({ title, children }) {
       : undefined;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${role === "Admin" ? "admin-panel" : ""} ${role === "Warden" ? "warden-panel" : ""} ${role === "Security" ? "security-panel" : ""} ${role === "Student" ? "student-panel" : ""} ${role === "Parent" ? "parent-panel" : ""}`}>
       <Sidebar
         role={role}
         open={menuOpen}

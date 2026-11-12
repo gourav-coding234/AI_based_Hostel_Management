@@ -113,7 +113,7 @@ export default function WardenOverview() {
     pendingInventoryRequests + pendingGatePasses + pendingLeave + unassignedComplaints + overdueFees;
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="warden-overview flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
         <div
           aria-hidden="true"

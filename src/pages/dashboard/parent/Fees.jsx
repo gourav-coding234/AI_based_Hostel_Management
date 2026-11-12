@@ -1,5 +1,6 @@
 import { Card, ProgressBar, EmptyState, Pill, Button } from "../../../components/dashboard/student/ui";
-import { ErrorState, LoadingState } from "../../../components/ui/DataState";
+import { ErrorState } from "../../../components/ui/DataState";
+import PortalLoader from "../../../components/ui/PortalLoader";
 import { WalletIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
@@ -17,7 +18,7 @@ export default function ParentFees() {
 
   if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
-  if (fees.loading) return <LoadingState label="Loading fees…" />;
+  if (fees.loading) return <PortalLoader label="Loading fees…" />;
   if (fees.error) return <ErrorState message={fees.error} />;
 
   // View-only: figures and status are derived here from the fee records

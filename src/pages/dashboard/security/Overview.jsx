@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { StatCard, Card, Pill, ProgressBar } from "../../../components/dashboard/student/ui";
 import ActivityFeed from "../../../components/dashboard/ActivityFeed";
-import { LoadingState, ErrorState, EmptyState } from "../../../components/ui/DataState";
+import { ErrorState, EmptyState } from "../../../components/ui/DataState";
+import PortalLoader from "../../../components/ui/PortalLoader";
 import {
   QrIcon,
   ScanIcon,
@@ -157,12 +158,12 @@ export default function SecurityOverview() {
   }, [gatePasses, movementQuery.data, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
 
   if (error || passesQuery.error || movementQuery.error) return <ErrorState message={error || passesQuery.error || movementQuery.error} />;
-  if (loading || passesQuery.loading || movementQuery.loading) return <LoadingState label="Loading gate overview…" />;
+  if (loading || passesQuery.loading || movementQuery.loading) return <PortalLoader label="Loading gate overview…" />;
 
   const recentVisitors = visitors.slice(0, FEED_LIMIT);
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="security-overview flex flex-col gap-6 animate-fade-in">
       <p className="-mt-3 text-xs text-slate-400">This overview loads only today's attendance, active passes, current visitors, and a short activity feed. Open each register for the full history.</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

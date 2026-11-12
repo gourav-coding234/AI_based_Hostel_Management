@@ -110,7 +110,7 @@ export default function AdminOverview() {
   const maxEnrollment = Math.max(1, ...enrollmentTrend.map((d) => d.students));
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="admin-overview flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
         <div
           aria-hidden="true"

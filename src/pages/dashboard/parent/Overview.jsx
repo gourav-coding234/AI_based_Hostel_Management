@@ -85,7 +85,7 @@ export default function ParentOverview() {
   const noticesError = noticesQuery.error || notifications.error;
 
   return (
-    <div className="flex flex-col gap-6 animate-fade-in">
+    <div className="parent-overview flex flex-col gap-6 animate-fade-in">
       <Card className="relative overflow-hidden bg-navy-950 text-white">
         <div
           aria-hidden="true"
