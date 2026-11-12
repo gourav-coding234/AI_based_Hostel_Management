@@ -58,8 +58,8 @@ export default function ParentOverview() {
   // Only real data, straight from Firestore, scoped to the linked child.
   const room = studentRecord;
   const childName = studentUser?.name || "Your child";
-  const dataError = fees.error || attendance.error || gatePasses.error || leaveRequests.error;
-  const statsLoading = fees.loading || attendance.loading || gatePasses.loading || leaveRequests.loading;
+  const dataError = fees.error || attendance.error || gatePasses.error || movement.error || leaveRequests.error;
+  const statsLoading = fees.loading || attendance.loading || gatePasses.loading || movement.loading || leaveRequests.loading;
 
   const feeSummary = summarizeChildFees(fees.items);
   const { total: totalFee, paid, pending: feeRemaining } = feeSummary;

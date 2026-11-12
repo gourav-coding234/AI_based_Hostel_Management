@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, doc, query, where, getDoc, getDocs, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../data/demoFixtures";
 import { readErrorMessage } from "../firebase/readErrorMessage";
@@ -64,6 +64,42 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
     }
 
     let cancelled = false;
+    // Current gate movement is stored as one document whose document ID is
+    // the student UID (`inOutStatus/{studentId}`), unlike history collections
+    // which are queried by a studentId field. Read that exact path so the
+    // parent/student ownership rule can validate the document directly.
+    if (collectionName === "inOutStatus") {
+      const statusRef = doc(db, collectionName, studentId);
+      const publishDocument = (snap) => {
+        const items = snap.exists() ? [{ id: snap.id, ...snap.data() }] : [];
+        if (items.length) studentDataCache.set(statusKey, { savedAt: Date.now(), items });
+        else studentDataCache.delete(statusKey);
+        setState({ loading: false, items, error: "" });
+      };
+      const publishError = (err) => {
+        console.error(`Failed to load ${collectionName}:`, err);
+        const message = readErrorMessage(err, "Couldn't load this right now.");
+        publishReadStatus(statusKey, message, collectionName);
+        setState({ loading: false, items: [], error: message });
+      };
+      if (live) {
+        const unsubscribe = onSnapshot(statusRef, (snap) => {
+          if (cancelled) return;
+          publishReadStatus(statusKey, "", collectionName);
+          publishDocument(snap);
+        }, (err) => { if (!cancelled) publishError(err); });
+        return () => { cancelled = true; unsubscribe(); publishReadStatus(statusKey, "", collectionName); };
+      }
+      getDoc(statusRef)
+        .then((snap) => {
+          if (cancelled) return;
+          publishReadStatus(statusKey, "", collectionName);
+          publishDocument(snap);
+        })
+        .catch((err) => { if (!cancelled) publishError(err); });
+      return () => { cancelled = true; publishReadStatus(statusKey, "", collectionName); };
+    }
+
     if (live) {
       const unsubscribe = onSnapshot(q, (snap) => {
         if (cancelled) return;
