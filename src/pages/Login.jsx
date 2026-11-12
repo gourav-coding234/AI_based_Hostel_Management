@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signIn, signOut, friendlyAuthError } from "../firebase/auth";
 import { getUserProfile } from "../firebase/firestore";
 import { ROLE_LIST, dashboardPathForRole } from "../roles";
+import { PRINCIPAL_EMAIL, PRINCIPAL_PHONE } from "../data/emergencyContacts";
 import collegeLogo from "../assets/college-logo-circle.png";
 
 export default function Login() {
@@ -236,8 +237,8 @@ export default function Login() {
 
             <p className="help-box">
               Need help? Contact the college office at{" "}
-              <a href="mailto:principal@gcekjr.ac.in">principal@gcekjr.ac.in</a> or call{" "}
-              <strong>06766-213180</strong>.
+              <a href={`mailto:${PRINCIPAL_EMAIL}`}>{PRINCIPAL_EMAIL}</a> or call{" "}
+              <strong>{PRINCIPAL_PHONE}</strong>.
             </p>
 
             <Link to="/" className="back-link desktop-only">

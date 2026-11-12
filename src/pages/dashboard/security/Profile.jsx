@@ -98,6 +98,7 @@ export default function SecurityProfile() {
             </div>
           </div>
         </div>
+        {form.photoURL && <button type="button" onClick={photoUpload.remove} disabled={photoUpload.uploading} className="relative mt-3 text-xs text-rose-700 underline disabled:opacity-50">Remove photo</button>}
         {photoUpload.uploading && <p role="status" className="relative mt-3 text-xs text-teal-300">{photoUpload.stage === "Uploading photo" ? `Uploading photo… ${photoUpload.progress}%` : `${photoUpload.stage}…`}</p>}
       </Card>
 

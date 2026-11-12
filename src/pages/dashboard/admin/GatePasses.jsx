@@ -20,7 +20,7 @@ export default function GatePasses() {
   const { data, loading } = useCollections({
     passes: { name: "gatePasses", options: { orderByField: "from" } },
     blocks: { name: "blocks" },
-  });
+  }, { live: true, cacheMs: 0 });
   const passes = data.passes;
   const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
 

@@ -156,7 +156,7 @@ phone on the same Wi-Fi you can open the "Network" URL Vite prints
    | `VITE_FIREBASE_API_KEY` | `apiKey` |
    | `VITE_FIREBASE_AUTH_DOMAIN` | `authDomain` |
    | `VITE_FIREBASE_PROJECT_ID` | `projectId` |
-   | `VITE_FIREBASE_STORAGE_BUCKET` | `storageBucket` |
+   | `VITE_FIREBASE_STORAGE_BUCKET` | `storageBucket` (optional; profile photos are stored as compressed Firestore data URLs) |
    | `VITE_FIREBASE_MESSAGING_SENDER_ID` | `messagingSenderId` |
    | `VITE_FIREBASE_APP_ID` | `appId` |
 

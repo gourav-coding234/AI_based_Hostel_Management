@@ -1,10 +1,6 @@
 import { useMemo } from "react";
 import { useCollections } from "./useCollection";
 
-function studentWing(student) {
-  return student.wing || student.hostelResidence || "";
-}
-
 function normalizeRegistration(value) {
   return String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
@@ -13,120 +9,125 @@ function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function clean(value) {
+  return value == null ? "" : String(value).trim();
+}
+
 /**
- * Shared hostel directory built from all three student data sources:
- * portal accounts, room/allocation profiles, and the imported academic
- * register. This keeps register-only students visible to Admin/Warden while
- * clearly marking that they don't yet have a portal account. Attendance
- * consumers can use hasPortalAccount to avoid writing records under a fake ID.
+ * One shared resident directory for Warden, Security and the room directory.
+ * The academic register is queried only for rows explicitly assigned to a
+ * hostel wing/block; institute-wide non-residents are not downloaded here.
  */
 export function useStudentDirectory() {
   const { data, loading, error } = useCollections({
     students: { name: "students" },
     users: { name: "users", options: { where: [["role", "==", "Student"]] } },
-    studentRegister: { name: "studentRegister" },
+    registerByWing: { name: "studentRegister", options: { where: [["wing", "!=", ""]] } },
+    registerByResidence: { name: "studentRegister", options: { where: [["hostelResidence", "!=", ""]] } },
+    registerByBlock: { name: "studentRegister", options: { where: [["block", "!=", ""]] } },
+    blocks: { name: "blocks", options: { limitCount: 200 } },
   }, { live: false, maxDocs: 2000, cacheMs: 10_000 });
 
   const directory = useMemo(() => {
-    const registerByRegNo = new Map();
-    const registerByEmail = new Map();
-    const registerByUid = new Map();
-    data.studentRegister.forEach((row) => {
-      const regNo = row.regNo || row.registrationNo || row.id || "";
-      const normalizedRegNo = normalizeRegistration(regNo);
-      const email = normalizeEmail(row.email);
-      const uid = row.studentId || row.userId || row.uid || "";
-      if (normalizedRegNo) registerByRegNo.set(normalizedRegNo, row);
-      if (email) registerByEmail.set(email, row);
-      if (uid) registerByUid.set(uid, row);
+    const byReg = new Map();
+    const byEmail = new Map();
+    const byUid = new Map();
+    const rows = new Map();
+    const blockTypeByName = new Map(data.blocks.map((block) => [clean(block.name).toLowerCase(), clean(block.type)]));
+    const registerRecords = new Map();
+    [...data.registerByWing, ...data.registerByResidence, ...data.registerByBlock].forEach((record) => {
+      const key = record.id || normalizeRegistration(record.regNo || record.registrationNo);
+      if (key) registerRecords.set(key, { ...(registerRecords.get(key) || {}), ...record });
     });
 
-    const studentsById = new Map(data.students.map((student) => [student.id, student]));
-    const matchedRegisterIds = new Set();
-    const rows = data.users.map((account) => {
-      const allocation = studentsById.get(account.id) || {};
-      const regNo = allocation.registrationNo || allocation.regNo || account.registrationNo || account.regNo || "";
-      const registerRecord = (regNo && registerByRegNo.get(normalizeRegistration(regNo)))
-        || registerByUid.get(account.id)
-        || registerByEmail.get(normalizeEmail(account.email))
-        || {};
-      if (registerRecord.id) matchedRegisterIds.add(registerRecord.id);
-      const finalRegNo = regNo || registerRecord.regNo || registerRecord.registrationNo || registerRecord.id || "";
-      return {
-        id: account.id,
-        userId: account.id,
-        hasPortalAccount: true,
-        name: allocation.name || account.name || registerRecord.name || "Unnamed student",
-        email: account.email || registerRecord.email || "",
-        phone: allocation.phone || account.phone || registerRecord.phone || "",
-        wing: studentWing(allocation) || account.hostelResidence || registerRecord.wing || registerRecord.hostelResidence || "",
-        hostelResidence: allocation.hostelResidence || account.hostelResidence || registerRecord.hostelResidence || registerRecord.wing || "",
-        room: allocation.room || registerRecord.room || "",
-        bed: allocation.bed || registerRecord.bed || "",
-        status: account.status || "Active",
-        regNo: finalRegNo,
-        gender: allocation.gender || account.gender || registerRecord.gender || "",
-        branch: allocation.branch || account.branch || registerRecord.branch || "",
-        year: allocation.year || account.year || registerRecord.year || "",
+    function findMatch(source, uid = "") {
+      const regNo = clean(source.regNo || source.registrationNo || source.registrationNumber);
+      const email = normalizeEmail(source.email);
+      const sourceUid = uid || clean(source.studentId || source.userId || source.uid || source.id);
+      return (regNo && byReg.get(normalizeRegistration(regNo))) ||
+        (email && byEmail.get(email)) ||
+        (sourceUid && byUid.get(sourceUid)) || null;
+    }
+
+    function addSource(source, kind, uid = "") {
+      const regNo = clean(source.regNo || source.registrationNo || source.registrationNumber);
+      const sourceUid = uid || clean(source.studentId || source.userId || source.uid || (kind === "student" ? source.id : ""));
+      let row = findMatch(source, sourceUid);
+      if (!row && kind === "register" && !clean(source.wing || source.hostelResidence)) return;
+      if (!row) {
+        const stableReg = normalizeRegistration(regNo);
+        const id = sourceUid && kind === "student" ? sourceUid : stableReg ? `reg:${stableReg}` : `register:${source.id}`;
+        row = {
+          id,
+          hasAccount: false,
+          accountUid: "",
+          hasPortalAccount: false,
+          name: "",
+          regNo: "",
+          gender: "",
+          branch: "",
+          year: "",
+          wing: "",
+          room: "",
+          bed: "",
+          phone: "",
+          email: "",
+          status: "Account needed",
+          photoURL: "",
+          hostelResidence: "",
+        };
+      }
+
+      const merged = {
+        ...row,
+        name: clean(source.name || source.studentName) || row.name || "Unnamed student",
+        regNo: regNo || row.regNo,
+        gender: clean(source.gender) || row.gender,
+        branch: clean(source.branch) || row.branch,
+        year: clean(source.year) || row.year,
+        wing: clean(source.wing || source.block || source.hostelResidence) || row.wing,
+        hostelResidence: clean(source.hostelResidence || source.wing || source.block) || row.hostelResidence,
+        room: clean(source.room) || row.room,
+        bed: clean(source.bed) || row.bed,
+        phone: clean(source.phone) || row.phone,
+        email: clean(source.email) || row.email,
+        photoURL: clean(source.photoURL) || row.photoURL,
+        status: clean(source.status) || row.status,
       };
-    });
+      if (kind === "account") {
+        merged.id = uid;
+        merged.accountUid = uid;
+        merged.hasAccount = true;
+        merged.hasPortalAccount = true;
+        merged.userId = uid;
+        merged.status = clean(source.status) || "Active";
+      } else if (row.hasAccount) {
+        merged.id = row.accountUid;
+      }
 
-    // Keep room/allocation profiles visible if their account was removed or
-    // is temporarily missing. These rows are display-only until a real
-    // Student account is restored.
-    const knownUserIds = new Set(rows.map((row) => row.id));
-    data.students.forEach((allocation) => {
-      if (knownUserIds.has(allocation.id)) return;
-      const regNo = allocation.registrationNo || allocation.regNo || "";
-      const registerRecord = (regNo && registerByRegNo.get(normalizeRegistration(regNo)))
-        || registerByUid.get(allocation.id)
-        || registerByEmail.get(normalizeEmail(allocation.email))
-        || {};
-      if (registerRecord.id) matchedRegisterIds.add(registerRecord.id);
-      rows.push({
-        id: allocation.id,
-        userId: "",
-        hasPortalAccount: false,
-        name: allocation.name || registerRecord.name || "Unnamed student",
-        email: allocation.email || registerRecord.email || "",
-        phone: allocation.phone || registerRecord.phone || "",
-        wing: studentWing(allocation) || registerRecord.wing || registerRecord.hostelResidence || "",
-        hostelResidence: allocation.hostelResidence || registerRecord.hostelResidence || registerRecord.wing || "",
-        room: allocation.room || registerRecord.room || "",
-        bed: allocation.bed || registerRecord.bed || "",
-        status: "Account needed",
-        regNo: regNo || registerRecord.regNo || registerRecord.registrationNo || registerRecord.id || "",
-        gender: allocation.gender || registerRecord.gender || "",
-        branch: allocation.branch || registerRecord.branch || "",
-        year: allocation.year || registerRecord.year || "",
-      });
-    });
+      // Use hostel block configuration to classify old roster entries that
+      // carry a Boys/Girls wing but no gender field.
+      if (!merged.gender) {
+        const type = blockTypeByName.get(merged.wing.toLowerCase()) || blockTypeByName.get(merged.hostelResidence.toLowerCase());
+        if (type === "Boys") merged.gender = "Male";
+        else if (type === "Girls") merged.gender = "Female";
+      }
 
-    data.studentRegister.forEach((record) => {
-      if ((record.id && matchedRegisterIds.has(record.id)) || (record.studentId && knownUserIds.has(record.studentId)) || (record.userId && knownUserIds.has(record.userId)) || (record.uid && knownUserIds.has(record.uid))) return;
-      const regNo = record.regNo || record.registrationNo || record.id || "";
-      rows.push({
-        id: `register:${record.id || normalizeRegistration(regNo)}`,
-        userId: "",
-        hasPortalAccount: false,
-        name: record.name || record.studentName || "Unnamed student",
-        email: record.email || "",
-        phone: record.phone || "",
-        wing: record.wing || record.hostelResidence || "",
-        hostelResidence: record.hostelResidence || record.wing || "",
-        room: record.room || "",
-        bed: record.bed || "",
-        status: "Account needed",
-        regNo,
-        gender: record.gender || "",
-        branch: record.branch || "",
-        year: record.year || "",
-      });
-    });
+      if (row.id !== merged.id) rows.delete(row.id);
+      rows.set(merged.id, merged);
+      if (merged.regNo) byReg.set(normalizeRegistration(merged.regNo), merged);
+      if (merged.email) byEmail.set(normalizeEmail(merged.email), merged);
+      if (merged.accountUid) byUid.set(merged.accountUid, merged);
+      if (sourceUid) byUid.set(sourceUid, merged);
+    }
 
-    rows.sort((a, b) => a.name.localeCompare(b.name));
-    return rows;
-  }, [data.users, data.students, data.studentRegister]);
+    // Add authenticated students first, then fill profile and academic data.
+    data.users.forEach((account) => addSource(account, "account", account.id));
+    data.students.forEach((student) => addSource(student, "student", student.id));
+    registerRecords.forEach((record) => addSource(record, "register"));
+
+    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [data.users, data.students, data.registerByWing, data.registerByResidence, data.registerByBlock, data.blocks]);
 
   return { directory, loading, error };
 }

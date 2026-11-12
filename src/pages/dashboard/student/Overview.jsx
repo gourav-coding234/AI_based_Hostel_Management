@@ -18,7 +18,7 @@ import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
 import { noticeAppliesTo } from "../../../utils/notices";
 import { computeFeeStatus } from "../../../utils/fees";
-import { isPassActive } from "../../../utils/gatePass";
+import { isPassActive, passStatus } from "../../../utils/gatePass";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -46,6 +46,7 @@ export default function Overview() {
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
   const complaints = useStudentCollection("complaints", studentId);
   const gatePasses = useStudentCollection("gatePasses", studentId, { live: true });
+  const movement = useStudentCollection("inOutStatus", studentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", studentId);
   // Fetch a bit more than we display — filtering by wing happens client-side
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
@@ -94,7 +95,9 @@ export default function Overview() {
 
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
-  const activePass = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find(isPassActive);
+  const studentPasses = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || "")));
+  const activePass = studentPasses.find(isPassActive) || studentPasses.find((pass) => passStatus(pass) === "Completed");
+  const movementStatus = movement.items[0];
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -207,9 +210,11 @@ export default function Overview() {
                 height={120}
                 className="rounded-xl border border-slate-200 p-1.5 shadow-sm shadow-slate-200/60"
               />
-              <Pill tone={activePass.status}>{activePass.status}</Pill>
+              <Pill tone={passStatus(activePass)}>{movementStatus?.status === "OUT" ? "Out" : passStatus(activePass)}</Pill>
               <p className="text-sm font-medium text-ink">{activePass.type}</p>
               <p className="text-xs text-slate-500">{activePass.from} → {activePass.to}</p>
+              {movementStatus?.status === "OUT" && <p className="text-xs text-slate-500">Exit recorded {movementStatus.exitTime?.toDate ? movementStatus.exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
+              {passStatus(activePass) === "Completed" && <p className="text-xs text-slate-500">Returned {activePass.returnedAt?.toDate ? activePass.returnedAt.toDate().toLocaleString("en-IN") : activePass.entryTime?.toDate ? activePass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
               <Link to="/dashboard/student/gate-pass" className="w-full">
                 <Button variant="outline" className="w-full">View full pass</Button>
               </Link>

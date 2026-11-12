@@ -66,7 +66,7 @@ export default function StaffProfile() {
               <button type="button" onClick={() => fileRef.current?.click()} disabled={photoUpload.uploading} aria-label="Change profile photo" className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white shadow"><CameraIcon /></button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={choosePhoto} />
             </div>
-            <div><p className="font-medium text-ink">{form.name || profile?.email}</p><p className="text-sm text-slate-500">{profile?.role} · {profile?.email}</p>{photoUpload.uploading && <p role="status" className="text-xs text-teal-700">{photoUpload.stage === "Uploading photo" ? `Uploading photo… ${photoUpload.progress}%` : `${photoUpload.stage}…`}</p>}</div>
+            <div><p className="font-medium text-ink">{form.name || profile?.email}</p><p className="text-sm text-slate-500">{profile?.role} · {profile?.email}</p>{form.photoURL && <button type="button" onClick={photoUpload.remove} disabled={photoUpload.uploading} className="mt-1 text-xs text-rose-700 underline disabled:opacity-50">Remove photo</button>}{photoUpload.uploading && <p role="status" className="text-xs text-teal-700">{photoUpload.stage === "Uploading photo" ? `Uploading photo… ${photoUpload.progress}%` : `${photoUpload.stage}…`}</p>}</div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name"><input className={inputCls} name="name" value={form.name} onChange={updateField} required /></Field>

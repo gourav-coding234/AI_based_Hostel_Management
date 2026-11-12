@@ -16,7 +16,7 @@ import {
   AlertIcon,
   MegaphoneIcon,
 } from "../../../components/dashboard/admin/icons";
-import { useCollections } from "../../../hooks/useCollection";
+import { useCollection, useCollections } from "../../../hooks/useCollection";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -34,7 +34,7 @@ export default function AdminOverview() {
 
   // Keep the overview a lightweight snapshot: cap activity lists and reuse
   // the result briefly instead of holding listeners open on every register.
-  const { data, loading, error: overviewError } = useCollections({
+  const { data, loading: snapshotLoading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students" },
     // Overview only needs the count; avoid role + orderBy composite index.
@@ -42,14 +42,18 @@ export default function AdminOverview() {
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees" },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
-    gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
     leaveRequests: { name: "leaveRequests", options: { orderByField: "from", limitCount: 100 } },
     visitors: { name: "visitors", options: { where: [["outTime", "==", ""]], limitCount: 100 } },
     expenses: { name: "expenses" },
     feedback: { name: "feedback", options: { limitCount: 100 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
 
-  const { blocks, students, wardens, complaints, fees, notices, gatePasses, leaveRequests, visitors, expenses, feedback } = data;
+  const { blocks, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback } = data;
+  const gatePassQuery = useCollection("gatePasses", { limitCount: 1000 });
+  const movementQuery = useCollection("inOutStatus", { limitCount: 2000 });
+  const gatePasses = gatePassQuery.data;
+  const loading = snapshotLoading || gatePassQuery.loading || movementQuery.loading;
+  const studentsOut = movementQuery.data.filter((entry) => entry.status === "OUT").length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
   const recentComplaints = recentByDate(complaints, "date");
   const recentGatePasses = recentByDate(gatePasses, "from");
@@ -140,13 +144,14 @@ export default function AdminOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : students.length} sub={`${wardens.length} wardens on staff`} tone="teal" /></Link>
-        <Link to="/dashboard/admin/blocks"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "No blocks recorded yet"} tone="navy" /></Link>
+        <Link to="/dashboard/admin/data-import"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "Add blocks in Data Import"} tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
         <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints in snapshot" value={openComplaints} sub={`${complaints.length} recent records loaded`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${gatePasses.length} requests total`} tone={pendingGatePasses > 0 ? "amber" : "teal"} /></Link>
+        <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Students currently out" value={loading ? "…" : studentsOut} sub="Live gate movement status" tone={studentsOut > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/leave"><StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub="Checked in and not yet checked out" tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub={`${blocks.length} blocks to manage`} tone="navy" /></Link>
@@ -188,7 +193,7 @@ export default function AdminOverview() {
 
         <Card title="Blocks at a glance">
           {blocks.length === 0 ? (
-            <EmptyState icon={<BuildingIcon />} title="No blocks yet" description="Add blocks via Data Import or the Blocks page." />
+            <EmptyState icon={<BuildingIcon />} title="No blocks yet" description="Add blocks in Data Import." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
               {blocks.map((b) => {

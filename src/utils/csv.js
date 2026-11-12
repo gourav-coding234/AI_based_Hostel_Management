@@ -1,7 +1,7 @@
 /**
  * Minimal CSV parser for the bulk user-upload form.
- * Expects a header row: name,email,password,role,hostelResidence,linkedStudentId
- * (hostelResidence and linkedStudentId are optional columns).
+ * Expects a header row: name,email,password,role,hostelResidence,linkedStudentId,registrationNo
+ * (hostelResidence, linkedStudentId and registrationNo are optional columns).
  * Handles simple comma-separated values; does not support quoted commas.
  */
 export function parseUsersCsv(text) {
@@ -33,16 +33,16 @@ export function parseUsersCsv(text) {
       errors.push(`Row ${i + 2}: missing a required value, skipped.`);
       return;
     }
-    rows.push(row);
+    rows.push({ ...row, registrationNo: row.registrationno || row.regno || row.registrationnumber || "" });
   });
 
   return { rows, errors };
 }
 
 export const CSV_TEMPLATE =
-  "name,email,password,role,hostelResidence,linkedStudentId\n" +
-  "Anita Sahoo,anita.sahoo@example.com,ChangeMe123,Student,Block C,\n" +
-  "Ravi Kumar,ravi.kumar@example.com,ChangeMe123,Parent,,s27\n";
+  "name,email,password,role,hostelResidence,linkedStudentId,registrationNo\n" +
+  "Anita Sahoo,anita.sahoo@example.com,ChangeMe123,Student,Block C,,2301104001\n" +
+  "Ravi Kumar,ravi.kumar@example.com,ChangeMe123,Parent,,s27,\n";
 
 /**
  * Triggers a browser "Save As" for text content (used for CSV exports and

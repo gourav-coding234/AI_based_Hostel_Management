@@ -95,7 +95,9 @@ service cloud.firestore {
            "name", "dob", "phone", "bloodGroup", "address",
            "emergencyContactName", "emergencyContactPhone", "bio",
            "photoURL", "gateAssigned", "shift", "relationToStudent", "updatedAt"
-         ]));
+         ]) &&
+         (!request.resource.data.keys().hasAny(["photoURL"]) ||
+           (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 280000)));
     }
 
     match /students/{studentId} {
@@ -105,7 +107,9 @@ service cloud.firestore {
       allow create, delete: if isStaff();
       allow update: if isStaff() ||
         (isStudent() && request.auth.uid == studentId &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'updatedAt']));
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'updatedAt']) &&
+         (!request.resource.data.keys().hasAny(['photoURL']) ||
+           (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 280000)));
     }
 
     match /expenses/{expenseId} {
@@ -208,7 +212,7 @@ service cloud.firestore {
            request.resource.data.status == 'Out' &&
            request.resource.data.exitTime == request.time &&
            request.resource.data.scannedByUid == request.auth.uid) ||
-          ((resource.data.get('tripState', '') == 'Out' || resource.data.status == 'journey_started') &&
+          ((resource.data.get('tripState', '') == 'Out' || resource.data.status == 'Out' || resource.data.status == 'journey_started') &&
            request.resource.data.tripState == 'Returned' &&
            request.resource.data.status == 'Completed' &&
            request.resource.data.entryTime == request.time &&

@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { createUserAccount } from "../../../firebase/adminUsers";
 import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, bulkUpdateDocuments, deleteDocument, getCollection, logAudit } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { useCollection } from "../../../hooks/useCollection";
 import { isDemoMode } from "../../../data/demoFixtures";
+import AdminBlocksSection from "./AdminBlocksSection";
 
 function validateMixedRecords(records) {
   if (!records.length) return { validRecords: [], errors: [{ row: 0, field: "dataType", message: "The file has no data rows." }], byTarget: {} };
@@ -97,7 +98,7 @@ async function fingerprintRecords(records) {
 }
 
 async function resolveStudentIds(records, importedRegister = [], allowMissingReference = true) {
-  const accounts = (await getCollection("users")).filter((account) => account.role === "Student");
+  const accounts = await getCollection("users", { whereClauses: [["role", "==", "Student"]] });
   const accountByUid = new Map(accounts.map((account) => [account.id, account]));
   const uidByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
   const uidByRegistration = new Map();
@@ -149,66 +150,6 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
   return { resolved, failed, studentUids: new Set(accountByUid.keys()) };
 }
 
-async function repairAttendanceStudentLinks() {
-  const attendance = await getCollection("attendance");
-  const { resolved, failed, studentUids } = await resolveStudentIds(attendance, [], false);
-  const existingUidDates = new Set(attendance
-    .filter((record) => studentUids.has(String(record.studentId || "")) && record.date)
-    .map((record) => `${record.studentId}|${record.date}`));
-  const updates = [];
-  let alreadyLinked = 0;
-  let duplicateDates = 0;
-
-  // Resolve a second pass from original IDs so each existing document keeps its ID.
-  const resolvedByDocument = new Map(resolved.filter((record) => record.id).map((record) => [record.id, record]));
-  const sourceByDocument = new Map(attendance.map((record) => [record.id, record]));
-  for (const [id, record] of resolvedByDocument) {
-    const source = sourceByDocument.get(id);
-    if (!source) continue;
-    const sourceId = String(source.studentId || source.studentID || "");
-    if (sourceId === record.studentId && studentUids.has(sourceId)) {
-      alreadyLinked += 1;
-      continue;
-    }
-    if (sourceId && sourceId === record.studentId) continue;
-    const uidDate = `${record.studentId}|${record.date || ""}`;
-    if (record.date && existingUidDates.has(uidDate)) {
-      duplicateDates += 1;
-      continue;
-    }
-    if (record.date) existingUidDates.add(uidDate);
-    updates.push({ id, data: { studentId: record.studentId, ...(record.studentName ? { studentName: record.studentName } : {}) } });
-  }
-  const linked = await bulkUpdateDocuments("attendance", updates);
-  return {
-    linked,
-    alreadyLinked,
-    unmatched: failed.length,
-    duplicateDates,
-    total: attendance.length,
-    unmatchedExamples: failed.slice(0, 5).map(({ studentId, studentName }) => [studentId, studentName].filter(Boolean).join(" · ")),
-  };
-}
-
-let attendanceRepairPromise = null;
-export function ensureAttendanceLinksRepaired(actor) {
-  if (attendanceRepairPromise) return attendanceRepairPromise;
-  attendanceRepairPromise = (async () => {
-    const result = await repairAttendanceStudentLinks();
-    if (result.linked > 0) {
-      await logAudit({
-        actor,
-        action: "Linked existing attendance to Student accounts",
-        target: `${result.linked} attendance records linked`,
-      });
-    }
-    return result;
-  })().finally(() => {
-    attendanceRepairPromise = null;
-  });
-  return attendanceRepairPromise;
-}
-
 function expandStudentBundleRows(records) {
   const expanded = [];
   const sharedSeen = new Set();
@@ -242,6 +183,7 @@ function expandStudentBundleRows(records) {
         regNo: record.regNo, name: record.name, gender: record.gender, branch: record.branch,
         branchCode: record.branchCode, year: record.year, batch: record.batch,
         admissionYear: record.admissionYear, email: record.email, phone: record.phone,
+        hostelResidence: record.hostelResidence, wing: record.wing, room: record.room, bed: record.bed,
       });
     }
     if (present(record, "email") && present(record, "name")) {
@@ -311,17 +253,39 @@ function expandStudentBundleRows(records) {
         guardName: record.guardName, shift: record.shift, date: record.date, gate: record.gate,
       }, `${record.guardName}|${record.shift}|${record.date}|${record.gate}`);
     }
-    if (present(record, "block") && present(record, "warden") && present(record, "totalBeds")) {
+    if ((present(record, "name") || present(record, "block")) && present(record, "totalBeds")) {
+      const name = record.name || record.block;
       add(record, sourceRow, "blocks", {
-        name: record.block, warden: record.warden, totalBeds: record.totalBeds,
-        occupiedBeds: record.occupiedBeds,
-      }, record.block);
+        name, type: record.type, warden: record.warden, totalRooms: record.totalRooms,
+        totalBeds: record.totalBeds, occupiedBeds: record.occupiedBeds,
+      }, name);
     }
   });
   return expanded;
 }
 
 async function importRecords(target, records, createdBy) {
+  if (target.key === "blocks") {
+    const current = await getCollection("blocks");
+    const names = new Set(current.map((block) => String(block.name || "").trim().toLocaleLowerCase()));
+    const newRecords = records.filter((record) => {
+      const key = String(record.name || "").trim().toLocaleLowerCase();
+      if (!key || names.has(key)) return false;
+      names.add(key);
+      return true;
+    }).map((record) => ({
+      ...record,
+      name: String(record.name || "").trim(),
+      ...(record.type ? { type: record.type } : {}),
+      ...(record.warden ? {} : { warden: "Unassigned" }),
+      totalRooms: Number(record.totalRooms || 0),
+      totalBeds: Number(record.totalBeds || 0),
+      occupiedBeds: Number(record.occupiedBeds || 0),
+    }));
+    const skipped = records.length - newRecords.length;
+    const written = newRecords.length ? await bulkAddDocuments("blocks", newRecords, createdBy) : 0;
+    return { written, failed: skipped ? [{ target: "Hostel blocks", reason: `${skipped} block row(s) matched an existing block name and were skipped.` }] : [] };
+  }
   if (target.key === "students") {
     const accountResult = await ensureStudentAccounts(records, target.onProgress);
     const result = await bulkUpsertStudentsByEmail(records, createdBy);
@@ -367,13 +331,36 @@ async function ensureStudentAccounts(records, onProgress) {
         email: record.email,
         password: "123456",
         role: "Student",
+        registrationNo: record.regNo || record.registrationNo || "",
+        gender: record.gender || "",
+        branch: record.branch || "",
+        year: record.year || "",
+        wing: record.wing || "",
+        room: record.room || "",
+        bed: record.bed || "",
+        phone: record.phone || "",
         hostelResidence: record.hostelResidence || record.block,
       });
       createdAccounts += 1;
     } catch (error) {
-      // Existing accounts are reused; the student roster upsert or UID
-      // mapping below confirms whether the existing account is a Student.
-      if (error?.code !== "auth/email-already-in-use") {
+      if (error?.code === "auth/email-already-in-use") {
+        try {
+          const existing = (await getCollection("users", { whereClauses: [["email", "==", record.email.trim().toLowerCase()]], limitCount: 2 }))
+            .find((account) => account.role === "Student");
+          if (!existing) throw new Error("An account already uses this email, but no matching Student profile was found.");
+          const registrationNo = record.regNo || record.registrationNo || "";
+          if (registrationNo) await updateDocument("users", existing.id, {
+            registrationNo,
+            regNo: registrationNo,
+            gender: record.gender || "",
+            branch: record.branch || "",
+            year: record.year || "",
+          });
+          if (registrationNo) await reconcileStudentRecordsForAccount(registrationNo, existing.id);
+        } catch (linkError) {
+          errors.set(record.email, linkError?.message || "Could not link the existing Student account to this registration number.");
+        }
+      } else {
         errors.set(record.email, error?.message || "Could not create the student login account.");
       }
     }
@@ -397,26 +384,20 @@ export default function DataImport() {
   const [importProgress, setImportProgress] = useState(null);
   const [fileAlreadyImported, setFileAlreadyImported] = useState(null);
   const [fileFingerprint, setFileFingerprint] = useState("");
-  const [attendanceRepair, setAttendanceRepair] = useState({ busy: true, error: "", result: null });
+  const [attendanceRepair, setAttendanceRepair] = useState({ busy: false, error: "", result: null });
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    let active = true;
-    if (isDemoMode()) {
-      setAttendanceRepair({ busy: false, error: "", result: null });
-      return () => { active = false; };
+  async function linkExistingAttendance() {
+    setAttendanceRepair({ busy: true, error: "", result: null });
+    try {
+      const result = await reconcileStudentAccountLinks();
+      setAttendanceRepair({ busy: false, error: "", result });
+      logAudit({ actor: user?.email || user?.uid || "Admin", action: "Linked student records to accounts", target: `${result.accountsProcessed} student accounts checked; ${result.attendance} attendance records linked` }).catch(() => {});
+    } catch (error) {
+      console.error("Failed to reconcile student records:", error);
+      setAttendanceRepair({ busy: false, error: error.message || "Student records could not be linked.", result: null });
     }
-    if (!user?.uid) return () => { active = false; };
-    ensureAttendanceLinksRepaired(user?.email || user?.uid || "Admin")
-      .then((result) => {
-        if (active) setAttendanceRepair({ busy: false, error: "", result });
-      })
-      .catch((error) => {
-        console.error("Failed to automatically link imported attendance:", error);
-        if (active) setAttendanceRepair({ busy: false, error: error.message || "Attendance records could not be linked automatically.", result: null });
-      });
-    return () => { active = false; };
-  }, [user?.email, user?.uid]);
+  }
 
   function reset() {
     setFile(null);
@@ -560,6 +541,7 @@ export default function DataImport() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      <AdminBlocksSection />
       <Card
         title="Bulk data import"
         subtitle="Upload a CSV or Excel file to add records to the correct database sections. Every row is validated before it is written."
@@ -619,16 +601,18 @@ export default function DataImport() {
             />
           </Field>
 
-          {attendanceRepair.busy && <p role="status" className="border-t border-slate-100 pt-3 text-xs text-slate-500">Checking imported attendance links automatically…</p>}
-          {attendanceRepair.error && <p role="alert" className="border-t border-rose-100 pt-3 text-sm text-rose-700">Attendance auto-linking failed: {attendanceRepair.error}</p>}
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+            <Button type="button" onClick={linkExistingAttendance} disabled={attendanceRepair.busy || isDemoMode()}>
+              {attendanceRepair.busy ? "Linking student records…" : "Link attendance to accounts"}
+            </Button>
+            <p className="text-xs text-slate-500">Run once after student accounts are created to connect attendance and related records by registration number.</p>
+          </div>
+          {attendanceRepair.error && <p role="alert" className="border-t border-rose-100 pt-3 text-sm text-rose-700">Student record linking failed: {attendanceRepair.error}</p>}
           {attendanceRepair.result && (
             <div role="status" className="border-t border-slate-100 pt-3">
               <p className="text-xs text-slate-600">
-                Attendance link check: {attendanceRepair.result.linked} linked, {attendanceRepair.result.alreadyLinked} already linked, {attendanceRepair.result.unmatched} unmatched, {attendanceRepair.result.duplicateDates} duplicate dates skipped.
+                Checked {attendanceRepair.result.accountsProcessed} student accounts; linked {attendanceRepair.result.attendance} attendance, {attendanceRepair.result.fees} fees, {attendanceRepair.result.gatePasses} gate passes, and {attendanceRepair.result.leaveRequests} leave requests.
               </p>
-              {attendanceRepair.result.unmatchedExamples?.length > 0 && (
-                <p className="mt-1 text-xs text-amber-700">Could not match: {attendanceRepair.result.unmatchedExamples.join("; ")}</p>
-              )}
             </div>
           )}
 

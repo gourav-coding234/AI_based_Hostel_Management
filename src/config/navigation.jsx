@@ -18,7 +18,6 @@ import {
   WrenchIcon,
   WalletIcon,
   MegaphoneIcon,
-  BuildingIcon,
   DownloadIcon,
   ClipboardIcon,
   EyeIcon,
@@ -56,7 +55,6 @@ export const NAVIGATION = {
       items: [
         { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
         { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
-        { label: "Blocks & Rooms", to: "/dashboard/admin/blocks", icon: <BuildingIcon /> },
       ],
     },
     {

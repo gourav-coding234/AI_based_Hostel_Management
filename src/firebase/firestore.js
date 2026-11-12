@@ -14,10 +14,9 @@ import {
   addDoc,
   runTransaction,
 } from "firebase/firestore";
-import { db, firebaseConfig } from "./config";
+import { db } from "./config";
 import { computeFeeStatus } from "../utils/fees";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { storage } from "./config";
+import { fileToResizedDataUrl } from "../utils/image";
 
 /**
  * Fetches a user's profile document from the `users` collection.
@@ -50,57 +49,13 @@ export async function updateUserProfile(uid, data) {
   await setDoc(doc(db, "users", uid), data, { merge: true });
 }
 
-/** Resize and upload a profile image to Storage, then persist its URL. */
+/** Compress the avatar in-browser and persist it on the user's Firestore profile. */
 export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role = "", onStage = () => {}) {
   if (!uid || !file) throw new Error("Choose a photo before uploading.");
-  if (!storage || !firebaseConfig.storageBucket) {
-    throw new Error("Firebase Storage is not configured. Set VITE_FIREBASE_STORAGE_BUCKET in the deployment environment.");
-  }
-  const allowed = ["image/jpeg", "image/png", "image/webp"];
-  if (!allowed.includes(file.type)) {
-    throw new Error(file.type === "image/heic" || file.type === "image/heif"
-      ? "This phone photo is HEIC/HEIF. Save or share it as JPG, PNG, or WebP, then try again."
-      : "Choose a JPG, PNG, or WebP image.");
-  }
-  if (file.size > 15 * 1024 * 1024) throw new Error("This image is larger than 15 MB.");
-
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) throw new Error("The selected image could not be opened. Try another JPG, PNG, or WebP file.");
-  const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Image processing is unavailable in this browser.");
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close?.();
-  let blob;
-  for (const quality of [0.86, 0.74, 0.62, 0.5, 0.38]) {
-    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-    if (blob && blob.size <= 500 * 1024) break;
-  }
-  if (!blob) throw new Error("The selected image could not be processed.");
-  if (blob.size > 500 * 1024) throw new Error("This image could not be compressed below 500 KB. Choose a smaller photo.");
-
-  onStage("Uploading photo");
-  const task = uploadBytesResumable(ref(storage, `profilePhotos/${uid}.jpg`), blob, { contentType: "image/jpeg" });
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      callback(value);
-    };
-    const timeout = setTimeout(() => {
-      finish(reject, new Error("Firebase Storage did not respond within 60 seconds. Check that Storage is enabled, the bucket name is correct, and storage.rules are published."));
-      task.cancel();
-    }, 60_000);
-    task.on("state_changed", (snapshot) => {
-      onProgress(snapshot.totalBytes ? Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100) : 0);
-    }, (error) => finish(reject, error), () => finish(resolve));
-  });
-  const photoURL = await getDownloadURL(task.snapshot.ref);
+  onStage("Preparing photo");
+  const photoURL = await fileToResizedDataUrl(file);
+  if (photoURL.length > 280_000) throw new Error("The compressed photo is too large for a profile. Choose a smaller image.");
+  onProgress(100);
   onStage("Saving profile photo");
   try {
     await updateUserProfile(uid, { photoURL });
@@ -115,6 +70,13 @@ export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role 
     }
   }
   return photoURL;
+}
+
+/** Remove the photo from the profile, and keep Student's linked profile in sync. */
+export async function removeProfilePhoto(uid, role = "") {
+  if (!uid) throw new Error("Your account is not ready. Refresh and try again.");
+  await updateUserProfile(uid, { photoURL: "" });
+  if (role === "Student") await setDoc(doc(db, "students", uid), { photoURL: "", updatedAt: serverTimestamp() }, { merge: true });
 }
 
 /**
@@ -290,7 +252,7 @@ export async function saveAttendanceForDate(records, existingIdByStudentId, mark
         },
         { merge: true }
       );
-      if (markedBy?.persistStudentGender && ["Male", "Female"].includes(r.gender)) {
+      if (markedBy?.persistStudentGender && r.hasAccount !== false && ["Male", "Female"].includes(r.gender)) {
         batch.set(doc(db, "students", r.studentId), { gender: r.gender, updatedAt: serverTimestamp() }, { merge: true });
       }
       written += 1;
@@ -299,6 +261,111 @@ export async function saveAttendanceForDate(records, existingIdByStudentId, mark
   }
 
   return written;
+}
+
+function normalizeStudentRegNo(value) {
+  return String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
+
+async function findLegacyStudentRecords(collectionName, registrationNo) {
+  const regNo = String(registrationNo || "").trim();
+  const normalized = normalizeStudentRegNo(regNo);
+  const studentIds = [`reg:${normalized}`, `register:${regNo}`, regNo].filter(Boolean);
+  const clauses = [
+    ...studentIds.map((studentId) => [["studentId", "==", studentId]]),
+    [["registrationNo", "==", regNo]],
+    [["regNo", "==", regNo]],
+  ];
+  const results = await Promise.all(clauses.map((whereClauses) =>
+    getCollection(collectionName, { whereClauses }).catch((error) => {
+      if (error?.code === "permission-denied" || error?.code === "resource-exhausted") throw error;
+      return [];
+    })
+  ));
+  const unique = new Map();
+  results.flat().forEach((record) => unique.set(record.id, record));
+  return [...unique.values()];
+}
+
+/**
+ * Re-key history recorded against reg:<registrationNo> to the real Firebase
+ * UID. Attendance uses its canonical uid_date document ID; related fee,
+ * pass and leave documents keep their existing IDs and only change studentId.
+ * The operation can be safely repeated after a partial/network failure.
+ */
+export async function reconcileStudentRecordsForAccount(registrationNo, uid) {
+  const regNo = String(registrationNo || "").trim();
+  if (!regNo || !uid) return { attendance: 0, fees: 0, gatePasses: 0, leaveRequests: 0 };
+
+  const result = { attendance: 0, fees: 0, gatePasses: 0, leaveRequests: 0 };
+  const attendanceRows = (await findLegacyStudentRecords("attendance", regNo))
+    .filter((record) => record.date && record.id !== `${uid}_${record.date}`);
+  const byDate = new Map();
+  attendanceRows.forEach((record) => {
+    const current = byDate.get(record.date);
+    const time = (value) => value?.toMillis?.() || 0;
+    if (!current || time(record.markedAt) >= time(current.markedAt)) byDate.set(record.date, record);
+  });
+
+  let batch = writeBatch(db);
+  let operations = 0;
+  async function flush() {
+    if (!operations) return;
+    await batch.commit();
+    batch = writeBatch(db);
+    operations = 0;
+  }
+  for (const [date, source] of byDate) {
+    const targetId = `${uid}_${date}`;
+    const targetRef = doc(db, "attendance", targetId);
+    const { id: sourceId, ...sourceData } = source;
+    const targetSnap = await getDoc(targetRef);
+    batch.set(targetRef, {
+      ...(targetSnap.exists() ? targetSnap.data() : sourceData),
+      studentId: uid,
+      registrationNo: regNo,
+      studentName: sourceData.studentName || "",
+      date,
+    }, { merge: true });
+    operations += 1;
+    if (sourceId !== targetId) {
+      batch.delete(doc(db, "attendance", sourceId));
+      operations += 1;
+    }
+    result.attendance += 1;
+    if (operations >= 400) await flush();
+  }
+  await flush();
+
+  for (const collectionName of ["fees", "gatePasses", "leaveRequests"]) {
+    const rows = (await findLegacyStudentRecords(collectionName, regNo)).filter((record) => record.studentId !== uid);
+    const updates = rows.map(({ id, ...record }) => ({ id, data: { studentId: uid, registrationNo: record.registrationNo || regNo } }));
+    result[collectionName] = updates.length ? await bulkUpdateDocuments(collectionName, updates) : 0;
+  }
+  return result;
+}
+
+/** Admin action: reconcile existing registration-linked history to accounts. */
+export async function reconcileStudentAccountLinks() {
+  const [accounts, students] = await Promise.all([
+    getCollection("users", { whereClauses: [["role", "==", "Student"]] }),
+    getCollection("students"),
+  ]);
+  const studentsByUid = new Map(students.map((row) => [row.id, row]));
+  const totals = { accountsProcessed: 0, attendance: 0, fees: 0, gatePasses: 0, leaveRequests: 0 };
+  for (const account of accounts) {
+    const student = studentsByUid.get(account.id) || {};
+    const email = String(account.email || "").trim().toLowerCase();
+    const row = account.registrationNo || account.regNo || student.registrationNo || student.regNo || !email
+      ? null
+      : (await getCollection("studentRegister", { whereClauses: [["email", "==", email]], limitCount: 1 }))[0] || null;
+    const regNo = account.registrationNo || account.regNo || student.registrationNo || student.regNo || row?.regNo || row?.registrationNo;
+    if (!regNo) continue;
+    const linked = await reconcileStudentRecordsForAccount(regNo, account.id);
+    totals.accountsProcessed += 1;
+    Object.keys(linked).forEach((key) => { totals[key] += linked[key]; });
+  }
+  return totals;
 }
 
 /**
@@ -383,7 +450,13 @@ export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
         registrationNo: regNo,
         branch: row.branch || "",
         year: row.year || "",
+        gender: row.gender || "",
         batch: row.batch || "",
+        phone: row.phone || "",
+        hostelResidence: row.hostelResidence || row.wing || "",
+        wing: row.wing || "",
+        room: row.room || "",
+        bed: row.bed || "",
       }, { merge: true });
       written += 1;
     }
@@ -885,7 +958,10 @@ export async function recordGateMovement(passId, direction, guard, expectedStude
     tx.set(statusRef, {
       studentId: pass.studentId,
       registrationNo,
+      gatePassId: passId,
+      reason: pass.reason || "",
       status: direction === "Out" ? "OUT" : "IN",
+      ...(direction === "Out" ? { exitTime: serverTimestamp() } : { entryTime: serverTimestamp(), returnedAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
     });
 
@@ -918,15 +994,20 @@ export async function recordGateMovement(passId, direction, guard, expectedStude
 
 /** Security's one-tap manual movement entry; the current in/out state and log
  * are committed together so refreshes and concurrent guards cannot lose it. */
-export async function recordManualMovement(student, guard) {
+export async function recordManualMovement(student, direction, reason, guard) {
   if (!student?.id || !guard?.uid) throw new Error("STUDENT_OR_GUARD_REQUIRED");
+  if (!["Out", "In"].includes(direction)) throw new Error("INVALID_DIRECTION");
+  if (direction === "Out" && !String(reason || "").trim()) throw new Error("REASON_REQUIRED");
   const statusRef = doc(db, "inOutStatus", student.id);
   const logRef = doc(collection(db, "inOutLogs"));
   const now = new Date();
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(statusRef);
     const previous = snap.exists() ? snap.data().status : "IN";
-    const type = previous === "OUT" ? "IN" : "OUT";
+    if ((direction === "Out" && previous === "OUT") || (direction === "In" && previous !== "OUT")) {
+      throw new Error(direction === "Out" ? "ALREADY_OUT" : "NOT_OUT_YET");
+    }
+    const type = direction.toUpperCase();
     const entry = {
       studentId: student.id,
       registrationNo: student.regNo || "",
@@ -937,6 +1018,7 @@ export async function recordManualMovement(student, guard) {
       type,
       direction: type === "OUT" ? "Out" : "In",
       method: "manual",
+      reason: direction === "Out" ? String(reason).trim() : "",
       guardId: guard.uid,
       guard: guard.name || "Security",
       time: now.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }),
@@ -944,7 +1026,14 @@ export async function recordManualMovement(student, guard) {
       scannedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     };
-    tx.set(statusRef, { status: type, studentId: student.id, registrationNo: entry.registrationNo, updatedAt: serverTimestamp() });
+    tx.set(statusRef, {
+      status: type,
+      studentId: student.id,
+      registrationNo: entry.registrationNo,
+      ...(direction === "Out" ? { reason: entry.reason } : {}),
+      ...(direction === "Out" ? { exitTime: serverTimestamp() } : { entryTime: serverTimestamp(), returnedAt: serverTimestamp() }),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
     tx.set(logRef, entry);
     return entry;
   });

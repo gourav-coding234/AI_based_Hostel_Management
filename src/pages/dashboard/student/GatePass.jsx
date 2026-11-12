@@ -125,6 +125,7 @@ export default function GatePass() {
   const { user, profile } = useAuth();
   const studentId = user?.uid || "";
   const gatePasses = useMyGatePasses(studentId);
+  const movement = useStudentCollection("inOutStatus", studentId, { live: true });
   // Own room/wing record — used only to tag the pass with block/room so the
   // admin/warden GatePasses pages' block & wing filters actually have
   // something to filter on. Never used to gate access; that's Firestore's job.
@@ -155,6 +156,7 @@ export default function GatePass() {
   // is "active" is ever cached in state or localStorage.
   const activePass = useMemo(() => pickActivePass(passes.filter((p) => isPassActive(p) && !isPassOut(p)), now), [passes, now]);
   const journeyPass = passes.find(isPassOut);
+  const completedPass = passes.find((pass) => passStatus(pass) === "Completed");
   const pendingPass = passes.find((p) => p.status === "Pending");
 
   useEffect(() => {
@@ -211,6 +213,13 @@ export default function GatePass() {
               <p className="text-sm text-slate-500">Exit recorded {journeyPass.exitTime?.toDate ? journeyPass.exitTime.toDate().toLocaleString("en-IN") : "by security"}.</p>
               <p className="max-w-sm text-xs text-slate-400">This pass has already been used for exit and its QR is disabled. Security will record your return at the gate.</p>
             </div>
+          ) : movement.items[0]?.status === "OUT" ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <Pill tone="Out">Out</Pill>
+              <p className="font-display text-base font-semibold text-ink">Manual exit</p>
+              <p className="text-sm text-slate-500">Exit recorded {movement.items[0].exitTime?.toDate ? movement.items[0].exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>
+              {movement.items[0].reason && <p className="text-sm text-slate-500">{movement.items[0].reason}</p>}
+            </div>
           ) : activePass ? (
             <div className="flex flex-col items-center gap-4 py-2 text-center">
               {qrFailed ? (
@@ -238,7 +247,7 @@ export default function GatePass() {
                 <p className="mt-1 text-xs text-slate-400">{displayDate(activePass.from)} → {displayDate(activePass.to)}</p>
               </div>
               <div className="flex items-center gap-2">
-                <Pill tone={activePass.status}>{activePass.status}</Pill>
+                <Pill tone={passStatus(activePass)}>{passStatus(activePass)}</Pill>
                 <Pill tone={activePass.tripState === "Out" ? "Pending" : activePass.tripState === "Returned" ? "Resolved" : "Normal"}>
                   {activePass.tripState}
                 </Pill>
@@ -248,6 +257,12 @@ export default function GatePass() {
                 security at the gate — they verify and record it once on the way out and once on the way back in. Your trip
                 status above updates automatically once security logs it.
               </p>
+            </div>
+          ) : completedPass ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <Pill tone={passStatus(completedPass)}>{passStatus(completedPass)}</Pill>
+              <p className="font-display text-base font-semibold text-ink">{completedPass.type} · {completedPass.id}</p>
+              <p className="text-sm text-slate-500">Returned {completedPass.returnedAt?.toDate ? completedPass.returnedAt.toDate().toLocaleString("en-IN") : completedPass.entryTime?.toDate ? completedPass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>
             </div>
           ) : pendingPass ? (
             <EmptyState
@@ -323,7 +338,7 @@ export default function GatePass() {
                     <td className="py-2.5 font-medium text-ink">{p.type}</td>
                     <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>
                       <td className="py-2.5"><Pill tone={passStatus(p)}>{passStatus(p)}</Pill></td>
-                    <td className="py-2.5 pr-0 text-right text-slate-500">{p.tripState}</td>
+                    <td className="py-2.5 pr-0 text-right text-slate-500">{passStatus(p) === "Completed" ? `Returned ${p.returnedAt?.toDate ? p.returnedAt.toDate().toLocaleString("en-IN") : p.entryTime?.toDate ? p.entryTime.toDate().toLocaleString("en-IN") : ""}` : passStatus(p) === "Out" ? `Exit ${p.exitTime?.toDate ? p.exitTime.toDate().toLocaleString("en-IN") : "recorded"}` : p.tripState || "—"}</td>
                   </tr>
                 ))}
               </tbody>

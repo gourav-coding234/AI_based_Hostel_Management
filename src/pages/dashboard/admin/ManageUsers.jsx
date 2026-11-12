@@ -15,7 +15,7 @@ function tsToDate(ts) {
   return new Date(ts);
 }
 
-const EMPTY_FORM = { name: "", email: "", password: "", role: "Student", hostelResidence: "", linkedStudentId: "" };
+const EMPTY_FORM = { name: "", email: "", password: "", role: "Student", registrationNo: "", hostelResidence: "", linkedStudentId: "" };
 
 const roleAccent = {
   Admin: "bg-navy-950/5 text-navy-900",
@@ -412,6 +412,18 @@ export default function ManageUsers() {
               />
             </Field>
 
+            {form.role === "Student" && (
+              <Field label="Registration number (optional, links roster and attendance)">
+                <input
+                  type="text"
+                  placeholder="Student registration number"
+                  value={form.registrationNo}
+                  onChange={(e) => setForm({ ...form, registrationNo: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Block / hostel (optional)">
                 <input
@@ -464,7 +476,7 @@ export default function ManageUsers() {
           }
         >
           <p className="-mt-2 mb-2 text-sm text-slate-500">
-            Columns: <code className="text-xs">name, email, password, role, hostelResidence, linkedStudentId</code>
+            Columns: <code className="text-xs">name, email, password, role, hostelResidence, linkedStudentId, registrationNo</code>
           </p>
 
           <form onSubmit={handleBulkCreate} className="mt-4 space-y-3">
@@ -666,7 +678,7 @@ export default function ManageUsers() {
 
       <Card title="Block coverage">
         {blocks.length === 0 ? (
-          <EmptyState title="No blocks yet" description="Add blocks on the Blocks page or via Data Import." />
+          <EmptyState title="No blocks yet" description="Add blocks in Data Import." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {blocks.map((b) => (

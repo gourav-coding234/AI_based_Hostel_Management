@@ -8,7 +8,7 @@ import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
 import { useParentNotifications } from "../../../hooks/useParentNotifications";
 import { noticeAppliesTo } from "../../../utils/notices";
-import { isPassActive } from "../../../utils/gatePass";
+import { isPassActive, passStatus } from "../../../utils/gatePass";
 import { inr, feeTone, summarizeChildFees, notificationToNotice } from "./parentData";
 
 function initials(name) {
@@ -48,6 +48,7 @@ export default function ParentOverview() {
   const fees = useStudentCollection("fees", linkedStudentId);
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { live: true });
+  const movement = useStudentCollection("inOutStatus", linkedStudentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId);
   const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const notifications = useParentNotifications();
@@ -71,7 +72,8 @@ export default function ParentOverview() {
   });
   const attendancePct = monthLog.length ? Math.round((monthCounts.Present / monthLog.length) * 100) : null;
 
-  const pass = currentPass([...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))));
+  const sortedPasses = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || "")));
+  const pass = currentPass(sortedPasses) || sortedPasses.find((item) => passStatus(item) === "Completed");
 
   // Latest notices AND the parent's own notifications in one short list,
   // newest first — same merge the Notices page uses.
@@ -138,9 +140,11 @@ export default function ParentOverview() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-950/5 text-navy-900">
             <QrIcon />
           </span>
-          <p className="mt-4 font-display text-lg font-semibold text-ink">{statsLoading ? "…" : pass ? pass.status : "None"}</p>
+          <p className="mt-4 font-display text-lg font-semibold text-ink">{statsLoading ? "…" : movement.items[0]?.status === "OUT" ? "Out" : pass ? passStatus(pass) : "None"}</p>
           <p className="mt-0.5 text-sm text-slate-500">Gate pass status</p>
           {pass && <p className="mt-0.5 text-xs text-slate-400">{pass.type}</p>}
+          {movement.items[0]?.status === "OUT" && <p className="mt-0.5 text-xs text-slate-400">Exit recorded {movement.items[0].exitTime?.toDate ? movement.items[0].exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
+          {pass && passStatus(pass) === "Completed" && <p className="mt-0.5 text-xs text-slate-400">Returned {pass.returnedAt?.toDate ? pass.returnedAt.toDate().toLocaleString("en-IN") : pass.entryTime?.toDate ? pass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
         </Link>
         <Link to="/dashboard/parent/room" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">

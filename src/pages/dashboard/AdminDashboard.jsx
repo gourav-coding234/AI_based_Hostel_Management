@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import StaffProfile from "./admin/StaffProfile";
 import AdminOverview from "./admin/Overview";
@@ -9,7 +9,6 @@ import Complaints from "./admin/Complaints";
 import Fees from "./admin/Fees";
 import Expenses from "./admin/Expenses";
 import Notices from "./admin/Notices";
-import Blocks from "./admin/Blocks";
 import Reports from "./admin/Reports";
 import AuditLog from "./admin/AuditLog";
 import Visitors from "./admin/Visitors";
@@ -26,7 +25,7 @@ export default function AdminDashboard() {
         <Route path="users" element={<ManageUsers />} />
         <Route path="data-import" element={<DataImport />} />
         <Route path="student-register" element={<StudentRegister />} />
-        <Route path="blocks" element={<Blocks />} />
+        <Route path="blocks" element={<Navigate to="/dashboard/admin/data-import" replace />} />
         <Route path="visitors" element={<Visitors />} />
         <Route path="gate-passes" element={<GatePasses />} />
         <Route path="leave" element={<Leave />} />

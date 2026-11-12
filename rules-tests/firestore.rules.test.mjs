@@ -26,6 +26,7 @@ before(async () => {
     const pass = { studentId: "stu1", studentName: "A", from: "a", to: "b", type: "Home", reason: "r", status: "Approved", approvedBy: "W" };
     await setDoc(doc(d, "gatePasses", "fresh"), pass);
     await setDoc(doc(d, "gatePasses", "out"), { ...pass, tripState: "Out" });
+    await setDoc(doc(d, "gatePasses", "out-legacy"), { ...pass, status: "Out" });
     await setDoc(doc(d, "gatePasses", "pending"), { ...pass, status: "Pending" });
     await setDoc(doc(d, "gatePasses", "done"), { ...pass, tripState: "Returned", status: "Completed" });
     await setDoc(doc(d, "attendance", "stu1_2026-09-28"), { studentId: "stu1", date: "2026-09-28", status: "Present", markedBy: "warden" });
@@ -64,6 +65,20 @@ describe("attendance", () => {
     await assertFails(getDoc(doc(db("stu2"), "attendance", "stu1_2026-09-28")));
     await assertFails(getDoc(doc(db("par2"), "attendance", "stu1_2026-09-28")));
   });
+  it("lets staff mark an unlinked registration row without exposing it to other students/parents", async () => {
+    const record = { studentId: "reg:2301104001", registrationNo: "2301104001", date: "2026-09-30", status: "Present", markedBy: "sec" };
+    await assertSucceeds(setDoc(doc(db("sec"), "attendance", "reg:2301104001_2026-09-30"), record));
+    await assertFails(getDoc(doc(db("stu1"), "attendance", "reg:2301104001_2026-09-30")));
+    await assertFails(getDoc(doc(db("par1"), "attendance", "reg:2301104001_2026-09-30")));
+  });
+});
+
+describe("profile photos", () => {
+  it("allows a user to save a compressed photo to their own profile only", async () => {
+    await assertSucceeds(updateDoc(doc(db("stu1"), "users", "stu1"), { photoURL: `data:image/jpeg;base64,${"a".repeat(1000)}` }));
+    await assertFails(updateDoc(doc(db("stu1"), "users", "stu2"), { photoURL: "data:image/jpeg;base64,abc" }));
+    await assertFails(updateDoc(doc(db("stu1"), "users", "stu1"), { photoURL: `data:image/jpeg;base64,${"a".repeat(280001)}` }));
+  });
 });
 
 describe("gate passes", () => {
@@ -72,6 +87,7 @@ describe("gate passes", () => {
   it("OUT ok; RETURN ok", async () => {
     await assertSucceeds(updateDoc(p("fresh"), { status: "Out", tripState: "Out", exitTime: serverTimestamp(), scannedBy: "Guard", scannedByUid: "sec", updatedAt: serverTimestamp() }));
     await assertSucceeds(updateDoc(p("out"), { tripState: "Returned", status: "Completed", entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: "sec", updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(p("out-legacy"), { tripState: "Returned", status: "Completed", entryTime: serverTimestamp(), returnedAt: serverTimestamp(), returnedByUid: "sec", updatedAt: serverTimestamp() }));
   });
   it("cannot touch protected fields, even with a valid transition", async () => {
     for (const extra of [{ studentId: "x" }, { studentName: "x" }, { from: "x" }, { to: "x" }, { type: "x" }, { reason: "x" }, { approvedBy: "x" }])
@@ -114,6 +130,28 @@ describe("logs, visitors, incidents", () => {
     await assertFails(deleteDoc(doc(db("sec"), "visitors", "v1")));
     await assertSucceeds(setDoc(doc(db("sec"), "incidents", "i2"), { title: "y" }));
     await assertSucceeds(updateDoc(doc(db("sec"), "incidents", "i1"), { title: "z" }));
+  });
+});
+
+describe("gate desk movement privacy", () => {
+  it("lets security write guarded movement logs and status, while students and parents only read linked records", async () => {
+    await assertSucceeds(setDoc(doc(db("sec"), "inOutLogs", "desk-out"), {
+      studentId: "stu1", guardId: "sec", type: "OUT", direction: "Out", method: "manual", reason: "Medical appointment",
+    }));
+    await assertFails(setDoc(doc(db("sec"), "inOutLogs", "bad-guard"), {
+      studentId: "stu1", guardId: "someone-else", type: "OUT", direction: "Out",
+    }));
+    await assertSucceeds(setDoc(doc(db("sec"), "inOutStatus", "stu1"), {
+      studentId: "stu1", status: "OUT", reason: "Medical appointment",
+    }));
+    await assertSucceeds(getDoc(doc(db("stu1"), "inOutStatus", "stu1")));
+    await assertSucceeds(getDoc(doc(db("par1"), "inOutStatus", "stu1")));
+    await assertFails(getDoc(doc(db("stu2"), "inOutStatus", "stu1")));
+    await assertFails(getDoc(doc(db("par2"), "inOutStatus", "stu1")));
+    await assertSucceeds(getDoc(doc(db("stu1"), "inOutLogs", "desk-out")));
+    await assertSucceeds(getDoc(doc(db("par1"), "inOutLogs", "desk-out")));
+    await assertFails(getDoc(doc(db("stu2"), "inOutLogs", "desk-out")));
+    await assertFails(getDoc(doc(db("par2"), "inOutLogs", "desk-out")));
   });
 });
 

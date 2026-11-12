@@ -64,7 +64,7 @@ export default function WardenAttendance() {
     return map;
   }, [attendance, selectedDate]);
 
-  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal, unlinkedCount } = useAttendanceRoster(directory, existingForDate, assignedWing);
+  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal, unlinkedCount, withAccountCount } = useAttendanceRoster(directory, existingForDate, assignedWing);
 
   // Local edits for the visible date only — Firestore (via existingForDate
   // above) is what the draft is seeded from and what "after a refresh"
@@ -131,7 +131,8 @@ export default function WardenAttendance() {
     });
 
     const records = marked.map((s) => ({
-      studentId: s.id,
+      studentId: s.accountUid || s.id,
+      hasAccount: s.hasAccount,
       registrationNo: s.regNo || "",
       studentName: s.name,
       wing: s.wing,
@@ -157,7 +158,7 @@ export default function WardenAttendance() {
   }
 
   const rosterColumns = [
-    { key: "name", label: "Name", sortable: true },
+    { key: "name", label: "Name", sortable: true, render: (r) => <div className="flex items-center gap-2">{r.name}{!r.hasAccount && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">No account yet</span>}</div> },
     { key: "regNo", label: "Registration No", render: (r) => <span className="font-mono text-xs">{r.regNo || "—"}</span> },
     { key: "wing", label: "Wing/Block", sortable: true, render: (r) => r.wing || "—" },
     {
@@ -298,8 +299,8 @@ export default function WardenAttendance() {
           <p className="text-xs text-slate-500">
             {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
           </p>
-          <p className="text-xs text-slate-500">Roster total: {rosterTotal}{assignedWing ? ` in ${assignedWing}` : " hostel-wide"}. Students without a recorded gender appear under Unspecified.</p>
-          {unlinkedCount > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{unlinkedCount} imported student record{unlinkedCount === 1 ? "" : "s"} appear in the directory but have no Student login yet, so attendance cannot be linked to their dashboard until an Admin creates or repairs the account.</p>}
+          <p className="text-xs text-slate-500">Residents: {rosterTotal}{assignedWing ? ` in ${assignedWing}` : " hostel-wide"} · with account: {withAccountCount} · without account: {unlinkedCount}. Students without recorded gender appear under Unspecified.</p>
+          {unlinkedCount > 0 && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Attendance can be recorded for all residents. {unlinkedCount} without accounts will be linked automatically when their Student accounts are created.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {markedCount} of {roster.length} marked

@@ -12,6 +12,7 @@ export default function ParentGatePass() {
   const linked = useLinkedStudent();
   const { studentUser, linkedStudentId } = linked;
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { orderByField: "from", live: true });
+  const movement = useStudentCollection("inOutStatus", linkedStudentId, { live: true });
   // Read-only. Queried by studentId so it satisfies the same own-record rule
   // as every other Parent query; the rules give parents no write access here.
   const leaves = useStudentCollection("leaveRequests", linkedStudentId, { orderByField: "from" });
@@ -19,7 +20,7 @@ export default function ParentGatePass() {
   if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
   const passList = gatePasses.items;
-  const activePass = passList.find(isPassActive);
+  const activePass = passList.find(isPassActive) || [...passList].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find((pass) => passStatus(pass) === "Completed");
   async function exportGatePasses() {
     await downloadXlsxFile(passList, [
       { label: "Gate Pass ID", value: (row) => row.id },
@@ -39,7 +40,14 @@ export default function ParentGatePass() {
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <Card title="Current status">
-        {activePass ? (
+        {movement.items[0]?.status === "OUT" ? (
+          <div className="flex flex-col items-center gap-2 py-3 text-center">
+            <Pill tone="Out">Out</Pill>
+            <p className="font-display text-base font-semibold text-ink">{activePass?.type || "Manual movement"}</p>
+            <p className="text-sm text-slate-500">Exit recorded {movement.items[0].exitTime?.toDate ? movement.items[0].exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>
+            {activePass?.reason && <p className="text-sm text-slate-500">{activePass.reason}</p>}
+          </div>
+        ) : activePass ? (
           <div className="flex flex-col items-center gap-3 py-2 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-500/10 text-teal-600">
               <QrIcon />
@@ -49,12 +57,13 @@ export default function ParentGatePass() {
               <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
               <p className="mt-1 text-xs text-slate-400">{activePass.from} → {activePass.to}</p>
               {activePass.exitTime?.toDate && <p className="mt-1 text-xs text-slate-500">Exit recorded {activePass.exitTime.toDate().toLocaleString("en-IN")}</p>}
+              {passStatus(activePass) === "Completed" && <p className="mt-1 text-xs text-slate-500">Returned {activePass.returnedAt?.toDate ? activePass.returnedAt.toDate().toLocaleString("en-IN") : activePass.entryTime?.toDate ? activePass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
             </div>
             <div className="flex items-center gap-2">
               <Pill tone={passStatus(activePass)}>{passStatus(activePass)}</Pill>
               {activePass.tripState && (
-                <Pill tone={activePass.tripState === "Out" ? "Pending" : activePass.tripState === "Returned" ? "Resolved" : "Normal"}>
-                  {activePass.tripState}
+                <Pill tone={passStatus(activePass)}>
+                  {passStatus(activePass)}
                 </Pill>
               )}
             </div>
@@ -62,7 +71,7 @@ export default function ParentGatePass() {
         ) : (
           <EmptyState
             icon={<QrIcon />}
-            title="No approved gate pass right now"
+            title="No gate pass right now"
             description={`${studentUser?.name || "Your child"} doesn't have an active outing or home-visit pass.`}
           />
         )}
@@ -93,8 +102,8 @@ export default function ParentGatePass() {
                     <td className="py-2.5 text-slate-400">{p.id}</td>
                     <td className="py-2.5 font-medium text-ink">{p.type || "—"}</td>
                     <td className="py-2.5 text-slate-500">{p.from || "—"} → {p.to || "—"}</td>
-                    <td className="py-2.5"><Pill tone={p.status}>{p.status || "Pending"}</Pill></td>
-                    <td className="py-2.5 pr-0 text-right text-slate-500">{p.tripState || "—"}</td>
+                    <td className="py-2.5"><Pill tone={passStatus(p)}>{passStatus(p)}</Pill></td>
+                    <td className="py-2.5 pr-0 text-right text-slate-500">{passStatus(p) === "Completed" ? `Returned ${p.returnedAt?.toDate ? p.returnedAt.toDate().toLocaleString("en-IN") : p.entryTime?.toDate ? p.entryTime.toDate().toLocaleString("en-IN") : ""}` : passStatus(p) === "Out" ? `Exit ${p.exitTime?.toDate ? p.exitTime.toDate().toLocaleString("en-IN") : "recorded"}` : p.tripState || "—"}</td>
                   </tr>
                 ))}
               </tbody>

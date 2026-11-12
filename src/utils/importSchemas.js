@@ -10,7 +10,9 @@ export const IMPORT_SCHEMAS = {
     description: "One row per hostel block/wing (capacity used for occupancy stats).",
     columns: [
       { key: "name", label: "Block name", required: true, type: "string" },
+      { key: "type", label: "Hostel type (Boys/Girls)", required: false, type: "enum", enumValues: ["Boys", "Girls"] },
       { key: "warden", label: "Warden name", required: false, type: "string" },
+      { key: "totalRooms", label: "Total rooms", required: false, type: "number" },
       { key: "totalBeds", label: "Total beds", required: true, type: "number" },
       { key: "occupiedBeds", label: "Occupied beds", required: false, type: "number" },
     ],
@@ -205,6 +207,10 @@ export const IMPORT_SCHEMAS = {
       { key: "admissionYear", label: "Admission year", required: false, type: "number" },
       { key: "email", label: "Email", required: false, type: "email" },
       { key: "phone", label: "Phone", required: false, type: "string" },
+      { key: "hostelResidence", label: "Hostel block (hostel residents only)", required: false, type: "string" },
+      { key: "wing", label: "Wing / block", required: false, type: "string" },
+      { key: "room", label: "Room", required: false, type: "string" },
+      { key: "bed", label: "Bed", required: false, type: "string" },
     ],
   },
   dutyRoster: {
