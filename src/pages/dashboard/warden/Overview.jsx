@@ -39,7 +39,6 @@ export default function WardenOverview() {
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees", options: { limitCount: 100 } },
     attendance: { name: "attendance", options: { where: [["date", "==", today]], limitCount: 500 } },
-    roomRequests: { name: "roomRequests", options: { limitCount: 100 } },
     inventoryRequests: { name: "inventoryRequests", options: { limitCount: 100 } },
     leaveRequests: { name: "leaveRequests", options: { limitCount: 100 } },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
@@ -108,11 +107,10 @@ export default function WardenOverview() {
 
   // ---- Room + inventory requests — also hostel-wide, matching Room
   // Allotment / Warden Inventory, which don't scope these by wing either. ----
-  const pendingRoomRequests = data.roomRequests.filter((r) => r.status === "Pending").length;
   const pendingInventoryRequests = data.inventoryRequests.filter((r) => r.status === "Pending").length;
 
   const totalPendingActions =
-    pendingRoomRequests + pendingInventoryRequests + pendingGatePasses + pendingLeave + unassignedComplaints + overdueFees;
+    pendingInventoryRequests + pendingGatePasses + pendingLeave + unassignedComplaints + overdueFees;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
@@ -176,10 +174,6 @@ export default function WardenOverview() {
             <li className="flex items-center justify-between gap-3 py-3">
               <span className="text-sm text-ink">Pending leave requests</span>
               <Pill tone="Pending">{pendingLeave}</Pill>
-            </li>
-            <li className="flex items-center justify-between gap-3 py-3">
-              <span className="text-sm text-ink">Pending room requests</span>
-              <Pill tone="Pending">{pendingRoomRequests}</Pill>
             </li>
             <li className="flex items-center justify-between gap-3 py-3">
               <span className="text-sm text-ink">Pending inventory requests</span>
@@ -383,15 +377,6 @@ export default function WardenOverview() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Student directory</p>
             <p className="truncate text-xs text-slate-400">Search and view all residents</p>
-          </div>
-        </Link>
-        <Link to="/dashboard/warden/rooms" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
-            <BedIcon />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink">Allot vacant beds</p>
-            <p className="truncate text-xs text-slate-400">{vacantBeds} beds free right now</p>
           </div>
         </Link>
         <Link to="/dashboard/warden/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">

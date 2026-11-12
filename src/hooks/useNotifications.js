@@ -23,7 +23,6 @@ const ROLE_WATCH = {
   [ROLES.WARDEN]: [
     { key: "complaints", name: "complaints", label: (n) => `${n} open complaint${n === 1 ? "" : "s"}`, to: "/dashboard/warden/complaints", filter: (d) => d.status !== "Resolved" },
     { key: "leaveRequests", name: "leaveRequests", label: (n) => `${n} leave request${n === 1 ? "" : "s"} pending`, to: "/dashboard/warden/leave", filter: (d) => d.status === "Pending" },
-    { key: "roomRequests", name: "roomRequests", label: (n) => `${n} room request${n === 1 ? "" : "s"} pending`, to: "/dashboard/warden/rooms", filter: (d) => d.status === "Pending" },
   ],
   [ROLES.SECURITY]: [
     { key: "incidents", name: "incidents", label: (n) => `${n} incident${n === 1 ? "" : "s"} open`, to: "/dashboard/security/incidents", filter: (d) => d.status !== "Resolved" },

@@ -2,7 +2,6 @@ import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import StaffProfile from "./admin/StaffProfile";
 import WardenOverview from "./warden/Overview";
-import RoomAllotment from "./warden/RoomAllotment";
 import WardenFees from "./warden/WardenFees";
 import WardenMess from "./warden/WardenMess";
 import WardenAttendance from "./warden/WardenAttendance";
@@ -20,7 +19,6 @@ export default function WardenDashboard() {
       <Routes>
         <Route path="profile" element={<StaffProfile />} />
         <Route index element={<WardenOverview />} />
-        <Route path="rooms" element={<RoomAllotment />} />
         <Route path="directory" element={<StudentDirectory />} />
         <Route path="visitors" element={<Visitors />} />
         <Route path="gate-passes" element={<GatePasses />} />

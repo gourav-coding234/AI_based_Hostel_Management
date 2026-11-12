@@ -125,7 +125,6 @@ export const NAVIGATION = {
       section: "Hostel",
       items: [
         { label: "Student Directory", to: "/dashboard/warden/directory", icon: <UsersIcon /> },
-        { label: "Room & Bed", to: "/dashboard/warden/rooms", icon: <BedIcon /> },
         { label: "Attendance", to: "/dashboard/warden/attendance", icon: <CheckSquareIcon /> },
       ],
     },
