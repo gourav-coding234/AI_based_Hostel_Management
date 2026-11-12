@@ -9,9 +9,11 @@ service firebase.storage {
 
     match /profilePhotos/{fileName} {
       allow read: if signedIn();
-      allow write: if signedIn() && (fileName == request.auth.uid + '.jpg' || isAdmin())
+      allow create, update: if signedIn() && (fileName == request.auth.uid + '.jpg' || isAdmin())
+        && request.resource != null
         && request.resource.size <= 512000
         && request.resource.contentType == 'image/jpeg';
+      allow delete: if signedIn() && (fileName == request.auth.uid + '.jpg' || isAdmin());
     }
   }
 }

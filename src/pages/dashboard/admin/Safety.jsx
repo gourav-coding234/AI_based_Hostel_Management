@@ -93,7 +93,7 @@ export default function Safety() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {emergencyContacts.map((c) => (
-              <div key={c.id} className="rounded-2xl border border-slate-200 p-4">
+              <div key={c.id} className={`rounded-2xl border border-slate-200 p-4 ${c.id === "default-principal" ? "sm:col-span-2" : ""}`}>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{c.role}</p>
                 <p className="mt-1 font-display text-sm font-semibold text-ink">{c.name}</p>
                 <div className="mt-2 flex flex-col gap-1.5 text-sm text-slate-600">

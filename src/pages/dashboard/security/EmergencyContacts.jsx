@@ -49,7 +49,7 @@ export default function SecurityEmergencyContacts() {
             return (
               <div
                 key={c.id}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 transition-shadow duration-200 hover:shadow-md"
+                className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60 transition-shadow duration-200 hover:shadow-md ${c.id === "default-principal" ? "sm:col-span-2" : ""}`}
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{role || "Contact"}</p>
                 <p className="mt-1 font-display text-base font-semibold text-ink">{name || "Unnamed contact"}</p>

@@ -46,7 +46,7 @@ export default function EmergencyContacts() {
             const email = clean(c.email);
             const telTarget = toTelTarget(phone);
             return (
-              <Card key={c.id}>
+              <Card key={c.id} className={c.id === "default-principal" ? "sm:col-span-2" : ""}>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{role || "Contact"}</p>
                 <p className="mt-1.5 font-display text-base font-semibold text-ink">{name || "Unnamed contact"}</p>
                 <div className="mt-3 flex flex-col gap-2">

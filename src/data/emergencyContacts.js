@@ -5,8 +5,8 @@ export const PRINCIPAL_EMAIL = "principal@gcekjr.ac.in";
 // Please confirm whether one digit is missing.
 export const DEFAULT_EMERGENCY_CONTACTS = [
   { id: "default-principal", name: "Principal", role: "Principal", phone: PRINCIPAL_PHONE, email: PRINCIPAL_EMAIL },
-  { id: "default-boys-hostel", name: "Dr. Yogesh Kumar Nayak", role: "Boys Hostel Warden", phone: "8789958911", email: "" },
   { id: "default-girls-hostel", name: "Dr. Rajesh Kumar Tripathy", role: "Girls Hostel Warden", phone: "9776343570", email: "" },
+  { id: "default-boys-hostel", name: "Dr. Yogesh Kumar Nayak", role: "Boys Hostel Warden", phone: "8789958911", email: "" },
   { id: "default-security-banamali", name: "Banamali", role: "Security Guard", phone: "9348084139", email: "" },
   { id: "default-security-dehury", name: "Dehury", role: "Security Guard", phone: "798520218", email: "" },
   { id: "default-ambulance-driver", name: "Ambulance Driver", role: "Ambulance", phone: "9437627043", email: "" },

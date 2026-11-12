@@ -1,17 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { updateUserProfile } from "../../../firebase/firestore";
 import { useProfilePhotoUpload } from "../../../hooks/useProfilePhotoUpload";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
-import { CameraIcon } from "../../../components/dashboard/parent/icons";
+import ProfilePhotoControl from "../../../components/dashboard/ProfilePhotoControl";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
-
-function initials(name, email) {
-  const source = (name || email || "?").trim();
-  const parts = source.split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
 
 function toFormState(profile) {
   return {
@@ -30,20 +23,11 @@ export default function ParentProfile() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const fileInputRef = useRef(null);
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
   const photoUpload = useProfilePhotoUpload(user, refreshProfile, (photoURL) => set("photoURL", photoURL), profile?.role);
-
-  async function handlePhotoChange(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setError("");
-    await photoUpload.upload(file);
-  }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -73,25 +57,7 @@ export default function ParentProfile() {
           className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
         />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-          <div className="relative shrink-0">
-            {form.photoURL ? (
-              <img src={form.photoURL} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white/10" />
-            ) : (
-              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-500/20 font-display text-2xl font-semibold text-teal-200 ring-4 ring-white/10">
-                {initials(profile?.name, profile?.email)}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={photoUpload.uploading}
-              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-teal-500 text-white shadow-md transition-colors hover:bg-teal-400 disabled:opacity-60"
-              aria-label="Change photo"
-            >
-              <CameraIcon />
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          </div>
+          <ProfilePhotoControl photoURL={form.photoURL} name={profile?.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
           <div>
             <h2 className="font-display text-xl font-semibold">{displayName}</h2>
             <p className="mt-0.5 text-sm text-slate-300">{profile?.email}</p>
@@ -101,8 +67,6 @@ export default function ParentProfile() {
             </div>
           </div>
         </div>
-        {form.photoURL && <button type="button" onClick={photoUpload.remove} disabled={photoUpload.uploading} className="mt-3 text-xs text-rose-700 underline disabled:opacity-50">Remove photo</button>}
-        {photoUpload.uploading && <p role="status" className="mt-3 text-xs text-teal-300">{photoUpload.stage === "Uploading photo" ? `Uploading photo… ${photoUpload.progress}%` : `${photoUpload.stage}…`}</p>}
       </Card>
 
       <Card title="Edit your profile">
@@ -140,7 +104,7 @@ export default function ParentProfile() {
             />
           </Field>
 
-          {(error || photoUpload.error) && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error || photoUpload.error}</p>}
+          {error && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error}</p>}
           {success && <p className="rounded-xl bg-teal-500/10 px-4 py-2.5 text-sm text-teal-700">{success}</p>}
 
           <Button type="submit" disabled={saving || photoUpload.uploading} className="w-full sm:w-auto">
