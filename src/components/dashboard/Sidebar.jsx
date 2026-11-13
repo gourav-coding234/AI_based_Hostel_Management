@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { NAVIGATION } from "../../config/navigation";
+import ProfileAvatar from "./ProfileAvatar";
 
 const COLLAPSE_ICON = (
   <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -78,11 +79,7 @@ export default function Sidebar({ role, open, onClose, collapsed, onToggleCollap
 
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            {profile?.photoURL ? (
-              <img src={profile.photoURL} alt="" className="user-avatar" />
-            ) : (
-              <span className="user-avatar-fallback">{initials}</span>
-            )}
+            <ProfileAvatar src={profile?.photoURL} initials={initials} className="user-avatar" fallbackClassName="user-avatar-fallback" />
             {!collapsed && (
               <div className="sidebar-user-text">
                 <span className="sidebar-user-name">{displayName}</span>

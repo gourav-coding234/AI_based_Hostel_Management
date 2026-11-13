@@ -59,7 +59,7 @@ export default function ParentProfile() {
           className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
         />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-          <ProfilePhotoControl photoURL={form.photoURL} name={profile?.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
+          <ProfilePhotoControl photoURL={profile?.photoURL || form.photoURL} name={profile?.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
           <div>
             <h2 className="font-display text-xl font-semibold">{displayName}</h2>
             <p className="mt-0.5 text-sm text-slate-300">{profile?.email}</p>

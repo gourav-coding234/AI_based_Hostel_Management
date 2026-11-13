@@ -96,7 +96,8 @@ export default function Overview() {
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
   const studentPasses = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || "")));
-  const activePass = studentPasses.find(isPassActive) || studentPasses.find((pass) => passStatus(pass) === "Completed");
+  const activePass = studentPasses.find(isPassActive);
+  const completedPass = studentPasses.find((pass) => passStatus(pass) === "Completed");
   const movementStatus = movement.items[0];
 
   return (
@@ -219,6 +220,15 @@ export default function Overview() {
                 <Button variant="outline" className="w-full">View full pass</Button>
               </Link>
             </div>
+          ) : completedPass ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <Pill tone="Completed">Completed</Pill>
+              <p className="text-sm font-medium text-ink">{completedPass.type}</p>
+              <p className="text-xs text-slate-500">This journey has ended. Its QR code is no longer active.</p>
+              <Link to="/dashboard/student/gate-pass">
+                <Button variant="outline">View pass history</Button>
+              </Link>
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
@@ -243,13 +253,13 @@ export default function Overview() {
             <p className="truncate text-xs text-slate-400">Food, utensils or quality</p>
           </div>
         </Link>
-        <Link to="/dashboard/student/complaints?category=Inventory" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
+        <Link to="/dashboard/student/complaints" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600 transition-transform duration-200 group-hover:scale-105">
-            <BedIcon />
+            <WrenchIcon />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-ink">Request extra furniture</p>
-            <p className="truncate text-xs text-slate-400">Raise an inventory complaint</p>
+            <p className="text-sm font-semibold text-ink">Raise a complaint</p>
+            <p className="truncate text-xs text-slate-400">Report a hostel issue</p>
           </div>
         </Link>
         <Link to="/dashboard/student/fees" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">

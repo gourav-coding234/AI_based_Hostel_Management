@@ -49,7 +49,7 @@ export default function StaffProfile() {
       <Card title="My profile" subtitle="Update your personal details and profile photo.">
         <form onSubmit={save} className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-4">
-            <ProfilePhotoControl photoURL={form.photoURL} name={form.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
+            <ProfilePhotoControl photoURL={profile?.photoURL || form.photoURL} name={form.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
             <div><p className="font-medium text-ink">{form.name || profile?.email}</p><p className="text-sm text-slate-500">{profile?.role} · {profile?.email}</p></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">

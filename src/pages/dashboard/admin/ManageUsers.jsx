@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
-import { createUserAccount, friendlyCreateAccountError } from "../../../firebase/adminUsers";
+import { createUserAccount, friendlyCreateAccountError, updateManagedUserAccount } from "../../../firebase/adminUsers";
 import { getCollection, deleteUserProfile, updateDocument, logAudit } from "../../../firebase/firestore";
 import { parseUsersCsv, CSV_TEMPLATE, downloadTextFile } from "../../../utils/csv";
 import { ROLE_LIST } from "../../../roles";
@@ -54,6 +54,10 @@ export default function ManageUsers() {
   const [parentLinkDrafts, setParentLinkDrafts] = useState({});
   const [parentLinkSaving, setParentLinkSaving] = useState("");
   const [parentLinkFeedback, setParentLinkFeedback] = useState({});
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [accountDraft, setAccountDraft] = useState({ email: "", password: "" });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [accountEditError, setAccountEditError] = useState("");
 
   // Blocks & students only — the "users" collection is already loaded above
   // via loadUsers(), so warden rows are derived from that same list instead
@@ -170,6 +174,40 @@ export default function ManageUsers() {
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
+    }
+  }
+
+  function openAccountEditor(account) {
+    setEditingAccount(account);
+    setAccountDraft({ email: account.email || "", password: "" });
+    setAccountEditError("");
+  }
+
+  async function saveAccountChanges(event) {
+    event.preventDefault();
+    if (!editingAccount) return;
+    setSavingAccount(true);
+    setAccountEditError("");
+    try {
+      const updated = await updateManagedUserAccount({
+        user: currentUser,
+        targetUid: editingAccount.id,
+        email: accountDraft.email,
+        password: accountDraft.password,
+      });
+      setUsers((list) => list.map((account) => account.id === editingAccount.id
+        ? { ...account, email: updated.email }
+        : account));
+      logAudit({
+        actor: profile?.name || currentUser?.email || "Admin",
+        action: "Updated account credentials",
+        target: `${editingAccount.name || editingAccount.id} (${updated.email})${updated.passwordUpdated ? " — password changed" : ""}`,
+      }).catch(() => {});
+      setEditingAccount(null);
+    } catch (error) {
+      setAccountEditError(error?.message || "Couldn't update this account. Please try again.");
+    } finally {
+      setSavingAccount(false);
     }
   }
 
@@ -592,6 +630,14 @@ export default function ManageUsers() {
                     <Pill tone="General">{u.role}</Pill>
                     <span className="hidden text-xs text-slate-400 sm:inline">{u.hostelResidence || "—"}</span>
 
+                    <Button
+                      variant="outline"
+                      className="px-3 py-1.5 text-xs"
+                      onClick={() => openAccountEditor(u)}
+                    >
+                      Edit account
+                    </Button>
+
                     {u.role === "Parent" && (
                       <div className="flex flex-wrap items-center gap-2">
                         <select
@@ -692,6 +738,46 @@ export default function ManageUsers() {
           </div>
         )}
       </Card>
+
+      {editingAccount && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingAccount) setEditingAccount(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="edit-managed-account-title" className="w-full max-w-lg rounded-2xl bg-white p-5 text-slate-900 shadow-2xl sm:p-6">
+            <h2 id="edit-managed-account-title" className="font-display text-xl font-semibold">Edit account</h2>
+            <p className="mt-1 text-sm text-slate-500">Change sign-in details for {editingAccount.name || editingAccount.email}.</p>
+            <form onSubmit={saveAccountChanges} className="mt-5 space-y-4">
+              <Field label="Email address">
+                <input
+                  type="email"
+                  required
+                  autoComplete="off"
+                  value={accountDraft.email}
+                  onChange={(event) => setAccountDraft((current) => ({ ...current, email: event.target.value }))}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="New password">
+                <input
+                  type="password"
+                  minLength={6}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  placeholder="Leave blank to keep the current password"
+                  value={accountDraft.password}
+                  onChange={(event) => setAccountDraft((current) => ({ ...current, password: event.target.value }))}
+                  className={inputCls}
+                />
+              </Field>
+              <p className="text-xs text-slate-500">Password changes apply immediately. Share the new sign-in details securely with the account holder.</p>
+              {accountEditError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{accountEditError}</p>}
+              {accountEditSuccess && <p role="status" className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-700">{accountEditSuccess}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" disabled={savingAccount} onClick={() => setEditingAccount(null)}>Cancel</Button>
+                <Button type="submit" disabled={savingAccount}>{savingAccount ? "Saving…" : "Save account"}</Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

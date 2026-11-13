@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useDismissableMenu } from "../../hooks/useDismissableMenu";
+import ProfileAvatar from "./ProfileAvatar";
 
 const CHEVRON = (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -48,11 +49,7 @@ export default function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {profile?.photoURL ? (
-          <img src={profile.photoURL} alt="" className="user-avatar" />
-        ) : (
-          <span className="user-avatar-fallback">{initials}</span>
-        )}
+        <ProfileAvatar src={profile?.photoURL} initials={initials} className="user-avatar" fallbackClassName="user-avatar-fallback" />
         <span className="user-name">{displayName}</span>
         {CHEVRON}
       </button>

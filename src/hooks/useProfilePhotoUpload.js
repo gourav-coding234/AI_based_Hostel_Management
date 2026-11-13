@@ -11,6 +11,17 @@ function blobToDataUrl(blob) {
   });
 }
 
+function confirmImageCanDisplay(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => image.naturalWidth > 0 && image.naturalHeight > 0
+      ? resolve()
+      : reject(new Error("The selected photo could not be opened. Please choose another image."));
+    image.onerror = () => reject(new Error("The selected photo could not be opened. Please choose another image."));
+    image.src = dataUrl;
+  });
+}
+
 export function useProfilePhotoUpload(user, setLocalProfilePhoto, onUploaded) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -26,8 +37,12 @@ export function useProfilePhotoUpload(user, setLocalProfilePhoto, onUploaded) {
     try {
       const blob = await fileToResizedJpegBlob(file, imageOptions);
       const photoURL = await blobToDataUrl(blob);
+      await confirmImageCanDisplay(photoURL);
       setStage("Saving to this browser");
       saveLocalProfilePhoto(user?.uid, photoURL);
+      if (localStorage.getItem(`gce-hostel:profile-photo:v1:${user.uid}`) !== photoURL) {
+        throw new Error("The photo was not saved by this browser. Check that site storage is enabled, then try again.");
+      }
       setProgress(100);
       setLocalProfilePhoto?.(photoURL);
       onUploaded?.(photoURL);

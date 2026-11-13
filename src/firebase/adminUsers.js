@@ -101,6 +101,23 @@ export async function createUserAccount({ name, email, password, role, hostelRes
   return { uid, ...profile };
 }
 
+/** Update another account through the server-side Firebase Admin API. */
+export async function updateManagedUserAccount({ user, targetUid, email, password }) {
+  if (!user) throw new Error("Your admin session has expired. Sign in again.");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/admin/update-account", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ targetUid, email, password }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "Couldn't update this account. Please try again.");
+  return result;
+}
+
 export function friendlyCreateAccountError(error) {
   switch (error?.code) {
     case "auth/email-already-in-use":
