@@ -17,10 +17,10 @@ function profileForm(profile) {
 }
 
 export default function StaffProfile() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, setLocalProfilePhoto } = useAuth();
   const [form, setForm] = useState(() => profileForm(profile));
   const [saving, setSaving] = useState(false);
-  const photoUpload = useProfilePhotoUpload(user, refreshProfile, (photoURL) => setForm((current) => ({ ...current, photoURL })), profile?.role);
+  const photoUpload = useProfilePhotoUpload(user, setLocalProfilePhoto, (photoURL) => setForm((current) => ({ ...current, photoURL })));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -33,7 +33,9 @@ export default function StaffProfile() {
     setSuccess("");
     setSaving(true);
     try {
-      await updateUserProfile(user.uid, form);
+      const profileFields = { ...form };
+      delete profileFields.photoURL;
+      await updateUserProfile(user.uid, profileFields);
       await refreshProfile();
       setSuccess("Profile updated.");
     } catch (cause) {

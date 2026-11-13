@@ -14,10 +14,8 @@ import {
   addDoc,
   runTransaction,
 } from "firebase/firestore";
-import { db, storage } from "./config";
+import { db } from "./config";
 import { computeFeeStatus } from "../utils/fees";
-import { fileToResizedJpegBlob } from "../utils/image";
-import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 
 /**
  * Fetches a user's profile document from the `users` collection.
@@ -48,50 +46,6 @@ export async function getDocument(collectionName, id) {
  */
 export async function updateUserProfile(uid, data) {
   await setDoc(doc(db, "users", uid), data, { merge: true });
-}
-
-/** Compress the avatar, upload it to Storage, then save its URL on the profile. */
-export async function uploadProfilePhoto(uid, file, onProgress = () => {}, role = "", onStage = () => {}, imageOptions = {}) {
-  if (!uid || !file) throw new Error("Choose a photo before uploading.");
-  if (!storage) throw new Error("Profile photo storage is not configured. Add the Firebase Storage bucket to the app settings.");
-  onStage("Preparing photo");
-  const blob = await fileToResizedJpegBlob(file, imageOptions);
-  const photoRef = ref(storage, `profilePhotos/${uid}.jpg`);
-  onStage("Uploading photo");
-  const task = uploadBytesResumable(photoRef, blob, { contentType: "image/jpeg" });
-  const snapshot = await new Promise((resolve, reject) => {
-    task.on("state_changed", (state) => onProgress(Math.round((state.bytesTransferred / state.totalBytes) * 100)), reject, () => resolve(task.snapshot));
-  });
-  const photoURL = await getDownloadURL(snapshot.ref);
-  onStage("Saving profile photo");
-  try {
-    await updateUserProfile(uid, { photoURL });
-  } catch (error) {
-    throw new Error("The photo uploaded, but Firebase could not save its URL to your profile. Check Firestore profile permissions and try again.", { cause: error });
-  }
-  if (role === "Student") {
-    try {
-      await setDoc(doc(db, "students", uid), { photoURL, updatedAt: serverTimestamp() }, { merge: true });
-    } catch (error) {
-      throw new Error("The photo is saved to your profile, but the student room profile could not be updated. Check the students document rules.", { cause: error });
-    }
-  }
-  return photoURL;
-}
-
-/** Remove the photo from the profile, and keep Student's linked profile in sync. */
-export async function removeProfilePhoto(uid, role = "") {
-  if (!uid) throw new Error("Your account is not ready. Refresh and try again.");
-  if (storage) {
-    const currentProfile = await getUserProfile(uid);
-    if (currentProfile?.photoURL && !currentProfile.photoURL.startsWith("data:")) {
-      await deleteObject(ref(storage, `profilePhotos/${uid}.jpg`)).catch((error) => {
-        if (error?.code !== "storage/object-not-found") throw error;
-      });
-    }
-  }
-  await updateUserProfile(uid, { photoURL: "" });
-  if (role === "Student") await setDoc(doc(db, "students", uid), { photoURL: "", updatedAt: serverTimestamp() }, { merge: true });
 }
 
 /**

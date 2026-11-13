@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 
 function envValue(value) {
   return typeof value === "string" ? value.trim().replace(/^["']|["']$/g, "") : value;
@@ -51,6 +50,4 @@ const app = configured ? initializeApp(appOptions) : null;
 
 export const auth = configured ? getAuth(app) : null;
 export const db = configured ? getFirestore(app) : null;
-export const storage = configured && firebaseConfig.storageBucket ? getStorage(app) : null;
-
 export default app;

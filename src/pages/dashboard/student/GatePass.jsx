@@ -3,6 +3,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/student/icons";
 import { useDocument } from "../../../hooks/useDocument";
+import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { addDocument } from "../../../firebase/firestore";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../../firebase/config";

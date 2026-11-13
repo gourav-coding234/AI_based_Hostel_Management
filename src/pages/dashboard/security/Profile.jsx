@@ -16,7 +16,7 @@ function toFormState(profile) {
 }
 
 export default function SecurityProfile() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, setLocalProfilePhoto } = useAuth();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -25,7 +25,7 @@ export default function SecurityProfile() {
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
-  const photoUpload = useProfilePhotoUpload(user, refreshProfile, (photoURL) => set("photoURL", photoURL), profile?.role);
+  const photoUpload = useProfilePhotoUpload(user, setLocalProfilePhoto, (photoURL) => set("photoURL", photoURL));
 
   async function handleSave(e) {
     e.preventDefault();
@@ -34,7 +34,9 @@ export default function SecurityProfile() {
     setSuccess("");
     setSaving(true);
     try {
-      await updateUserProfile(user.uid, form);
+      const profileFields = { ...form };
+      delete profileFields.photoURL;
+      await updateUserProfile(user.uid, profileFields);
       await refreshProfile();
       setSuccess("Profile updated.");
     } catch (err) {

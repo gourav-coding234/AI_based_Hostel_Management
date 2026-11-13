@@ -2326,7 +2326,7 @@ img {
   display: none;
   position: relative;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   padding: 48px;
   background: var(--navy-950);
   color: #fff;
@@ -2402,7 +2402,10 @@ img {
   background: var(--red-600);
 }
 .auth-copyright {
-  position: relative;
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  left: 24px;
   text-align: center;
   font-size: 11px;
   color: #6f7787;

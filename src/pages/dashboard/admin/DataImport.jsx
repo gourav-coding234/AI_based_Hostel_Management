@@ -541,7 +541,6 @@ export default function DataImport() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <AdminBlocksSection />
       <Card
         title="Bulk data import"
         subtitle="Upload a CSV or Excel file to add records to the correct database sections. Every row is validated before it is written."
@@ -718,6 +717,7 @@ export default function DataImport() {
         </div>
       </Card>
 
+      <AdminBlocksSection />
       <DataDeleteSection />
 
       <Card title="How this works" className="bg-slate-50/60">

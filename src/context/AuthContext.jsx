@@ -1,6 +1,14 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { watchAuthState, signOut as firebaseSignOut } from "../firebase/auth";
 import { getUserProfile } from "../firebase/firestore";
+import { getLocalProfilePhoto } from "../utils/localProfilePhotos";
+
+function withLocalProfilePhoto(uid, profile) {
+  if (!profile) return profile;
+  const localPhoto = getLocalProfilePhoto(uid);
+  // Profile photos are browser-local. Do not fall back to a stale Firebase URL.
+  return { ...profile, photoURL: localPhoto || "" };
+}
 
 const AuthContext = createContext(null);
 
@@ -27,7 +35,7 @@ export function AuthProvider({ children }) {
       try {
         const userProfile = await getUserProfile(firebaseUser.uid);
         if (requestId !== profileRequest) return;
-        setProfile(userProfile);
+        setProfile(withLocalProfilePhoto(firebaseUser.uid, userProfile));
       } catch (err) {
         if (requestId !== profileRequest) return;
         console.error("Failed to load user profile:", err);
@@ -61,7 +69,7 @@ export function AuthProvider({ children }) {
     setError(null);
     try {
       const userProfile = await getUserProfile(user.uid);
-      setProfile(userProfile);
+      setProfile(withLocalProfilePhoto(user.uid, userProfile));
     } catch (err) {
       console.error("Failed to refresh user profile:", err);
       setError(err?.code === "resource-exhausted"
@@ -70,6 +78,10 @@ export function AuthProvider({ children }) {
           ? "Firebase denied access to your account profile. Check your user document and Firestore rules."
           : `Couldn't load your profile: ${err?.message || "Please refresh."}`);
     }
+  }
+
+  function setLocalProfilePhoto(photoURL) {
+    setProfile((current) => current ? { ...current, photoURL: photoURL || "" } : current);
   }
 
   const value = {
@@ -81,6 +93,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(user),
     logout,
     refreshProfile,
+    setLocalProfilePhoto,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
