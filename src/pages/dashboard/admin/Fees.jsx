@@ -51,7 +51,7 @@ export default function Fees() {
     const hostel = hostelForFee(fee);
     const block = String(fee.block || "").trim();
     const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
-    return `${hostel || "Hostel not specified"} · ${blockLabel}`;
+    return hostel ? `${hostel} · ${blockLabel}` : blockLabel;
   }
 
   // Recalculate status (and the remaining balance) from total/paid/dueDate
@@ -118,7 +118,7 @@ export default function Fees() {
 
   const feeCsvHeaders = [
     { label: "Student", value: (f) => f.studentName },
-    { label: "Hostel", value: (f) => hostelForFee(f) || "Not specified" },
+    { label: "Hostel", value: (f) => hostelForFee(f) || "" },
     { label: "Block", value: (f) => f.block },
     { label: "Room", value: (f) => f.room },
     { label: "Total", value: (f) => f.total },

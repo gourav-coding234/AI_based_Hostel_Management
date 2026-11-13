@@ -36,7 +36,7 @@ export const IMPORT_SCHEMAS = {
     dedupeKeys: ["studentId", "dueDate"],
     label: "Fee records",
     collection: "fees",
-    description: "One row per student's fee record. Include hostel (Boys Hostel/Girls Hostel) when block letters overlap between hostels.",
+    description: "One row per student's fee record. Hostel is saved as Boys Hostel or Girls Hostel and is inferred from the linked student's gender when possible; provide it when it cannot be inferred.",
     columns: [
       { key: "studentId", label: "Student ID", required: true, type: "string" },
       { key: "studentName", label: "Student name", required: true, type: "string" },

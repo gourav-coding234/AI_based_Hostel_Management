@@ -7,6 +7,7 @@ import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
 import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
+import { normalizeHostel } from "../../../utils/hostels";
 import { useCollection } from "../../../hooks/useCollection";
 import { isDemoMode } from "../../../data/demoFixtures";
 import AdminBlocksSection from "./AdminBlocksSection";
@@ -102,6 +103,7 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
   const accountByUid = new Map(accounts.map((account) => [account.id, account]));
   const uidByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
   const uidByRegistration = new Map();
+  const rosterByUid = new Map();
   const accountIdsByName = new Map();
   const normalizedName = (value) => String(value || "").trim().toLowerCase().replace(/[.,']/g, "").replace(/\s+/g, " ");
   for (const account of accounts) {
@@ -115,7 +117,10 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
     .map(([name, ids]) => [name, ids.values().next().value]));
   for (const roster of importedRegister) {
     const uid = uidByEmail.get(String(roster.email || "").trim().toLowerCase());
-    if (uid && roster.regNo) uidByRegistration.set(String(roster.regNo).trim(), uid);
+    if (uid) {
+      if (roster.regNo) uidByRegistration.set(String(roster.regNo).trim(), uid);
+      rosterByUid.set(uid, roster);
+    }
   }
 
   const registrationNumbers = [...new Set(records.map((record) => String(record.studentId || record.studentID || record.regNo || record.registrationNo || "").trim())
@@ -125,7 +130,10 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
     const roster = await getCollection("studentRegister", { whereClauses: [["regNo", "in", chunk]] });
     for (const entry of roster) {
       const uid = uidByEmail.get(String(entry.email || "").trim().toLowerCase());
-      if (uid && entry.regNo) uidByRegistration.set(String(entry.regNo).trim(), uid);
+      if (uid) {
+        if (entry.regNo) uidByRegistration.set(String(entry.regNo).trim(), uid);
+        rosterByUid.set(uid, entry);
+      }
     }
   }
 
@@ -145,7 +153,21 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
       failed.push({ studentId: reference, studentName, reason: `Student ID ${reference || "(blank)"} could not be matched by account ID, email, registration number, or a unique student name.` });
       continue;
     }
-    resolved.push({ ...record, studentId: uid, studentName: studentName || accountByUid.get(uid)?.name || "" });
+    const account = accountByUid.get(uid) || {};
+    const roster = rosterByUid.get(uid) || {};
+    const hostel = normalizeHostel(record.hostel || record.hostelType) ||
+      normalizeHostel(roster.hostel || roster.hostelType || roster.gender || roster.hostelResidence) ||
+      normalizeHostel(account.hostel || account.hostelType || account.gender || account.hostelResidence);
+    resolved.push({
+      ...record,
+      studentId: uid,
+      studentName: studentName || account.name || "",
+      ...(hostel ? { hostel } : {}),
+      ...(record.block || account.wing || account.hostelResidence || roster.wing || roster.hostelResidence
+        ? { block: record.block || account.wing || account.hostelResidence || roster.wing || roster.hostelResidence }
+        : {}),
+      ...(record.room || account.room || roster.room ? { room: record.room || account.room || roster.room } : {}),
+    });
   }
   return { resolved, failed, studentUids: new Set(accountByUid.keys()) };
 }
@@ -476,6 +498,16 @@ export default function DataImport() {
               const result = await resolveStudentIds(rows, validation.byTarget.studentRegister || []);
               rowsToImport = result.resolved;
               failures.push(...result.failed.map((failure) => ({ ...failure, target: item.label })));
+              if (item.key === "fees") {
+                const withoutHostel = rowsToImport.filter((record) => !normalizeHostel(record.hostel));
+                rowsToImport = rowsToImport.filter((record) => normalizeHostel(record.hostel));
+                failures.push(...withoutHostel.map((record) => ({
+                  target: item.label,
+                  studentId: record.studentId,
+                  studentName: record.studentName,
+                  reason: "Could not determine Boys Hostel or Girls Hostel for this student. Add a Hostel column or correct the linked student's gender/hostel before importing.",
+                })));
+              }
             }
             if (!rowsToImport.length) continue;
             const { written, failed = [], createdAccounts = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
@@ -508,10 +540,20 @@ export default function DataImport() {
       }
       let recordsToImport = validation.validRecords;
       const linkingFailures = [];
-      if (target.key === "attendance") {
+      if (target.key === "attendance" || target.key === "fees") {
         const result = await resolveStudentIds(recordsToImport);
         recordsToImport = result.resolved;
         linkingFailures.push(...result.failed.map((failure) => ({ ...failure, target: target.label })));
+        if (target.key === "fees") {
+          const withoutHostel = recordsToImport.filter((record) => !normalizeHostel(record.hostel));
+          recordsToImport = recordsToImport.filter((record) => normalizeHostel(record.hostel));
+          linkingFailures.push(...withoutHostel.map((record) => ({
+            target: target.label,
+            studentId: record.studentId,
+            studentName: record.studentName,
+            reason: "Could not determine Boys Hostel or Girls Hostel for this student. Add a Hostel column or correct the linked student's gender/hostel before importing.",
+          })));
+        }
       }
       const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
       setImportedCount(written);

@@ -44,7 +44,7 @@ export default function WardenFees() {
     const hostel = fee.resolvedHostel || resolveFeeHostel(fee);
     const block = String(fee.block || "").trim();
     const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
-    return `${hostel || "Hostel not specified"} · ${blockLabel}`;
+    return hostel ? `${hostel} · ${blockLabel}` : blockLabel;
   }
 
   // Second layer: same block scoping the Warden overview uses. Status is
@@ -172,7 +172,7 @@ export default function WardenFees() {
   const csvColumns = [
     { label: "Student", value: (f) => f.studentName || "" },
     { label: "Registration Number", value: (f) => f.registrationNo || "" },
-    { label: "Hostel", value: (f) => f.resolvedHostel || "Not specified" },
+    { label: "Hostel", value: (f) => f.resolvedHostel || "" },
     { label: "Block", value: (f) => f.block || "" },
     { label: "Room", value: (f) => f.room || "" },
     { label: "Semester", value: (f) => f.semester || "" },
