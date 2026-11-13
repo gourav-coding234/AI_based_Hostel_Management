@@ -8,6 +8,7 @@ import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 import { bulkUpsertHostelAssignments, logAudit } from "../../../firebase/firestore";
 import { toCsvText } from "../../../utils/csv";
 import { parseAndValidateHostelCsv } from "../../../utils/wardenDirectoryImport";
+import { wardenHostel } from "../../../utils/hostels";
 
 const COLUMNS = [
   { key: "name", label: "Name", sortable: true },
@@ -42,19 +43,18 @@ const CSV_EXPORT_COLUMNS = [
 
 export default function StudentDirectory() {
   const { profile } = useAuth();
-  const assignedWing = profile?.block && profile.block !== "Unassigned" ? profile.block : "";
+  const assignedHostel = wardenHostel(profile);
 
   // Shared source with attendance, including academic-register rows that
   // don't have a portal account yet. Those are visibly marked as needing an
   // account rather than silently omitted.
   const { directory, loading, error } = useStudentDirectory();
 
-  // A warden assigned to a specific block (users/{uid}.block, the same
-  // field Admin → Manage Users sets and Warden Overview scopes by) only
-  // manages that wing's roster — mirrors Overview's exact `myWing` pattern.
+  // Hostel assignment includes every block in that hostel (A and B for boys;
+  // C for girls). Block remains each student's room location.
   const wingScoped = useMemo(
-    () => (assignedWing ? directory.filter((s) => !s.wing || s.wing === assignedWing) : directory),
-    [directory, assignedWing]
+    () => (assignedHostel ? directory.filter((s) => s.hostelType === assignedHostel) : directory),
+    [directory, assignedHostel]
   );
 
   const [wingFilter, setWingFilter] = useState("All");
@@ -109,7 +109,7 @@ export default function StudentDirectory() {
     setImportFailures([]);
 
     try {
-      const result = await parseAndValidateHostelCsv(f, { directory, assignedWing });
+      const result = await parseAndValidateHostelCsv(f, { directory, assignedHostel });
       setValidation(result);
       setUploadStatus("validated");
     } catch (err) {
@@ -131,7 +131,7 @@ export default function StudentDirectory() {
         logAudit({
           actor: profile?.name || "Warden",
           action: "Updated hostel directory via CSV",
-          target: `${written} student${written === 1 ? "" : "s"}${assignedWing ? ` (${assignedWing})` : ""}`,
+          target: `${written} student${written === 1 ? "" : "s"}${assignedHostel ? ` (${assignedHostel})` : ""}`,
         }).catch(() => {});
       }
     } catch (err) {
@@ -153,7 +153,7 @@ export default function StudentDirectory() {
               <p className="font-display text-base font-semibold text-ink">Student directory</p>
               <p className="text-sm text-slate-500">
                 {scoped.length} student{scoped.length === 1 ? "" : "s"}
-                {assignedWing ? ` in ${assignedWing} or awaiting wing assignment` : " across the hostel"}
+                {assignedHostel ? ` in ${assignedHostel}` : " across both hostels"}
               </p>
             </div>
           </div>
@@ -202,7 +202,7 @@ export default function StudentDirectory() {
         <Card
           title="Update hostel directory from CSV"
           subtitle={`Expected columns: uid (or email), wing, room, bed. Only these hostel fields are updated — no accounts, roles, or credentials are created or changed.${
-            assignedWing ? ` Restricted to your assigned wing: ${assignedWing}.` : ""
+            assignedHostel ? ` Restricted to your assigned hostel: ${assignedHostel}.` : ""
           }`}
         >
           <div className="flex flex-col gap-4">

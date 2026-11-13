@@ -14,10 +14,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentId;
     }
 
-    // The signed-in user's assigned block/wing ('' if none) — used to
-    // scope a Warden's fee updates to their own block.
-    function myBlock() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('block', '');
+    // The signed-in Warden is assigned to a whole hostel. Keep the mapping
+    // explicit so their fee actions cover Boys A+B or Girls C only.
+    function myHostel() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('hostel', '');
+    }
+
+    function feeBelongsToMyHostel() {
+      return (myHostel() == 'Boys Hostel' && resource.data.get('block', '') in ['A', 'B', 'Block A', 'Block B']) ||
+             (myHostel() == 'Girls Hostel' && resource.data.get('block', '') in ['C', 'Block C']);
     }
 
     // Quantity sanity for inventory writes made by a Warden.
@@ -121,15 +126,13 @@ service cloud.firestore {
       allow read: if isStaff() || isOwnRecord(resource.data.studentId);
 
       // Admin keeps full control of fee records (create/edit/delete).
-      // A Warden can only UPDATE, only records in their own assigned
-      // block (a warden with no block set manages all, matching the
-      // Warden pages), only the payment/reminder fields, and paid can
+      // A Warden can only UPDATE fee records in their assigned hostel,
+      // only the payment/reminder fields, and paid can
       // only go up and never past the total. Wardens cannot create or
       // delete fee records. Student/parent privacy is unchanged (read).
       allow create, delete: if isAdmin();
       allow update: if isAdmin() ||
-        (isWarden() &&
-         (myBlock() == '' || resource.data.block == myBlock()) &&
+        (isWarden() && feeBelongsToMyHostel() &&
          request.resource.data.diff(resource.data).affectedKeys()
            .hasOnly(['paid', 'status', 'lastPaymentAt', 'reminderSent', 'reminderSentAt',
                      'updatedBy', 'updatedByRole', 'updatedAt']) &&

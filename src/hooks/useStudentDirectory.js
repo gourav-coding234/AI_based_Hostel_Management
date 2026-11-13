@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useCollections } from "./useCollection";
+import { hostelForStudent } from "../utils/hostels";
 
 function normalizeRegistration(value) {
   return String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -112,6 +113,7 @@ export function useStudentDirectory() {
         if (type === "Boys") merged.gender = "Male";
         else if (type === "Girls") merged.gender = "Female";
       }
+      merged.hostelType = hostelForStudent(merged, data.blocks);
 
       if (row.id !== merged.id) rows.delete(row.id);
       rows.set(merged.id, merged);

@@ -15,22 +15,16 @@ import {
 } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
+import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
 }
 
-// Students can carry either `hostelResidence` (from bulk import) or `wing` —
-// this mirrors the exact fallback already used on Room Allotment / Student
-// Directory, so a warden's headcount always agrees with those pages.
-function studentWing(s) {
-  return s.hostelResidence || s.wing;
-}
-
 export default function WardenOverview() {
   const { profile, user } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "Warden";
-  const myWing = profile?.block;
+  const myHostel = wardenHostel(profile);
   const today = new Date().toISOString().slice(0, 10);
 
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
@@ -53,30 +47,34 @@ export default function WardenOverview() {
   const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----
-  const myBlocks = myWing ? data.blocks.filter((b) => b.name === myWing) : data.blocks;
+  const myBlocks = myHostel ? data.blocks.filter((b) =>
+    hostelForBlock(b.name, data.blocks) === myHostel ||
+    data.students.some((student) => studentMatchesHostel(student, myHostel, data.blocks) && String(student.hostelResidence || student.wing || student.block || "").trim().toLowerCase() === String(b.name || "").trim().toLowerCase())
+  ) : data.blocks;
   const totalBeds = myBlocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
   const occupiedBeds = myBlocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
   const vacantBeds = Math.max(totalBeds - occupiedBeds, 0);
   const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
   // ---- Residents (students model supports block/wing, so scope it) ----
-  const myStudents = myWing ? data.students.filter((s) => studentWing(s) === myWing) : data.students;
+  const myStudents = data.students.filter((s) => studentMatchesHostel(s, myHostel, data.blocks));
 
   // ---- Attendance (scoped via each student's wing — the attendance
   // record itself only carries studentId/date/status) ----
-  const wingByStudentId = Object.fromEntries(data.students.map((s) => [s.id, studentWing(s)]));
+  const studentByAnyId = {};
+  data.students.forEach((s) => [s.id, s.accountUid, s.userId, s.regNo, s.registrationNo, s.email].filter(Boolean).forEach((id) => { studentByAnyId[String(id)] = s; }));
   // attendance is ordered newest-first, so the latest date is the FIRST
   // record, not the last.
   const latestDate = data.attendance.length ? data.attendance[0].date : null;
   const todayAll = data.attendance.filter((a) => a.date === latestDate);
-  const todayRecords = myWing ? todayAll.filter((a) => wingByStudentId[a.studentId] === myWing) : todayAll;
+  const todayRecords = todayAll.filter((a) => studentMatchesHostel(studentByAnyId[String(a.studentId)], myHostel, data.blocks));
   const presentToday = todayRecords.filter((a) => a.status === "Present").length;
   const absentToday = todayRecords.filter((a) => a.status === "Absent").length;
   const markedToday = todayRecords.length;
   const attendancePct = markedToday ? Math.round((presentToday / markedToday) * 100) : null;
 
   // ---- Fees (fee records carry `block`, same scoping as Warden Fees page) ----
-  const myFees = myWing ? data.fees.filter((f) => f.block === myWing) : data.fees;
+  const myFees = data.fees.filter((f) => studentMatchesHostel(studentByAnyId[String(f.studentId)], myHostel, data.blocks) || (f.block && hostelForBlock(f.block, data.blocks) === myHostel));
   const totalDue = myFees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const totalCollected = myFees.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const totalOutstanding = Math.max(totalDue - totalCollected, 0);
@@ -85,13 +83,13 @@ export default function WardenOverview() {
 
   // ---- Gate passes (records carry `wing`, same scoping as Warden Gate
   // Passes page) ----
-  const myGatePasses = myWing ? gatePasses.filter((p) => (p.block || p.hostelResidence || p.wing) === myWing) : gatePasses;
+  const myGatePasses = gatePasses.filter((p) => studentMatchesHostel(studentByAnyId[String(p.studentId || p.studentUid || p.uid)], myHostel, data.blocks) || (p.block || p.hostelResidence || p.wing) && hostelForBlock(p.block || p.hostelResidence || p.wing, data.blocks) === myHostel);
   const pendingGatePasses = myGatePasses.filter((p) => p.status === "Pending").length;
   const approvedGatePasses = myGatePasses.filter((p) => p.status === "Approved").length;
 
   // ---- Leave requests (records carry `wing`, same scoping as Warden
   // Leave page) ----
-  const myLeaveRequests = myWing ? data.leaveRequests.filter((r) => (r.block || r.hostelResidence || r.wing) === myWing) : data.leaveRequests;
+  const myLeaveRequests = data.leaveRequests.filter((r) => studentMatchesHostel(studentByAnyId[String(r.studentId || r.studentUid || r.uid)], myHostel, data.blocks) || (r.block || r.hostelResidence || r.wing) && hostelForBlock(r.block || r.hostelResidence || r.wing, data.blocks) === myHostel);
   const pendingLeave = myLeaveRequests.filter((r) => r.status === "Pending").length;
   const approvedLeave = myLeaveRequests.filter((r) => r.status === "Approved").length;
   const rejectedLeave = myLeaveRequests.filter((r) => r.status === "Rejected").length;
@@ -123,7 +121,7 @@ export default function WardenOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {totalBeds ? `${occupiedBeds} of ${totalBeds} beds occupied` : "No blocks assigned yet"}{myWing ? ` in ${myWing}` : ""}
+              {totalBeds ? `${occupiedBeds} of ${totalBeds} beds occupied` : "No hostel assigned yet"}{myHostel ? ` · ${myHostel}` : ""}
             </p>
           </div>
           <div className="flex gap-2">
@@ -145,7 +143,7 @@ export default function WardenOverview() {
       {overviewError && <ErrorState message={overviewError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myWing ? `In ${myWing}` : "Across your hostel"} tone="navy" />
+        <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myHostel || "Across both hostels"} tone="navy" />
         <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : "No blocks assigned"} tone="teal" />
         <StatCard icon={<CheckSquareIcon />} label="Attendance today" value={loading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`} sub={markedToday ? `${presentToday}/${markedToday} present` : "Not marked yet"} tone={attendancePct !== null && attendancePct < 75 ? "rose" : "teal"} />
         <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalOutstanding)} pending` : "No fee records yet"} tone="amber" />

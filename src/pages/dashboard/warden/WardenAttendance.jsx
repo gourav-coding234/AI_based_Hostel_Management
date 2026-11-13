@@ -9,6 +9,7 @@ import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
 import { ATTENDANCE_GENDER_GROUPS, normalizeGender, useAttendanceRoster } from "../../../hooks/useAttendanceRoster";
 import { saveAttendanceForDate } from "../../../firebase/firestore";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
+import { wardenHostel } from "../../../utils/hostels";
 
 // The Student/Parent attendance pages already render three statuses
 // (Present/Absent/Leave — see student/Attendance.jsx's STATUS_COLORS and
@@ -35,12 +36,7 @@ function formatMarkedAt(ts) {
 export default function WardenAttendance() {
   const { user, profile } = useAuth();
 
-  // A warden assigned to a specific block (users/{uid}.block — the same
-  // field Student Directory's `assignedWing` and Overview's `myWing`
-  // already key off) only manages that wing's roster, so any export they
-  // take must be scoped the same way rather than leaking every wing's
-  // attendance to a wing-restricted warden.
-  const assignedWing = profile?.block && profile.block !== "Unassigned" ? profile.block : "";
+  const assignedHostel = wardenHostel(profile);
 
   const { directory, loading: directoryLoading } = useStudentDirectory();
   const { data: attendance, loading: attendanceLoading } = useCollection("attendance", {
@@ -48,7 +44,11 @@ export default function WardenAttendance() {
     orderByDirection: "desc",
   });
 
-  const wingByStudentId = useMemo(() => Object.fromEntries(directory.map((s) => [s.id, s.wing])), [directory]);
+  const studentByAnyId = useMemo(() => {
+    const map = {};
+    directory.forEach((student) => [student.id, student.accountUid, student.userId, student.regNo, student.registrationNo, student.email].filter(Boolean).forEach((id) => { map[String(id)] = student; }));
+    return map;
+  }, [directory]);
 
   // ---- Take attendance: date picker + editable roster ----
   const [selectedDate, setSelectedDate] = useState(() => toISO(new Date()));
@@ -64,7 +64,7 @@ export default function WardenAttendance() {
     return map;
   }, [attendance, selectedDate]);
 
-  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal, unlinkedCount, withAccountCount } = useAttendanceRoster(directory, existingForDate, assignedWing);
+  const { groups: genderCounts, roster, selectedGender, setSelectedGender, total: rosterTotal, unlinkedCount, withAccountCount } = useAttendanceRoster(directory, existingForDate, assignedHostel);
 
   // Local edits for the visible date only — Firestore (via existingForDate
   // above) is what the draft is seeded from and what "after a refresh"
@@ -187,10 +187,13 @@ export default function WardenAttendance() {
   // What actually gets exported: the saved Firestore records for the
   // selected date (not the in-progress `draftStatus` edits above), scoped
   // to the warden's assigned wing when they have one.
+  const assignedTodayRecords = useMemo(() => todayRecords.filter((record) => {
+    const student = studentByAnyId[String(record.studentId || record.studentUid || record.registrationNo || "")];
+    return !assignedHostel || student?.hostelType === assignedHostel;
+  }), [todayRecords, assignedHostel, studentByAnyId]);
   const exportRecords = useMemo(
-    () => todayRecords.filter((a) => normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) === selectedGender)
-      .filter((a) => !assignedWing || (a.wing || wingByStudentId[a.studentId]) === assignedWing),
-    [todayRecords, assignedWing, wingByStudentId, selectedGender, directory]
+    () => assignedTodayRecords.filter((a) => normalizeGender(a.gender || studentByAnyId[String(a.studentId || a.studentUid || a.registrationNo || "")]?.gender) === selectedGender),
+    [assignedTodayRecords, studentByAnyId, selectedGender]
   );
 
   const EXCEL_COLUMNS = [
@@ -211,21 +214,21 @@ export default function WardenAttendance() {
 
   const byWing = useMemo(() => {
     const map = new Map();
-    todayRecords.forEach((a) => {
-      if (normalizeGender(a.gender || directory.find((s) => s.id === a.studentId)?.gender) !== selectedGender) return;
-      if (assignedWing && (a.wing || wingByStudentId[a.studentId]) !== assignedWing) return;
-      const wing = a.wing || wingByStudentId[a.studentId] || "Unassigned";
+    assignedTodayRecords.forEach((a) => {
+      const student = studentByAnyId[String(a.studentId || a.studentUid || a.registrationNo || "")];
+      if (normalizeGender(a.gender || student?.gender) !== selectedGender) return;
+      const wing = a.wing || student?.wing || "Unassigned";
       if (!map.has(wing)) map.set(wing, { present: 0, total: 0 });
       const entry = map.get(wing);
       entry.total += 1;
       if (a.status === "Present") entry.present += 1;
     });
     return Array.from(map.entries()).map(([wing, v]) => ({ wing, ...v }));
-  }, [todayRecords, wingByStudentId, selectedGender, directory, assignedWing]);
+  }, [assignedTodayRecords, studentByAnyId, selectedGender]);
 
-  const totalPresent = todayRecords.filter((a) => a.status === "Present").length;
-  const totalAbsent = todayRecords.filter((a) => a.status === "Absent").length;
-  const totalMarked = todayRecords.length;
+  const totalPresent = assignedTodayRecords.filter((a) => a.status === "Present").length;
+  const totalAbsent = assignedTodayRecords.filter((a) => a.status === "Absent").length;
+  const totalMarked = assignedTodayRecords.length;
   const overallPct = totalMarked ? Math.round((totalPresent / totalMarked) * 100) : 0;
 
   const trend = useMemo(() => {
@@ -299,7 +302,7 @@ export default function WardenAttendance() {
           <p className="text-xs text-slate-500">
             {ATTENDANCE_GENDER_GROUPS.map(({ id, label }) => `${label}: ${genderCounts[id].total} students · ${genderCounts[id].present} Present / ${genderCounts[id].absent} Absent / ${genderCounts[id].leave} Leave`).join("  |  ")}
           </p>
-          <p className="text-xs text-slate-500">Residents: {rosterTotal}{assignedWing ? ` in ${assignedWing}` : " hostel-wide"} · with account: {withAccountCount} · without account: {unlinkedCount}. Students without recorded gender appear under Unspecified.</p>
+          <p className="text-xs text-slate-500">Residents: {rosterTotal}{assignedHostel ? ` in ${assignedHostel}` : " across both hostels"} · with account: {withAccountCount} · without account: {unlinkedCount}. Students without recorded gender appear under Unspecified.</p>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-400">
               {markedCount} of {roster.length} marked

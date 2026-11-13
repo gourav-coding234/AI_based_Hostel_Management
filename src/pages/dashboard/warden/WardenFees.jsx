@@ -9,6 +9,7 @@ import { getCollection, recordFeePayment, sendFeeReminder, logAudit } from "../.
 import { computeFeeStatus } from "../../../utils/fees";
 import { toCsvText } from "../../../utils/csv";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
+import { hostelForBlock, wardenHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -18,29 +19,35 @@ const filters = ["All", "Paid", "Partial", "Pending", "Overdue"];
 
 export default function WardenFees() {
   const { user, profile, loading: authLoading } = useAuth();
-  const myWing = profile?.block;
+  const myHostel = wardenHostel(profile);
   const staffName = profile?.name || user?.email || "Warden";
-  // A block-assigned warden only ever asks Firestore for their own block's
-  // fee records (unrelated hostels' records are never loaded), and waits
-  // for the profile so it never briefly fetches everything first.
-  const feesQuery = useCollection("fees", {
-    where: myWing ? [["block", "==", myWing]] : [],
-    skip: authLoading,
-  });
+  // Fees are joined to the assigned hostel's roster because a hostel may
+  // contain several blocks (A+B or C). The rules restrict reads to staff;
+  // the UI still scopes every displayed row before rendering.
+  const feesQuery = useCollection("fees", { skip: authLoading });
   const { directory } = useStudentDirectory();
+  const studentByAnyId = useMemo(() => {
+    const map = new Map();
+    directory.forEach((student) => [student.id, student.accountUid, student.userId, student.regNo, student.registrationNo, student.email].filter(Boolean).forEach((id) => map.set(String(id), student)));
+    return map;
+  }, [directory]);
   const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
 
   // Second layer: same block scoping the Warden overview uses. Status is
   // always recomputed (never trusted from the stored field) and the
   // pending amount is always total - paid.
   const studentFees = useMemo(() => {
-    const scoped = myWing ? feesQuery.data.filter((f) => f.block === myWing) : feesQuery.data;
+    const scoped = feesQuery.data.filter((fee) => {
+      if (!myHostel) return true;
+      const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
+      return student?.hostelType === myHostel || (fee.block && hostelForBlock(fee.block) === myHostel);
+    });
     return scoped.map((f) => {
       const total = Math.max(Number(f.total) || 0, 0);
       const paid = Math.max(Number(f.paid) || 0, 0);
       return { ...f, registrationNo: f.registrationNo || registrationByStudent.get(f.studentId) || "", total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
     });
-  }, [feesQuery.data, myWing, registrationByStudent]);
+  }, [feesQuery.data, myHostel, studentByAnyId, registrationByStudent]);
 
   const [filter, setFilter] = useState("All");
 
@@ -181,7 +188,7 @@ export default function WardenFees() {
           </span>
           <div className="flex-1">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-sm text-slate-500">Fee collection{myWing ? ` in ${myWing}` : " across your wings"}</p>
+              <p className="text-sm text-slate-500">Fee collection{myHostel ? ` in ${myHostel}` : " across both hostels"}</p>
               <p className="font-display text-lg font-semibold text-ink">{totalDue ? `${collectionPct}%` : "—"}</p>
             </div>
             {totalDue ? (

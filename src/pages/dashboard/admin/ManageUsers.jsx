@@ -8,6 +8,7 @@ import { Card, Button, Field, inputCls, Pill, EmptyState } from "../../../compon
 import DataTable from "../../../components/ui/DataTable";
 import { DownloadIcon, SearchIcon, TrashIcon, UsersIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { HOSTELS, hostelForStudent, wardenHostel } from "../../../utils/hostels";
 
 function tsToDate(ts) {
   if (!ts) return null;
@@ -276,48 +277,21 @@ export default function ManageUsers() {
   const studentUsers = useMemo(() => users.filter((u) => u.role === "Student"), [users]);
 
   // Warden management — the same "users" list, just the Warden rows,
-  // enriched with block assignment + workload for reassignment.
+  // enriched with hostel assignment + workload for reassignment.
   const wardens = useMemo(() => users.filter((u) => u.role === "Warden"), [users]);
-  const blockOptions = useMemo(() => ["Unassigned", ...blocks.map((b) => b.name)], [blocks]);
-
-  const studentCountByBlock = useMemo(() => {
-    const counts = {};
-    refData.students.forEach((s) => {
-      const key = s.hostelResidence || s.block;
-      if (!key) return;
-      counts[key] = (counts[key] || 0) + 1;
-    });
+  const hostelOptions = ["Unassigned", ...HOSTELS];
+  const studentCountByHostel = useMemo(() => refData.students.reduce((counts, student) => {
+    const hostel = hostelForStudent(student, blocks);
+    if (hostel) counts[hostel] = (counts[hostel] || 0) + 1;
     return counts;
-  }, [refData.students]);
+  }, {}), [refData.students, blocks]);
 
-  async function reassignWarden(id, block) {
+  async function reassignWarden(id, hostel) {
     setReassignError("");
-    const warden = users.find((u) => u.id === id);
-    const previousBlockName = warden?.block;
     try {
-      await updateDocument("users", id, { block });
-      setUsers((list) => list.map((u) => (u.id === id ? { ...u, block } : u)));
-
-      // The block documents' own `warden` field (a plain string shown on
-      // the Blocks page and Admin Overview's "Blocks at a glance" card) is
-      // a separate field from this warden's `users/{id}.block` — without
-      // syncing it here, those pages would keep showing the old warden's
-      // name after a reassignment. Clear it off the block being left (but
-      // only if this warden was actually the one recorded there) and set
-      // it on the block being taken on.
-      const wardenName = warden?.name?.trim() || warden?.email || "Unassigned";
-      const previousBlockDoc =
-        previousBlockName && previousBlockName !== "Unassigned"
-          ? blocks.find((b) => b.name === previousBlockName)
-          : null;
-      const nextBlockDoc = block && block !== "Unassigned" ? blocks.find((b) => b.name === block) : null;
-
-      if (previousBlockDoc && previousBlockDoc.id !== nextBlockDoc?.id && previousBlockDoc.warden === wardenName) {
-        await updateDocument("blocks", previousBlockDoc.id, { warden: "Unassigned" });
-      }
-      if (nextBlockDoc) {
-        await updateDocument("blocks", nextBlockDoc.id, { warden: wardenName });
-      }
+      const value = hostel === "Unassigned" ? "" : hostel;
+      await updateDocument("users", id, { hostel: value });
+      setUsers((list) => list.map((u) => (u.id === id ? { ...u, hostel: value } : u)));
     } catch (err) {
       console.error("Failed to reassign warden:", err);
       setReassignError("Couldn't reassign this warden. Please try again.");
@@ -337,22 +311,22 @@ export default function ManageUsers() {
       ),
     },
     {
-      key: "block",
-      label: "Assigned block",
+      key: "hostel",
+      label: "Assigned hostel",
       render: (w) => (
         <select
-          value={w.block || "Unassigned"}
+          value={wardenHostel(w, blocks) || "Unassigned"}
           onChange={(e) => reassignWarden(w.id, e.target.value)}
           onClick={(e) => e.stopPropagation()}
           className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
         >
-          {blockOptions.map((b) => (
-            <option key={b} value={b}>{b}</option>
+          {hostelOptions.map((hostel) => (
+            <option key={hostel} value={hostel}>{hostel}</option>
           ))}
         </select>
       ),
     },
-    { key: "students", label: "Student workload", render: (w) => studentCountByBlock[w.block] || 0 },
+    { key: "students", label: "Student workload", render: (w) => studentCountByHostel[wardenHostel(w, blocks)] || 0 },
     {
       key: "createdAt",
       label: "Joined",
@@ -384,7 +358,7 @@ export default function ManageUsers() {
             <div>
               <h2 className="font-display text-xl font-semibold">Manage users &amp; wardens</h2>
               <p className="mt-0.5 text-sm text-slate-300">
-                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"} · {wardens.length} warden{wardens.length === 1 ? "" : "s"} assigned across {blocks.length} block{blocks.length === 1 ? "" : "s"}
+                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"} · {wardens.length} warden{wardens.length === 1 ? "" : "s"} for 2 hostels
               </p>
             </div>
           </div>
@@ -705,15 +679,14 @@ export default function ManageUsers() {
         )}
       </Card>
 
-      {/* Warden management — same underlying accounts, filtered to Warden
-          role, with block reassignment and workload for oversight. */}
-      <Card title="Warden management" subtitle="Assign wardens to blocks and see their current workload.">
+      {/* Warden assignments are hostel-wide; block letters remain room locations. */}
+      <Card title="Warden management" subtitle="Assign each warden to a whole hostel. Boys Hostel covers Blocks A and B; Girls Hostel covers Block C.">
         {reassignError && <p className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{reassignError}</p>}
         <DataTable
           columns={wardenColumns}
           rows={wardens}
           loading={loadingUsers}
-          searchKeys={["name", "email", "block"]}
+          searchKeys={["name", "email", "hostel", "block"]}
           searchPlaceholder="Search wardens…"
           emptyTitle="No wardens added yet"
           emptyDescription="Create a Warden account above to see it here."
@@ -731,7 +704,7 @@ export default function ManageUsers() {
               <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-ink">{b.name}</p>
                 <p className="text-xs text-slate-400">{b.type} hostel</p>
-                <p className="mt-3 text-sm text-slate-600">Warden: <span className="font-medium text-ink">{b.warden || "Unassigned"}</span></p>
+                <p className="mt-3 text-sm text-slate-600">{hostelForStudent({ wing: b.name }, blocks) || `${b.type || "Hostel"} Hostel`}</p>
                 <p className="text-xs text-slate-400">{b.occupiedBeds || 0}/{b.totalBeds || 0} beds occupied</p>
               </div>
             ))}

@@ -256,7 +256,7 @@ function expandStudentBundleRows(records) {
     if ((present(record, "name") || present(record, "block")) && present(record, "totalBeds")) {
       const name = record.name || record.block;
       add(record, sourceRow, "blocks", {
-        name, type: record.type, warden: record.warden, totalRooms: record.totalRooms,
+        name, type: record.type, totalRooms: record.totalRooms,
         totalBeds: record.totalBeds, occupiedBeds: record.occupiedBeds,
       }, name);
     }
@@ -277,7 +277,6 @@ async function importRecords(target, records, createdBy) {
       ...record,
       name: String(record.name || "").trim(),
       ...(record.type ? { type: record.type } : {}),
-      ...(record.warden ? {} : { warden: "Unassigned" }),
       totalRooms: Number(record.totalRooms || 0),
       totalBeds: Number(record.totalBeds || 0),
       occupiedBeds: Number(record.occupiedBeds || 0),

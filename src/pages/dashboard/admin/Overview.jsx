@@ -120,7 +120,7 @@ export default function AdminOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {students.length} students across {blocks.length} blocks, managed by {wardens.length} wardens
+              {students.length} students across {blocks.length} blocks and 2 hostels, managed by {wardens.length} wardens
             </p>
           </div>
           <div className="flex gap-2">
@@ -153,7 +153,7 @@ export default function AdminOverview() {
         <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Students currently out" value={loading ? "…" : studentsOut} sub="Live gate movement status" tone={studentsOut > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/leave"><StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub="Checked in and not yet checked out" tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
-        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub={`${blocks.length} blocks to manage`} tone="navy" /></Link>
+        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub="Boys Hostel and Girls Hostel" tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<AlertIcon />} label="Students with dues" value={loading ? "…" : studentsWithDues} sub={totalPending ? `${inr(totalPending)} pending` : "No dues pending"} tone={studentsWithDues > 0 ? "rose" : "teal"} /></Link>
       </div>
 
@@ -204,7 +204,7 @@ export default function AdminOverview() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-ink">{b.name}</p>
-                        <p className="text-xs text-slate-400">{b.warden || "No warden assigned"}</p>
+                        <p className="text-xs text-slate-400">{b.type || "Hostel type not set"} Hostel</p>
                       </div>
                       <Pill tone={total && occupied / total > 0.95 ? "Urgent" : "General"}>
                         {occupied}/{total}

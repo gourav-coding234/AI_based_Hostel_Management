@@ -5,6 +5,7 @@ import DataTable from "../../../components/ui/DataTable";
 import { UsersIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { updateDocument } from "../../../firebase/firestore";
+import { HOSTELS, hostelForBlock, hostelForStudent, wardenHostel } from "../../../utils/hostels";
 
 function tsToDate(ts) {
   if (!ts) return null;
@@ -20,21 +21,21 @@ export default function Wardens() {
   });
   const wardens = data.wardens;
   const blocks = data.blocks;
-  const blockOptions = ["Unassigned", ...blocks.map((b) => b.name)];
+  const hostelOptions = ["Unassigned", ...HOSTELS];
 
-  const studentCountByBlock = useMemo(() => {
+  const studentCountByHostel = useMemo(() => {
     const counts = {};
     data.students.forEach((s) => {
-      const key = s.hostelResidence || s.block;
+      const key = hostelForStudent(s, blocks);
       if (!key) return;
       counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
-  }, [data.students]);
+  }, [data.students, blocks]);
 
-  async function reassign(id, block) {
+  async function reassign(id, hostel) {
     try {
-      await updateDocument("users", id, { block });
+      await updateDocument("users", id, { hostel: hostel === "Unassigned" ? "" : hostel });
     } catch (err) {
       console.error("Failed to reassign warden:", err);
     }
@@ -53,22 +54,22 @@ export default function Wardens() {
       ),
     },
     {
-      key: "block",
-      label: "Block",
+      key: "hostel",
+      label: "Assigned hostel",
       render: (w) => (
         <select
-          value={w.block || "Unassigned"}
+          value={wardenHostel(w, blocks) || "Unassigned"}
           onChange={(e) => reassign(w.id, e.target.value)}
           onClick={(e) => e.stopPropagation()}
           className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
         >
-          {blockOptions.map((b) => (
-            <option key={b} value={b}>{b}</option>
+          {hostelOptions.map((hostel) => (
+            <option key={hostel} value={hostel}>{hostel}</option>
           ))}
         </select>
       ),
     },
-    { key: "students", label: "Students", render: (w) => studentCountByBlock[w.block] || 0 },
+    { key: "students", label: "Students", render: (w) => studentCountByHostel[wardenHostel(w, blocks)] || 0 },
     {
       key: "createdAt",
       label: "Joined",
@@ -94,7 +95,7 @@ export default function Wardens() {
           </span>
           <div>
             <p className="font-display text-base font-semibold text-ink">Warden roster</p>
-            <p className="text-sm text-slate-500">Assign wardens to blocks and see their current workload.</p>
+            <p className="text-sm text-slate-500">Assign wardens to a hostel; Boys Hostel covers Blocks A and B, Girls Hostel covers Block C.</p>
           </div>
         </div>
       </Card>
@@ -104,7 +105,7 @@ export default function Wardens() {
           columns={columns}
           rows={wardens}
           loading={loading}
-          searchKeys={["name", "email", "block"]}
+          searchKeys={["name", "email", "hostel"]}
           searchPlaceholder="Search wardens…"
           emptyTitle="No wardens added yet"
           emptyDescription="Create warden accounts from Manage Users to see them here."
@@ -122,7 +123,7 @@ export default function Wardens() {
               <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-ink">{b.name}</p>
                 <p className="text-xs text-slate-400">{b.type} hostel</p>
-                <p className="mt-3 text-sm text-slate-600">Warden: <span className="font-medium text-ink">{b.warden || "Unassigned"}</span></p>
+                <p className="mt-3 text-sm text-slate-600">Hostel: <span className="font-medium text-ink">{hostelForBlock(b.name, blocks) || b.type || "Unspecified"}</span></p>
                 <p className="text-xs text-slate-400">{b.occupiedBeds || 0}/{b.totalBeds || 0} beds occupied</p>
               </div>
             ))}

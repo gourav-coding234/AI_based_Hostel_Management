@@ -5,6 +5,7 @@ import { EmptyState } from "../../../components/ui/DataState";
 import { BedIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { updateDocument, deleteDocument, logAudit } from "../../../firebase/firestore";
+import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
 
 export default function RoomAllotment() {
   const { profile, user } = useAuth();
@@ -13,8 +14,18 @@ export default function RoomAllotment() {
     students: { name: "students" },
     requests: { name: "roomRequests", options: { orderByField: "createdAt" } },
   });
-  const { blocks, students } = data;
-  const pendingRequests = data.requests.filter((r) => r.status === "Pending");
+  const assignedHostel = wardenHostel(profile, data.blocks);
+  const students = data.students.filter((student) => studentMatchesHostel(student, assignedHostel, data.blocks));
+  const blocks = data.blocks.filter((block) => !assignedHostel ||
+    hostelForBlock(block.name, data.blocks) === assignedHostel ||
+    students.some((student) => String(student.hostelResidence || student.wing || student.block || "").trim().toLowerCase() === String(block.name || "").trim().toLowerCase()));
+  const studentByAnyId = Object.fromEntries(data.students.flatMap((student) => [student.id, student.accountUid, student.userId, student.regNo, student.registrationNo, student.email].filter(Boolean).map((id) => [String(id), student])));
+  const pendingRequests = data.requests.filter((request) => {
+    if (request.status !== "Pending") return false;
+    const student = studentByAnyId[String(request.studentId || request.studentUid || request.uid || "")];
+    const requestWing = request.block || request.hostelResidence || request.wing;
+    return !assignedHostel || studentMatchesHostel(student, assignedHostel, data.blocks) || (requestWing && hostelForBlock(requestWing, data.blocks) === assignedHostel);
+  });
 
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
   const occupiedBeds = blocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
@@ -56,6 +67,12 @@ export default function RoomAllotment() {
     const draft = allotDraft[requestId];
     if (!draft?.room || !draft?.bed || !studentId) return;
     const wing = draft.wing || currentWing;
+    const targetBlock = blockByName[wing];
+    const requestStudent = studentByAnyId[String(studentId)];
+    if (!targetBlock || (assignedHostel && !blocks.some((block) => block.id === targetBlock.id)) || !studentMatchesHostel(requestStudent, assignedHostel, data.blocks)) {
+      setAllotError((e) => ({ ...e, [requestId]: "Choose a block and student within your assigned hostel." }));
+      return;
+    }
 
     const clash = students.find(
       (s) => s.id !== studentId && (s.hostelResidence || s.wing) === wing && s.room === draft.room && String(s.bed) === String(draft.bed)
@@ -183,9 +200,9 @@ export default function RoomAllotment() {
         )}
       </Card>
 
-      <Card title="Wing occupancy — room by room">
+      <Card title={`${assignedHostel || "Hostel"} occupancy — room by room`}>
         {blocks.length === 0 ? (
-          <EmptyState icon={<BedIcon />} title="No blocks added yet" description="Add blocks from the admin Blocks page or Data Import." />
+          <EmptyState icon={<BedIcon />} title="No blocks added yet" description="Ask the admin to add this hostel’s blocks in Data Import." />
         ) : (
           <>
             <div className="mb-4 flex flex-wrap gap-2">

@@ -7,11 +7,10 @@ export const IMPORT_SCHEMAS = {
     dedupeKeys: ["name"],
     label: "Hostel blocks",
     collection: "blocks",
-    description: "One row per hostel block/wing (capacity used for occupancy stats).",
+    description: "One row per hostel block/wing (A and B for Boys Hostel; C for Girls Hostel).",
     columns: [
       { key: "name", label: "Block name", required: true, type: "string" },
       { key: "type", label: "Hostel type (Boys/Girls)", required: false, type: "enum", enumValues: ["Boys", "Girls"] },
-      { key: "warden", label: "Warden name", required: false, type: "string" },
       { key: "totalRooms", label: "Total rooms", required: false, type: "number" },
       { key: "totalBeds", label: "Total beds", required: true, type: "number" },
       { key: "occupiedBeds", label: "Occupied beds", required: false, type: "number" },

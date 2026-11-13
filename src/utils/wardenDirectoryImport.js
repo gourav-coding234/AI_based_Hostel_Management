@@ -6,13 +6,14 @@
 // rows in the file). parseDataFile is still reused for the actual
 // CSV/Excel parsing so there's one file-reading implementation in the app.
 import { parseDataFile } from "./fileImport";
+import { hostelForBlock, studentMatchesHostel } from "./hostels";
 
 export const HOSTEL_CSV_COLUMNS = ["uid", "email", "wing", "room", "bed"];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Room/bed labels in this app look like "B-204" or "12" — letters, digits,
 // spaces and a hyphen/slash, nothing that could be a formula or garbage.
-const ROOM_RE = /^[A-Za-z0-9][A-Za-z0-9\-/ ]{0,19}$/;
+const ROOM_RE = /^[A-Za-z0-9][A-Za-z0-9 /-]{0,19}$/;
 const BED_RE = /^[A-Za-z0-9][A-Za-z0-9\-]{0,9}$/;
 
 /**
@@ -38,14 +39,14 @@ function findConflictOccupant(directory, wing, room, bed, uid, email) {
  *  - no two rows in the file targeting the same student
  *  - no two rows (or a row and an existing resident) targeting the same
  *    wing+room+bed unless it's the same student already there
- *  - when `assignedWing` is set (this warden is scoped to one block), no
- *    row targeting a different wing
+ *  - when `assignedHostel` is set, rows cannot target residents in another
+ *    hostel or assign a known block belonging to another hostel
  *
  * directory: the live, already-merged roster rows (see StudentDirectory) —
  * used only to detect bed clashes against residents already in the
  * database, never written to directly.
  */
-export async function parseAndValidateHostelCsv(file, { directory = [], assignedWing = "" } = {}) {
+export async function parseAndValidateHostelCsv(file, { directory = [], assignedHostel = "" } = {}) {
   const { records } = await parseDataFile(file);
   const errors = [];
   const validRecords = [];
@@ -86,23 +87,23 @@ export async function parseAndValidateHostelCsv(file, { directory = [], assigned
       return;
     }
 
-    // A block-assigned warden can only re-assign students who currently
-    // live in (or have no wing yet in) their own block.
-    if (assignedWing) {
-      const norm = (v) => String(v || "").trim().toLowerCase();
-      const current = directory.find((s) => (uid && s.id === uid) || (email && norm(s.email) === norm(email)));
-      if (current?.wing && current.wing !== assignedWing) {
-        errors.push({ row: rowNum, field: "uid / email", message: `${identifier} belongs to ${current.wing}, outside your assigned block.` });
+    // Warden can manage any block inside the assigned hostel, but cannot
+    // move students across to the other hostel.
+    const current = directory.find((s) => (uid && (s.id === uid || s.accountUid === uid)) || (email && String(s.email || "").trim().toLowerCase() === email.toLowerCase()));
+    if (assignedHostel) {
+      if (current && !studentMatchesHostel(current, assignedHostel)) {
+        errors.push({ row: rowNum, field: "uid / email", message: `${identifier} belongs to another hostel, outside your assignment.` });
         return;
       }
     }
 
-    const effectiveWing = wing || assignedWing;
-    if (assignedWing && wing && wing !== assignedWing) {
+    const effectiveWing = wing || current?.wing || "";
+    const targetHostel = effectiveWing ? hostelForBlock(effectiveWing) : "";
+    if (assignedHostel && effectiveWing && targetHostel && targetHostel !== assignedHostel) {
       errors.push({
         row: rowNum,
         field: "wing",
-        message: `You're only assigned to ${assignedWing}; this row targets ${wing}.`,
+        message: `You're assigned to ${assignedHostel}; ${effectiveWing} belongs to another hostel.`,
       });
       return;
     }

@@ -4,7 +4,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, deleteDocument, updateDocument } from "../../../firebase/firestore";
 
-const EMPTY = { name: "", type: "Boys", warden: "", totalRooms: "", totalBeds: "" };
+const EMPTY = { name: "", type: "Boys", totalRooms: "", totalBeds: "" };
 const normalized = (name) => String(name || "").trim().toLocaleLowerCase();
 
 export default function AdminBlocksSection() {
@@ -23,7 +23,7 @@ export default function AdminBlocksSection() {
 
   function beginEdit(block) {
     setEditingId(block.id);
-    setDraft({ name: block.name || "", type: block.type || "Boys", warden: block.warden || "", totalRooms: String(block.totalRooms ?? ""), totalBeds: String(block.totalBeds ?? "") });
+    setDraft({ name: block.name || "", type: block.type || "Boys", totalRooms: String(block.totalRooms ?? ""), totalBeds: String(block.totalBeds ?? "") });
     setFormError("");
     setMessage("");
   }
@@ -44,7 +44,6 @@ export default function AdminBlocksSection() {
     const data = {
       name,
       type: draft.type === "Girls" ? "Girls" : "Boys",
-      warden: draft.warden.trim() || "Unassigned",
       totalRooms: Number(draft.totalRooms || 0),
       totalBeds: Number(draft.totalBeds),
       ...(editingId ? {} : { occupiedBeds: 0 }),
@@ -82,7 +81,7 @@ export default function AdminBlocksSection() {
   }
 
   return (
-    <Card title="Hostel blocks" subtitle="Add and manage hostel wings and their capacity. Existing block data stays available to the other dashboards.">
+    <Card title="Hostel blocks" subtitle="Manage the hostel layout: Boys Hostel uses Blocks A and B; Girls Hostel uses Block C.">
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{blocks.length} blocks</div>
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{totals.rooms} rooms · {totals.beds} total beds</div>
@@ -92,7 +91,6 @@ export default function AdminBlocksSection() {
       <form onSubmit={save} className="mb-6 grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Block name"><input className={inputCls} value={draft.name} onChange={(e) => setDraft((current) => ({ ...current, name: e.target.value }))} placeholder="e.g. East Wing" required /></Field>
         <Field label="Hostel type"><select className={inputCls} value={draft.type} onChange={(e) => setDraft((current) => ({ ...current, type: e.target.value }))}><option value="Boys">Boys</option><option value="Girls">Girls</option></select></Field>
-        <Field label="Assigned warden"><input className={inputCls} value={draft.warden} onChange={(e) => setDraft((current) => ({ ...current, warden: e.target.value }))} placeholder="Optional" /></Field>
         <Field label="Total rooms"><input className={inputCls} type="number" min="0" value={draft.totalRooms} onChange={(e) => setDraft((current) => ({ ...current, totalRooms: e.target.value }))} /></Field>
         <Field label="Total beds"><input className={inputCls} type="number" min="0" value={draft.totalBeds} onChange={(e) => setDraft((current) => ({ ...current, totalBeds: e.target.value }))} required /></Field>
         <div className="flex items-end gap-2"><Button type="submit" disabled={busy}>{busy ? "Saving…" : editingId ? "Save changes" : "Add block"}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(""); setDraft(EMPTY); }}>Cancel</Button>}</div>
@@ -109,7 +107,6 @@ export default function AdminBlocksSection() {
             const percent = totalBeds ? Math.round(occupiedBeds / totalBeds * 100) : 0;
             return <div key={block.id} className="rounded-xl border border-slate-200 p-4">
               <div className="flex items-start justify-between gap-2"><div><p className="font-semibold text-ink">{block.name}</p><p className="text-xs text-slate-500">{block.type || "Type not set"} hostel · {block.totalRooms || 0} rooms</p></div><Pill tone={percent > 95 ? "Urgent" : "General"}>{percent}% full</Pill></div>
-              <p className="mt-3 text-sm text-slate-600">Warden: {block.warden || "Unassigned"}</p>
               <ProgressBar value={occupiedBeds} max={totalBeds} tone={percent > 95 ? "rose" : "teal"} />
               <p className="mt-1 text-xs text-slate-500">{occupiedBeds}/{totalBeds} beds occupied</p>
               <div className="mt-3 flex gap-2"><Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => beginEdit(block)}>Edit</Button><Button variant="danger" className="px-3 py-1.5 text-xs" onClick={() => setConfirmBlock(block)}>Delete</Button></div>
