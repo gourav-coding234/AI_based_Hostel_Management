@@ -611,6 +611,19 @@ img {
   font-size: 13.5px;
   color: var(--ink);
 }
+/* Native select controls need an explicit surface and browser scheme. Some
+   compact table selectors do not use .input, so cover every select here. */
+select:not([multiple]) {
+  color: var(--ink);
+  background-color: var(--surface);
+  border-color: var(--border-strong);
+  color-scheme: light;
+}
+select option,
+select optgroup {
+  color: var(--ink);
+  background-color: var(--surface);
+}
 .input::placeholder {
   color: var(--text-faint);
 }
@@ -1498,7 +1511,7 @@ img {
   color: #fff;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .nav-links {
     display: flex;
   }
@@ -1530,7 +1543,7 @@ img {
   color: #fff;
   background: transparent;
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .menu-toggle {
     display: none;
   }
@@ -1760,6 +1773,69 @@ img {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.leadership-more {
+  margin-top: 10px;
+  color: var(--navy-700);
+  font-size: 12px;
+}
+.leadership-more summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--navy-700);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.leadership-more summary::-webkit-details-marker {
+  display: none;
+}
+.leadership-more summary::after {
+  content: "+";
+  color: var(--red-600);
+  font-size: 16px;
+  line-height: 1;
+}
+.leadership-more[open] summary::after {
+  content: "−";
+}
+.leadership-more summary:focus-visible,
+.leadership-more-content a:focus-visible {
+  outline: 2px solid var(--navy-700);
+  outline-offset: 3px;
+}
+.leadership-more-content {
+  margin-top: 10px;
+  padding: 12px;
+  border-left: 2px solid var(--green-600);
+  background: #f7f9fc;
+}
+.leadership-more-content dl {
+  display: grid;
+  gap: 9px;
+}
+.leadership-more-content dt {
+  color: var(--navy-700);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.leadership-more-content dd {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.leadership-more-content a {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--navy-700);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .leadership-rule {
   position: absolute;
@@ -3447,6 +3523,14 @@ button,
   border-color: var(--border);
   color: var(--ink);
 }
+[data-theme="dark"] select:not([multiple]) {
+  color-scheme: dark;
+}
+[data-theme="dark"] select option,
+[data-theme="dark"] select optgroup {
+  color: var(--ink);
+  background-color: var(--surface);
+}
 [data-theme="dark"] input::placeholder,
 [data-theme="dark"] textarea::placeholder {
   color: var(--text-faint);
@@ -3716,4 +3800,230 @@ button,
   padding: 22px 0;
   font-size: 13.5px;
   color: var(--text-muted);
+}
+
+/* =======================================================================
+   Responsive layout pass — shared by public pages and every dashboard
+   ======================================================================= */
+#root {
+  width: 100%;
+  min-width: 320px;
+}
+
+body {
+  min-width: 320px;
+}
+
+.app-shell,
+.dashboard-main,
+.dashboard-content,
+.navbar-inner,
+.section-inner {
+  min-width: 0;
+}
+
+.dashboard-content > *,
+.topbar > *,
+.topbar-left > *,
+.topbar-right > *,
+.navbar-inner > *,
+.section-inner > * {
+  min-width: 0;
+}
+
+.dashboard-content {
+  overflow-x: clip;
+}
+
+/* Keep wide data tables inside their own scroll area instead of widening
+   the whole page. */
+.dashboard-content .overflow-x-auto,
+.dashboard-content .table-scroll {
+  max-width: 100%;
+}
+
+.dashboard-content :is(input, select, textarea) {
+  max-width: 100%;
+}
+
+.dashboard-content :is(button, a) {
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog {
+  max-height: calc(100dvh - 40px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.auth-page {
+  min-width: 320px;
+}
+
+.auth-body,
+.auth-form-panel,
+.auth-form {
+  min-width: 0;
+}
+
+.auth-form-panel {
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+
+.masthead {
+  flex-wrap: wrap;
+  gap: 5px 18px;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .nav-links {
+    display: none;
+  }
+  .menu-toggle {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 900px) {
+  .topbar-search {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) {
+  .topbar-search {
+    min-width: 150px;
+  }
+}
+
+@media (max-width: 767px) {
+  .masthead {
+    padding: 7px 14px;
+    align-items: flex-start;
+  }
+  .masthead-links {
+    flex-wrap: wrap;
+    gap: 5px 9px;
+  }
+  .navbar-inner {
+    padding: 10px 14px;
+  }
+  .navbar-actions {
+    flex-shrink: 0;
+  }
+  .navbar-login {
+    display: none;
+  }
+  .mobile-nav {
+    max-height: calc(100dvh - 64px - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .section {
+    padding: 44px 0;
+  }
+  .section-inner {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .hero-inner {
+    padding: 48px 16px 54px;
+    gap: 30px;
+  }
+  .hero-title {
+    font-size: clamp(29px, 8vw, 38px);
+    overflow-wrap: anywhere;
+  }
+  .hero-campus,
+  .hero-campus > img {
+    min-height: 220px;
+  }
+  .dashboard-content {
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .topbar {
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+  }
+  .user-chip-btn .user-name {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-content {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .topbar {
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+  .topbar-right {
+    flex-shrink: 0;
+  }
+  .topbar-left {
+    flex: 1 1 auto;
+  }
+  .menu-btn,
+  .icon-btn {
+    flex: 0 0 36px;
+  }
+  .card {
+    padding: 16px;
+  }
+  .card-head,
+  .confirm-actions,
+  .setup-actions {
+    flex-wrap: wrap;
+  }
+  .confirm-overlay,
+  .lightbox {
+    padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+  .confirm-dialog,
+  .lightbox-panel {
+    padding: 18px;
+  }
+  .hero-actions > .btn {
+    flex: 1 1 145px;
+  }
+  .leadership-card,
+  .leadership-card-principal {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .topbar {
+    gap: 5px;
+  }
+  .topbar-left {
+    gap: 7px;
+  }
+  .topbar-title {
+    max-width: 120px;
+  }
+  .topbar-right {
+    gap: 4px;
+  }
+  .user-chip-btn {
+    padding-right: 2px;
+  }
+  .card {
+    padding: 14px;
+  }
+  .role-grid {
+    gap: 6px;
+  }
+  .role-btn {
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: 11px;
+  }
 }

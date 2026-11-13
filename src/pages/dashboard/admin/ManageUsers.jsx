@@ -769,7 +769,6 @@ export default function ManageUsers() {
               </Field>
               <p className="text-xs text-slate-500">Password changes apply immediately. Share the new sign-in details securely with the account holder.</p>
               {accountEditError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{accountEditError}</p>}
-              {accountEditSuccess && <p role="status" className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-700">{accountEditSuccess}</p>}
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" disabled={savingAccount} onClick={() => setEditingAccount(null)}>Cancel</Button>
                 <Button type="submit" disabled={savingAccount}>{savingAccount ? "Saving…" : "Save account"}</Button>
