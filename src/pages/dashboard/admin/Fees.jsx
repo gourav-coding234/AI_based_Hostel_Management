@@ -16,6 +16,19 @@ function inr(n) {
 
 const statusFilters = ["All Statuses", "Pending", "Partial", "Paid", "Overdue"];
 
+function compareFeeGroups(a, b) {
+  const order = (label) => {
+    const value = String(label || "");
+    const hostelRank = /^Girls Hostel\b/i.test(value) ? 0 : /^Boys Hostel\b/i.test(value) ? 1 : 2;
+    const blockMatch = value.match(/\bBlock\s+([A-Z]+)\b/i);
+    const blockRank = blockMatch ? blockMatch[1].toUpperCase().charCodeAt(0) - 65 : 99;
+    return [hostelRank, blockRank, value.toLowerCase()];
+  };
+  const left = order(a);
+  const right = order(b);
+  return left[0] - right[0] || left[1] - right[1] || left[2].localeCompare(right[2]);
+}
+
 function toCsv(headers, rows) {
   const lines = [headers.map((h) => h.label).join(",")];
   rows.forEach((row) => {
@@ -76,7 +89,7 @@ export default function Fees() {
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const blockFilters = useMemo(() => {
-    return ["All Blocks", ...Array.from(new Set(fees.map(feeGroupLabel)))];
+    return ["All Blocks", ...Array.from(new Set(fees.map(feeGroupLabel))).sort(compareFeeGroups)];
   }, [fees, studentById, blocks]);
 
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -98,7 +111,7 @@ export default function Fees() {
       entry.totalDue += Number(f.total) || 0;
       entry.collected += Number(f.paid) || 0;
     });
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => compareFeeGroups(a.block, b.block));
   }, [fees, studentById, blocks]);
 
   // A defaulter is anyone with an outstanding balance — cleared fees never

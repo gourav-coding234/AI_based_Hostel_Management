@@ -6,7 +6,8 @@ import { getLocalProfilePhoto } from "../utils/localProfilePhotos";
 function withLocalProfilePhoto(uid, profile) {
   if (!profile) return profile;
   const localPhoto = getLocalProfilePhoto(uid);
-  // Profile photos are browser-local. Do not fall back to a stale Firebase URL.
+  // Photos are browser-local by design; don't fall back to an old or broken
+  // remote URL. An empty local override means the user removed the photo.
   return { ...profile, photoURL: localPhoto || "" };
 }
 
@@ -54,6 +55,19 @@ export function AuthProvider({ children }) {
       unsubscribe();
     };
   }, []);
+
+  // Profile photos are intentionally stored in this browser (no Firebase
+  // Storage). Keep the avatar in other open tabs in sync with that local copy.
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const key = `gce-hostel:profile-photo:v1:${user.uid}`;
+    function syncPhoto(event) {
+      if (event.key !== key) return;
+      setProfile((current) => current ? { ...current, photoURL: event.newValue ?? "" } : current);
+    }
+    window.addEventListener("storage", syncPhoto);
+    return () => window.removeEventListener("storage", syncPhoto);
+  }, [user?.uid]);
 
   async function logout() {
     await firebaseSignOut();

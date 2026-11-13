@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, Pill } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import DataTable from "../../../components/ui/DataTable";
@@ -22,6 +22,9 @@ export default function Wardens() {
   const wardens = data.wardens;
   const blocks = data.blocks;
   const hostelOptions = ["Unassigned", ...HOSTELS];
+  const [assignments, setAssignments] = useState({});
+  const [savingWardenId, setSavingWardenId] = useState("");
+  const [assignmentMessage, setAssignmentMessage] = useState("");
 
   const studentCountByHostel = useMemo(() => {
     const counts = {};
@@ -34,10 +37,25 @@ export default function Wardens() {
   }, [data.students, blocks]);
 
   async function reassign(id, hostel) {
+    const previous = assignments[id];
+    setAssignments((current) => ({ ...current, [id]: hostel }));
+    setSavingWardenId(id);
+    setAssignmentMessage("");
     try {
       await updateDocument("users", id, { hostel: hostel === "Unassigned" ? "" : hostel });
     } catch (err) {
       console.error("Failed to reassign warden:", err);
+      setAssignments((current) => {
+        const next = { ...current };
+        if (previous === undefined) delete next[id];
+        else next[id] = previous;
+        return next;
+      });
+      setAssignmentMessage(err?.code === "permission-denied"
+        ? "Firebase denied the assignment. Check that you are signed in as Admin and have published the current Firestore rules."
+        : "The hostel assignment could not be saved. Check the connection and try again.");
+    } finally {
+      setSavingWardenId("");
     }
   }
 
@@ -57,19 +75,23 @@ export default function Wardens() {
       key: "hostel",
       label: "Assigned hostel",
       render: (w) => (
-        <select
-          value={wardenHostel(w, blocks) || "Unassigned"}
-          onChange={(e) => reassign(w.id, e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
-        >
-          {hostelOptions.map((hostel) => (
-            <option key={hostel} value={hostel}>{hostel}</option>
-          ))}
-        </select>
+        <div>
+          <select
+            value={assignments[w.id] ?? (wardenHostel(w, blocks) || "Unassigned")}
+            disabled={savingWardenId === w.id}
+            onChange={(e) => reassign(w.id, e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20 disabled:opacity-60"
+          >
+            {hostelOptions.map((hostel) => (
+              <option key={hostel} value={hostel}>{hostel}</option>
+            ))}
+          </select>
+          {savingWardenId === w.id && <p className="mt-1 text-xs text-slate-500">Saving…</p>}
+        </div>
       ),
     },
-    { key: "students", label: "Students", render: (w) => studentCountByHostel[wardenHostel(w, blocks)] || 0 },
+    { key: "students", label: "Students", render: (w) => studentCountByHostel[wardenHostel({ ...w, hostel: assignments[w.id] ?? w.hostel }, blocks)] || 0 },
     {
       key: "createdAt",
       label: "Joined",
@@ -101,6 +123,7 @@ export default function Wardens() {
       </Card>
 
       <Card>
+        {assignmentMessage && <p role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{assignmentMessage}</p>}
         <DataTable
           columns={columns}
           rows={wardens}

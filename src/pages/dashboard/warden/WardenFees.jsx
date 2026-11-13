@@ -115,6 +115,10 @@ export default function WardenFees() {
       setPayError(
         err?.message === "INVALID_AMOUNT"
           ? "That amount is more than what's currently owed — the record may have just changed."
+          : err?.code === "permission-denied"
+            ? "Firebase blocked this payment. Confirm your warden account is assigned to this hostel, then publish the latest Firestore rules in Firebase Console."
+            : err?.code === "unavailable" || err?.code === "deadline-exceeded"
+              ? "Firebase is temporarily unavailable. Check the connection and try saving again."
           : "Couldn't save this payment. Please try again."
       );
     } finally {

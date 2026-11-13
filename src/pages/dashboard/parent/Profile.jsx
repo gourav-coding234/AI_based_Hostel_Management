@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { updateUserProfile } from "../../../firebase/firestore";
-import { useProfilePhotoUpload } from "../../../hooks/useProfilePhotoUpload";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
-import ProfilePhotoControl from "../../../components/dashboard/ProfilePhotoControl";
+import ProfileAvatarDisplay from "../../../components/dashboard/ProfileAvatarDisplay";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 
 function toFormState(profile) {
@@ -12,12 +11,11 @@ function toFormState(profile) {
     phone: profile?.phone ?? "",
     address: profile?.address ?? "",
     relationToStudent: profile?.relationToStudent ?? "",
-    photoURL: profile?.photoURL ?? "",
   };
 }
 
 export default function ParentProfile() {
-  const { user, profile, refreshProfile, setLocalProfilePhoto } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { studentUser, studentRecord, notLinked, loading: linkLoading, error: linkError } = useLinkedStudent();
   const [form, setForm] = useState(() => toFormState(profile));
   const [saving, setSaving] = useState(false);
@@ -27,7 +25,6 @@ export default function ParentProfile() {
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
-  const photoUpload = useProfilePhotoUpload(user, setLocalProfilePhoto, (photoURL) => set("photoURL", photoURL));
 
   async function handleSave(e) {
     e.preventDefault();
@@ -36,9 +33,7 @@ export default function ParentProfile() {
     setSuccess("");
     setSaving(true);
     try {
-      const profileFields = { ...form };
-      delete profileFields.photoURL;
-      await updateUserProfile(user.uid, profileFields);
+      await updateUserProfile(user.uid, form);
       await refreshProfile();
       setSuccess("Profile updated.");
     } catch (err) {
@@ -59,7 +54,7 @@ export default function ParentProfile() {
           className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-500/20 blur-3xl"
         />
         <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-          <ProfilePhotoControl photoURL={profile?.photoURL || form.photoURL} name={profile?.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
+          <ProfileAvatarDisplay photoURL={profile?.photoURL} name={displayName} email={profile?.email} />
           <div>
             <h2 className="font-display text-xl font-semibold">{displayName}</h2>
             <p className="mt-0.5 text-sm text-slate-300">{profile?.email}</p>
@@ -109,7 +104,7 @@ export default function ParentProfile() {
           {error && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error}</p>}
           {success && <p className="rounded-xl bg-teal-500/10 px-4 py-2.5 text-sm text-teal-700">{success}</p>}
 
-          <Button type="submit" disabled={saving || photoUpload.uploading} className="w-full sm:w-auto">
+          <Button type="submit" disabled={saving} className="w-full sm:w-auto">
             {saving ? "Saving…" : "Save changes"}
           </Button>
         </form>

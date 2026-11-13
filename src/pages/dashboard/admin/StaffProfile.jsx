@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { updateUserProfile } from "../../../firebase/firestore";
-import { useProfilePhotoUpload } from "../../../hooks/useProfilePhotoUpload";
 import { Card, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
-import ProfilePhotoControl from "../../../components/dashboard/ProfilePhotoControl";
+import ProfileAvatarDisplay from "../../../components/dashboard/ProfileAvatarDisplay";
 
 function profileForm(profile) {
   return {
@@ -12,15 +11,13 @@ function profileForm(profile) {
     dob: profile?.dob || "",
     bloodGroup: profile?.bloodGroup || "",
     address: profile?.address || "",
-    photoURL: profile?.photoURL || "",
   };
 }
 
 export default function StaffProfile() {
-  const { user, profile, refreshProfile, setLocalProfilePhoto } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [form, setForm] = useState(() => profileForm(profile));
   const [saving, setSaving] = useState(false);
-  const photoUpload = useProfilePhotoUpload(user, setLocalProfilePhoto, (photoURL) => setForm((current) => ({ ...current, photoURL })));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -33,9 +30,7 @@ export default function StaffProfile() {
     setSuccess("");
     setSaving(true);
     try {
-      const profileFields = { ...form };
-      delete profileFields.photoURL;
-      await updateUserProfile(user.uid, profileFields);
+      await updateUserProfile(user.uid, form);
       await refreshProfile();
       setSuccess("Profile updated.");
     } catch (cause) {
@@ -46,10 +41,10 @@ export default function StaffProfile() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
-      <Card title="My profile" subtitle="Update your personal details and profile photo.">
+      <Card title="My profile" subtitle="Update your personal details.">
         <form onSubmit={save} className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-4">
-            <ProfilePhotoControl photoURL={profile?.photoURL || form.photoURL} name={form.name} email={profile?.email} upload={photoUpload.upload} remove={photoUpload.remove} uploading={photoUpload.uploading} progress={photoUpload.progress} stage={photoUpload.stage} error={photoUpload.error} />
+            <ProfileAvatarDisplay photoURL={profile?.photoURL} name={form.name} email={profile?.email} />
             <div><p className="font-medium text-ink">{form.name || profile?.email}</p><p className="text-sm text-slate-500">{profile?.role} · {profile?.email}</p></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -61,7 +56,7 @@ export default function StaffProfile() {
           </div>
           {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
           {success && <p role="status" className="text-sm text-teal-700">{success}</p>}
-          <Button type="submit" disabled={saving || photoUpload.uploading}>{saving ? "Saving..." : "Save profile"}</Button>
+          <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</Button>
         </form>
       </Card>
     </div>

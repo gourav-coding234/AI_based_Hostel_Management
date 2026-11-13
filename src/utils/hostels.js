@@ -17,9 +17,9 @@ export function hostelForBlock(value, blocks = [], preferredHostel = "") {
   const configuredType = normalizeHostel(configured?.type);
   if (configuredType) return configuredType;
   const normalized = name.toLowerCase().replace(/^(block|wing)\s*/, "").trim();
-  // A and B exist in both hostels, so their letter alone cannot identify a hostel.
-  // Under the current layout, C is a boys-hostel block.
-  if (/^(c)(\b|\s)/.test(normalized) || normalized === "c") return "Boys Hostel";
+  // The configured college layout is Boys Hostel: A/B; Girls Hostel: C.
+  if (/^(a|b)(\b|\s)/.test(normalized) || normalized === "a" || normalized === "b") return "Boys Hostel";
+  if (/^(c)(\b|\s)/.test(normalized) || normalized === "c") return "Girls Hostel";
   return "";
 }
 

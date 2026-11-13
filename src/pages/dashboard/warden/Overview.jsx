@@ -121,7 +121,7 @@ export default function WardenOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {totalBeds ? `${occupiedBeds} of ${totalBeds} beds occupied` : "No hostel assigned yet"}{myHostel ? ` · ${myHostel}` : ""}
+              {totalBeds ? `${occupiedBeds} of ${totalBeds} beds occupied` : myHostel ? "Hostel assignment saved · bed capacity is not configured" : "No hostel assigned yet"}{myHostel ? ` · ${myHostel}` : ""}
             </p>
           </div>
           <div className="flex gap-2">
@@ -144,7 +144,7 @@ export default function WardenOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myHostel || "Across both hostels"} tone="navy" />
-        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : "No blocks assigned"} tone="teal" />
+        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : myHostel ? `No capacity data for ${myHostel}` : "No hostel assigned"} tone="teal" />
         <StatCard icon={<CheckSquareIcon />} label="Attendance today" value={loading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`} sub={markedToday ? `${presentToday}/${markedToday} present` : "Not marked yet"} tone={attendancePct !== null && attendancePct < 75 ? "rose" : "teal"} />
         <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalOutstanding)} pending` : "No fee records yet"} tone="amber" />
       </div>
