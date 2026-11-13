@@ -194,7 +194,7 @@ function expandStudentBundleRows(records) {
     }
     if (present(record, "studentId") && present(record, "studentName") && present(record, "total") && present(record, "paid")) {
       add(record, sourceRow, "fees", {
-        studentId: record.studentId, studentName: record.studentName, block: record.block,
+        studentId: record.studentId, studentName: record.studentName, block: record.block, hostel: record.hostel || record.hostelType,
         total: record.total, paid: record.paid, dueDate: record.dueDate, status: record.status,
       });
     }
@@ -258,7 +258,7 @@ function expandStudentBundleRows(records) {
       add(record, sourceRow, "blocks", {
         name, type: record.type, totalRooms: record.totalRooms,
         totalBeds: record.totalBeds, occupiedBeds: record.occupiedBeds,
-      }, name);
+      }, `${name}|${record.type || "Boys"}`);
     }
   });
   return expanded;
@@ -267,9 +267,9 @@ function expandStudentBundleRows(records) {
 async function importRecords(target, records, createdBy) {
   if (target.key === "blocks") {
     const current = await getCollection("blocks");
-    const names = new Set(current.map((block) => String(block.name || "").trim().toLocaleLowerCase()));
+    const names = new Set(current.map((block) => `${String(block.name || "").trim().toLocaleLowerCase()}|${String(block.type || "Boys").trim().toLocaleLowerCase()}`));
     const newRecords = records.filter((record) => {
-      const key = String(record.name || "").trim().toLocaleLowerCase();
+      const key = `${String(record.name || "").trim().toLocaleLowerCase()}|${String(record.type || "Boys").trim().toLocaleLowerCase()}`;
       if (!key || names.has(key)) return false;
       names.add(key);
       return true;
@@ -283,7 +283,7 @@ async function importRecords(target, records, createdBy) {
     }));
     const skipped = records.length - newRecords.length;
     const written = newRecords.length ? await bulkAddDocuments("blocks", newRecords, createdBy) : 0;
-    return { written, failed: skipped ? [{ target: "Hostel blocks", reason: `${skipped} block row(s) matched an existing block name and were skipped.` }] : [] };
+    return { written, failed: skipped ? [{ target: "Hostel blocks", reason: `${skipped} block row(s) matched an existing hostel and block name and were skipped.` }] : [] };
   }
   if (target.key === "students") {
     const accountResult = await ensureStudentAccounts(records, target.onProgress);

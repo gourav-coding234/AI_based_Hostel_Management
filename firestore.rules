@@ -14,15 +14,16 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentId;
     }
 
-    // The signed-in Warden is assigned to a whole hostel. Keep the mapping
-    // explicit so their fee actions cover Boys A+B or Girls C only.
+    // The signed-in Warden is assigned to a whole hostel. Fee records carry
+    // their hostel because A and B are used by both hostels; only Block C is
+    // unambiguous in the current layout (Boys Hostel).
     function myHostel() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('hostel', '');
     }
 
     function feeBelongsToMyHostel() {
-      return (myHostel() == 'Boys Hostel' && resource.data.get('block', '') in ['A', 'B', 'Block A', 'Block B']) ||
-             (myHostel() == 'Girls Hostel' && resource.data.get('block', '') in ['C', 'Block C']);
+      return resource.data.get('hostel', '') == myHostel() ||
+             (myHostel() == 'Boys Hostel' && resource.data.get('block', '') in ['C', 'Block C']);
     }
 
     // Quantity sanity for inventory writes made by a Warden.

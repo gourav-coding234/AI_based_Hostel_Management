@@ -4,10 +4,10 @@
 
 export const IMPORT_SCHEMAS = {
   blocks: {
-    dedupeKeys: ["name"],
+    dedupeKeys: ["name", "type"],
     label: "Hostel blocks",
     collection: "blocks",
-    description: "One row per hostel block/wing (A and B for Boys Hostel; C for Girls Hostel).",
+    description: "One row per hostel block/wing (A, B and C for Boys Hostel; A and B for Girls Hostel). Include hostel type because block letters can repeat.",
     columns: [
       { key: "name", label: "Block name", required: true, type: "string" },
       { key: "type", label: "Hostel type (Boys/Girls)", required: false, type: "enum", enumValues: ["Boys", "Girls"] },
@@ -36,11 +36,12 @@ export const IMPORT_SCHEMAS = {
     dedupeKeys: ["studentId", "dueDate"],
     label: "Fee records",
     collection: "fees",
-    description: "One row per student's fee record.",
+    description: "One row per student's fee record. Include hostel (Boys Hostel/Girls Hostel) when block letters overlap between hostels.",
     columns: [
       { key: "studentId", label: "Student ID", required: true, type: "string" },
       { key: "studentName", label: "Student name", required: true, type: "string" },
       { key: "block", label: "Block", required: false, type: "string" },
+      { key: "hostel", label: "Hostel (Boys Hostel/Girls Hostel)", required: false, type: "string" },
       { key: "room", label: "Room", required: false, type: "string" },
       { key: "total", label: "Total amount", required: true, type: "number" },
       { key: "paid", label: "Paid amount", required: true, type: "number" },

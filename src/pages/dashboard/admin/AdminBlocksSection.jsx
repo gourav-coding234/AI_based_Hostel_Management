@@ -37,8 +37,8 @@ export default function AdminBlocksSection() {
       setFormError("Enter a block name and valid non-negative room and bed totals.");
       return;
     }
-    if (blocks.some((block) => normalized(block.name) === normalized(name) && block.id !== editingId)) {
-      setFormError("A block with this name already exists. Block names must be unique.");
+    if (blocks.some((block) => normalized(block.name) === normalized(name) && String(block.type || "Boys") === draft.type && block.id !== editingId)) {
+      setFormError("This block name already exists for that hostel. The same block letter can be used in the other hostel.");
       return;
     }
     const data = {
@@ -81,7 +81,7 @@ export default function AdminBlocksSection() {
   }
 
   return (
-    <Card title="Hostel blocks" subtitle="Manage the hostel layout: Boys Hostel uses Blocks A and B; Girls Hostel uses Block C.">
+    <Card title="Hostel blocks" subtitle="Manage blocks by hostel: Boys Hostel has Blocks A, B and C; Girls Hostel has Blocks A and B.">
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{blocks.length} blocks</div>
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{totals.rooms} rooms · {totals.beds} total beds</div>

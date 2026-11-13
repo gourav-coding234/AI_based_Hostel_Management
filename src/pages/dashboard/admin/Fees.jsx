@@ -8,6 +8,7 @@ import { WalletIcon, AlertIcon, CheckIcon, CalendarClockIcon, DownloadIcon } fro
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, updateDocument, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
+import { hostelForBlock, hostelForStudent, normalizeHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -27,7 +28,31 @@ export default function Fees() {
   const { profile, user } = useAuth();
   const feesQuery = useCollection("fees");
   const studentsQuery = useCollection("students");
+  const blocksQuery = useCollection("blocks", { limitCount: 200 });
   const students = studentsQuery.data;
+  const blocks = blocksQuery.data;
+
+  const studentById = useMemo(() => {
+    const map = new Map();
+    students.forEach((student) => {
+      [student.id, student.uid, student.userId, student.studentId].filter(Boolean).forEach((id) => map.set(String(id), student));
+    });
+    return map;
+  }, [students]);
+
+  function hostelForFee(fee) {
+    const student = studentById.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
+    return normalizeHostel(fee.hostel || fee.hostelType) ||
+      hostelForStudent(student, blocks) ||
+      hostelForBlock(fee.block, blocks, fee.hostel || fee.hostelType);
+  }
+
+  function feeGroupLabel(fee) {
+    const hostel = hostelForFee(fee);
+    const block = String(fee.block || "").trim();
+    const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
+    return `${hostel || "Hostel not specified"} · ${blockLabel}`;
+  }
 
   // Recalculate status (and the remaining balance) from total/paid/dueDate
   // on every render, rather than trusting whatever was last written to the
@@ -51,9 +76,8 @@ export default function Fees() {
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const blockFilters = useMemo(() => {
-    const set = new Set(fees.map((f) => f.block).filter(Boolean));
-    return ["All Blocks", ...Array.from(set)];
-  }, [fees]);
+    return ["All Blocks", ...Array.from(new Set(fees.map(feeGroupLabel)))];
+  }, [fees, studentById, blocks]);
 
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const totalCollected = fees.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
@@ -68,14 +92,14 @@ export default function Fees() {
   const byBlock = useMemo(() => {
     const map = new Map();
     fees.forEach((f) => {
-      const key = f.block || "Unspecified";
-      if (!map.has(key)) map.set(key, { block: key, totalDue: 0, collected: 0 });
-      const entry = map.get(key);
+      const group = feeGroupLabel(f);
+      if (!map.has(group)) map.set(group, { block: group, totalDue: 0, collected: 0 });
+      const entry = map.get(group);
       entry.totalDue += Number(f.total) || 0;
       entry.collected += Number(f.paid) || 0;
     });
     return Array.from(map.values());
-  }, [fees]);
+  }, [fees, studentById, blocks]);
 
   // A defaulter is anyone with an outstanding balance — cleared fees never
   // show up here, whatever their status.
@@ -86,14 +110,15 @@ export default function Fees() {
 
   const filtered = useMemo(() => {
     return fees.filter((f) => {
-      const blockOk = blockFilter === "All Blocks" || f.block === blockFilter;
+      const blockOk = blockFilter === "All Blocks" || feeGroupLabel(f) === blockFilter;
       const statusOk = statusFilter === "All Statuses" || f.status === statusFilter;
       return blockOk && statusOk;
     });
-  }, [fees, blockFilter, statusFilter]);
+  }, [fees, blockFilter, statusFilter, studentById, blocks]);
 
   const feeCsvHeaders = [
     { label: "Student", value: (f) => f.studentName },
+    { label: "Hostel", value: (f) => hostelForFee(f) || "Not specified" },
     { label: "Block", value: (f) => f.block },
     { label: "Room", value: (f) => f.room },
     { label: "Total", value: (f) => f.total },
@@ -184,7 +209,8 @@ export default function Fees() {
       await addDocument("fees", {
         studentId: student.id,
         studentName: student.name,
-        block: student.hostelResidence || "",
+        block: student.hostelResidence || student.wing || "",
+        hostel: hostelForStudent(student, blocks),
         room: student.room || "",
         total,
         paid: 0,
@@ -259,7 +285,7 @@ export default function Fees() {
               >
                 <option value="">Select a student…</option>
                 {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} {s.hostelResidence ? `(${s.hostelResidence})` : ""}</option>
+                  <option key={s.id} value={s.id}>{s.name} {hostelForStudent(s, blocks) ? `(${hostelForStudent(s, blocks)}${s.hostelResidence || s.wing ? ` · ${s.hostelResidence || s.wing}` : ""})` : ""}</option>
                 ))}
               </select>
             </Field>
@@ -288,7 +314,7 @@ export default function Fees() {
         {!creating && <p className="text-sm text-slate-400">Add a fee record for a student who doesn't have one yet, or use Data Import for bulk entry.</p>}
       </Card>
 
-      <Card title="Collection by block">
+      <Card title="Collection by hostel and block">
         {feesQuery.loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : byBlock.length === 0 ? (

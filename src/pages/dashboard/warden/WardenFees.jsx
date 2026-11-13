@@ -9,7 +9,7 @@ import { getCollection, recordFeePayment, sendFeeReminder, logAudit } from "../.
 import { computeFeeStatus } from "../../../utils/fees";
 import { toCsvText } from "../../../utils/csv";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
-import { hostelForBlock, wardenHostel } from "../../../utils/hostels";
+import { hostelForBlock, normalizeHostel, hostelForStudent, wardenHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -33,6 +33,20 @@ export default function WardenFees() {
   }, [directory]);
   const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
 
+  function resolveFeeHostel(fee) {
+    const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
+    return normalizeHostel(fee.hostel || fee.hostelType) ||
+      hostelForStudent(student) ||
+      hostelForBlock(fee.block, [], fee.hostel || fee.hostelType);
+  }
+
+  function feeLocationLabel(fee) {
+    const hostel = fee.resolvedHostel || resolveFeeHostel(fee);
+    const block = String(fee.block || "").trim();
+    const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
+    return `${hostel || "Hostel not specified"} · ${blockLabel}`;
+  }
+
   // Second layer: same block scoping the Warden overview uses. Status is
   // always recomputed (never trusted from the stored field) and the
   // pending amount is always total - paid.
@@ -40,12 +54,12 @@ export default function WardenFees() {
     const scoped = feesQuery.data.filter((fee) => {
       if (!myHostel) return true;
       const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
-      return student?.hostelType === myHostel || (fee.block && hostelForBlock(fee.block) === myHostel);
+      return resolveFeeHostel(fee) === myHostel;
     });
     return scoped.map((f) => {
       const total = Math.max(Number(f.total) || 0, 0);
       const paid = Math.max(Number(f.paid) || 0, 0);
-      return { ...f, registrationNo: f.registrationNo || registrationByStudent.get(f.studentId) || "", total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
+      return { ...f, resolvedHostel: resolveFeeHostel(f), registrationNo: f.registrationNo || registrationByStudent.get(f.studentId) || "", total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
     });
   }, [feesQuery.data, myHostel, studentByAnyId, registrationByStudent]);
 
@@ -158,6 +172,7 @@ export default function WardenFees() {
   const csvColumns = [
     { label: "Student", value: (f) => f.studentName || "" },
     { label: "Registration Number", value: (f) => f.registrationNo || "" },
+    { label: "Hostel", value: (f) => f.resolvedHostel || "Not specified" },
     { label: "Block", value: (f) => f.block || "" },
     { label: "Room", value: (f) => f.room || "" },
     { label: "Semester", value: (f) => f.semester || "" },
@@ -275,7 +290,7 @@ export default function WardenFees() {
         <DataTable
           columns={[
             { key: "studentName", label: "Student", sortable: true, render: (f) => <><p className="font-medium text-ink">{f.studentName || "—"}</p><p className="text-xs text-slate-400">{f.registrationNo || "Registration number unavailable"}</p></> },
-            { key: "block", label: "Wing/Block", sortable: true, render: (s) => s.block || "—" },
+            { key: "block", label: "Hostel / Block", sortable: true, render: (s) => feeLocationLabel(s) },
             { key: "room", label: "Room", render: (s) => s.room || "—" },
             { key: "semester", label: "Semester", render: (s) => s.semester || "—" },
             { key: "total", label: "Total", sortable: true, render: (s) => inr(s.total) },
