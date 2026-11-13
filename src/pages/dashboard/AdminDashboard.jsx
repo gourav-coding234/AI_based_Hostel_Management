@@ -1,20 +1,22 @@
+import { lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import StaffProfile from "./admin/StaffProfile";
-import AdminOverview from "./admin/Overview";
-import DataImport from "./admin/DataImport";
-import ManageUsers from "./admin/ManageUsers";
-import StudentRegister from "./admin/StudentRegister";
-import Complaints from "./admin/Complaints";
-import Fees from "./admin/Fees";
-import Expenses from "./admin/Expenses";
-import Notices from "./admin/Notices";
-import Reports from "./admin/Reports";
-import AuditLog from "./admin/AuditLog";
-import Visitors from "./admin/Visitors";
-import GatePasses from "./admin/GatePasses";
-import Leave from "./admin/Leave";
-import Feedback from "./admin/Feedback";
+
+const StaffProfile = lazy(() => import("./admin/StaffProfile"));
+const AdminOverview = lazy(() => import("./admin/Overview"));
+const DataImport = lazy(() => import("./admin/DataImport"));
+const ManageUsers = lazy(() => import("./admin/ManageUsers"));
+const StudentRegister = lazy(() => import("./admin/StudentRegister"));
+const Complaints = lazy(() => import("./admin/Complaints"));
+const Fees = lazy(() => import("./admin/Fees"));
+const Expenses = lazy(() => import("./admin/Expenses"));
+const Notices = lazy(() => import("./admin/Notices"));
+const Reports = lazy(() => import("./admin/Reports"));
+const AuditLog = lazy(() => import("./admin/AuditLog"));
+const Visitors = lazy(() => import("./admin/Visitors"));
+const GatePasses = lazy(() => import("./admin/GatePasses"));
+const Leave = lazy(() => import("./admin/Leave"));
+const Feedback = lazy(() => import("./admin/Feedback"));
 
 export default function AdminDashboard() {
   return (

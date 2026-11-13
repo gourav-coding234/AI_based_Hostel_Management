@@ -2431,12 +2431,17 @@ select optgroup {
   text-align: center;
 }
 .auth-crest {
-  width: 108px;
-  height: 108px;
+  width: 148px;
+  height: 148px;
   border-radius: 50%;
   overflow: hidden;
   background: #fff;
   box-shadow: var(--shadow-md);
+}
+.auth-crest img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .auth-college-name {
   margin-top: 22px;
@@ -2535,11 +2540,17 @@ select optgroup {
   }
 }
 .mobile-brand-crest {
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   overflow: hidden;
   border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.mobile-brand-crest img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .mobile-brand-name {
   display: block;

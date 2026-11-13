@@ -1,13 +1,15 @@
+import { lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import Overview from "./security/Overview";
-import GateDesk from "./security/GateDesk";
-import Attendance from "./security/Attendance";
-import VisitorLog from "./security/VisitorLog";
-import IncidentReports from "./security/IncidentReports";
-import EmergencyContacts from "./security/EmergencyContacts";
-import Notices from "./security/Notices";
-import Profile from "./security/Profile";
+
+const Overview = lazy(() => import("./security/Overview"));
+const GateDesk = lazy(() => import("./security/GateDesk"));
+const Attendance = lazy(() => import("./security/Attendance"));
+const VisitorLog = lazy(() => import("./security/VisitorLog"));
+const IncidentReports = lazy(() => import("./security/IncidentReports"));
+const EmergencyContacts = lazy(() => import("./security/EmergencyContacts"));
+const Notices = lazy(() => import("./security/Notices"));
+const Profile = lazy(() => import("./security/Profile"));
 
 export default function SecurityDashboard() {
   return (

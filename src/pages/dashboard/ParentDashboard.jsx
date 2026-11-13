@@ -1,12 +1,14 @@
+import { lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import Overview from "./parent/Overview";
-import Profile from "./parent/Profile";
-import Attendance from "./parent/Attendance";
-import Fees from "./parent/Fees";
-import GatePass from "./parent/GatePass";
-import Notices from "./parent/Notices";
-import EmergencyContacts from "./parent/EmergencyContacts";
+
+const Overview = lazy(() => import("./parent/Overview"));
+const Profile = lazy(() => import("./parent/Profile"));
+const Attendance = lazy(() => import("./parent/Attendance"));
+const Fees = lazy(() => import("./parent/Fees"));
+const GatePass = lazy(() => import("./parent/GatePass"));
+const Notices = lazy(() => import("./parent/Notices"));
+const EmergencyContacts = lazy(() => import("./parent/EmergencyContacts"));
 
 export default function ParentDashboard() {
   return (

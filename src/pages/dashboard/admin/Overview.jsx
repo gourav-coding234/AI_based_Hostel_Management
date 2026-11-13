@@ -16,7 +16,7 @@ import {
   AlertIcon,
   MegaphoneIcon,
 } from "../../../components/dashboard/admin/icons";
-import { useCollection, useCollections } from "../../../hooks/useCollection";
+import { useCollections } from "../../../hooks/useCollection";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -46,14 +46,13 @@ export default function AdminOverview() {
     visitors: { name: "visitors", options: { where: [["outTime", "==", ""]], limitCount: 100 } },
     expenses: { name: "expenses" },
     feedback: { name: "feedback", options: { limitCount: 100 } },
+    gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
+    movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
 
-  const { blocks, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback } = data;
-  const gatePassQuery = useCollection("gatePasses", { limitCount: 1000 });
-  const movementQuery = useCollection("inOutStatus", { limitCount: 2000 });
-  const gatePasses = gatePassQuery.data;
-  const loading = snapshotLoading || gatePassQuery.loading || movementQuery.loading;
-  const studentsOut = movementQuery.data.filter((entry) => entry.status === "OUT").length;
+  const { blocks, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut } = data;
+  const loading = snapshotLoading;
+  const studentsOut = movementsOut.length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
   const recentComplaints = recentByDate(complaints, "date");
   const recentGatePasses = recentByDate(gatePasses, "from");

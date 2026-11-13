@@ -13,7 +13,7 @@ import {
   PackageIcon,
   ArrowRightIcon,
 } from "../../../components/dashboard/warden/icons";
-import { useCollection, useCollections } from "../../../hooks/useCollection";
+import { useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
 
 function inr(n) {
@@ -43,14 +43,13 @@ export default function WardenOverview() {
     leaveRequests: { name: "leaveRequests", options: { limitCount: 100 } },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
     inventory: { name: "inventory", options: { limitCount: 100 } },
+    gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
+    visitors: { name: "visitors", options: { where: [["outTime", "==", ""]], limitCount: 100 } },
+    movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
-  const gatePassesQuery = useCollection("gatePasses", { limitCount: 200 });
-  const visitorsQuery = useCollection("visitors", { limitCount: 100 });
-  const movementQuery = useCollection("inOutStatus", { limitCount: 1000 });
-  const loading = snapshotLoading || gatePassesQuery.loading || visitorsQuery.loading || movementQuery.loading;
-  const gatePasses = gatePassesQuery.data;
-  const visitors = visitorsQuery.data;
-  const studentsOut = movementQuery.data.filter((row) => row.status === "OUT").length;
+  const loading = snapshotLoading;
+  const { gatePasses, visitors, movementsOut } = data;
+  const studentsOut = movementsOut.length;
   const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
   // ---- Occupancy (blocks assigned to this warden's wing) ----

@@ -14,7 +14,7 @@ import {
   CalendarClockIcon,
   ListIcon,
 } from "../../../components/dashboard/security/icons";
-import { useCollection, useCollections } from "../../../hooks/useCollection";
+import { useCollections } from "../../../hooks/useCollection";
 import { isPassActive, isPassOut } from "../../../utils/gatePass";
 
 // Every target below is a route that SecurityDashboard.jsx actually mounts
@@ -75,11 +75,10 @@ export default function SecurityOverview() {
     // Today's records only, from the same `attendance` collection the
     // Warden and Security Attendance pages write to.
     attendance: { name: "attendance", options: { where: [["date", "==", attendanceDate]], limitCount: 500 } },
-  }, { live: false, maxDocs: 500, cacheMs: 30_000 });
-  const passesQuery = useCollection("gatePasses", { where: [["status", "in", ["Approved", "Out", "journey_started"]]], limitCount: 500 });
-  const movementQuery = useCollection("inOutStatus", { limitCount: 1000 });
-  const gatePasses = passesQuery.data;
-  const { leaveLogs, gateLogs, visitors: rawVisitors, visitorsInside, visitorsToday, incidents, attendance } = data;
+    gatePasses: { name: "gatePasses", options: { where: [["status", "in", ["Approved", "Out", "journey_started"]]], limitCount: 100 } },
+    movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
+  }, { live: false, maxDocs: 100, cacheMs: 30_000 });
+  const { leaveLogs, gateLogs, visitors: rawVisitors, visitorsInside, visitorsToday, incidents, attendance, gatePasses, movementsOut } = data;
 
   // Newest check-in first. Sorted here (not via a Firestore orderBy, which
   // would silently drop records that lack the ordered field).
@@ -110,7 +109,7 @@ export default function SecurityOverview() {
     // Approved, not yet returned, and either already out or still inside
     // its valid window.
     const activePasses = gatePasses.filter((p) => isPassActive(p) && (isPassOut(p) || !p.to || p.to >= nowKey)).length;
-    const movementOut = movementQuery.data.filter((movement) => movement.status === "OUT").map((movement) => movement.studentId || movement.id);
+    const movementOut = movementsOut.map((movement) => movement.studentId || movement.id);
     movementOut.forEach((id) => outIds.add(id));
 
     // --- Visitors ---
@@ -155,16 +154,16 @@ export default function SecurityOverview() {
       attendanceRecords: attendance.length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gatePasses, movementQuery.data, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
+  }, [gatePasses, movementsOut, leaveLogs, visitorsInside, visitorsToday, incidents, attendance, tick]);
 
-  if (error || passesQuery.error || movementQuery.error) return <ErrorState message={error || passesQuery.error || movementQuery.error} />;
-  if (loading || passesQuery.loading || movementQuery.loading) return <PortalLoader label="Loading gate overview…" />;
+  if (error) return <ErrorState message={error} />;
+  if (loading) return <PortalLoader label="Loading gate overview…" />;
 
   const recentVisitors = visitors.slice(0, FEED_LIMIT);
 
   return (
     <div className="security-overview flex flex-col gap-6 animate-fade-in">
-      <p className="-mt-3 text-xs text-slate-400">This overview loads only today's attendance, active passes, current visitors, and a short activity feed. Open each register for the full history.</p>
+      <p className="-mt-3 text-xs text-slate-400">Summary reads are capped at 100 records to keep this page responsive. Open a register for complete totals and history.</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<QrIcon />}

@@ -1,15 +1,17 @@
+import { lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import Overview from "./student/Overview";
-import Fees from "./student/Fees";
-import Mess from "./student/Mess";
-import Attendance from "./student/Attendance";
-import GatePass from "./student/GatePass";
-import Complaints from "./student/Complaints";
-import Notices from "./student/Notices";
-import Profile from "./student/Profile";
-import Leave from "./student/Leave";
-import EmergencyContacts from "./parent/EmergencyContacts";
+
+const Overview = lazy(() => import("./student/Overview"));
+const Fees = lazy(() => import("./student/Fees"));
+const Mess = lazy(() => import("./student/Mess"));
+const Attendance = lazy(() => import("./student/Attendance"));
+const GatePass = lazy(() => import("./student/GatePass"));
+const Complaints = lazy(() => import("./student/Complaints"));
+const Notices = lazy(() => import("./student/Notices"));
+const Profile = lazy(() => import("./student/Profile"));
+const Leave = lazy(() => import("./student/Leave"));
+const EmergencyContacts = lazy(() => import("./parent/EmergencyContacts"));
 
 export default function StudentDashboard() {
   return (

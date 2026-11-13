@@ -1,17 +1,19 @@
+import { lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
-import StaffProfile from "./admin/StaffProfile";
-import WardenOverview from "./warden/Overview";
-import WardenFees from "./warden/WardenFees";
-import WardenMess from "./warden/WardenMess";
-import WardenAttendance from "./warden/WardenAttendance";
-import WardenComplaints from "./warden/WardenComplaints";
-import WardenInventory from "./warden/WardenInventory";
-import StudentDirectory from "./warden/StudentDirectory";
-import WardenNotices from "./warden/WardenNotices";
-import Visitors from "./warden/Visitors";
-import GatePasses from "./warden/GatePasses";
-import Leave from "./warden/Leave";
+
+const StaffProfile = lazy(() => import("./admin/StaffProfile"));
+const WardenOverview = lazy(() => import("./warden/Overview"));
+const WardenFees = lazy(() => import("./warden/WardenFees"));
+const WardenMess = lazy(() => import("./warden/WardenMess"));
+const WardenAttendance = lazy(() => import("./warden/WardenAttendance"));
+const WardenComplaints = lazy(() => import("./warden/WardenComplaints"));
+const WardenInventory = lazy(() => import("./warden/WardenInventory"));
+const StudentDirectory = lazy(() => import("./warden/StudentDirectory"));
+const WardenNotices = lazy(() => import("./warden/WardenNotices"));
+const Visitors = lazy(() => import("./warden/Visitors"));
+const GatePasses = lazy(() => import("./warden/GatePasses"));
+const Leave = lazy(() => import("./warden/Leave"));
 
 export default function WardenDashboard() {
   return (
