@@ -15,6 +15,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { db } from "./config";
+import { publishDataChange } from "./dataChangeEvents";
 import { computeFeeStatus } from "../utils/fees";
 
 /**
@@ -88,12 +89,14 @@ export async function addDocument(collectionName, data, createdBy) {
     createdAt: serverTimestamp(),
     ...(createdBy ? { createdBy } : {}),
   });
+  publishDataChange(collectionName);
   return ref.id;
 }
 
 /** Merges fields onto an existing document. */
 export async function updateDocument(collectionName, id, data) {
   await setDoc(doc(db, collectionName, id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+  publishDataChange(collectionName);
 }
 
 /**
@@ -114,6 +117,7 @@ export async function logAudit({ actor, action, target, metadata = {} }) {
 /** Deletes a single document. */
 export async function deleteDocument(collectionName, id) {
   await deleteDoc(doc(db, collectionName, id));
+  publishDataChange(collectionName);
 }
 /** Deletes multiple documents in safe Firestore write batches. */
 export async function bulkDeleteDocuments(collectionName, ids, onProgress) {
@@ -127,6 +131,7 @@ export async function bulkDeleteDocuments(collectionName, ids, onProgress) {
     deleted += chunk.length;
     onProgress?.(deleted, ids.length);
   }
+  if (deleted > 0) publishDataChange(collectionName);
   return deleted;
 }
 
@@ -156,6 +161,7 @@ export async function bulkAddDocuments(collectionName, records, createdBy) {
     written += chunk.length;
   }
 
+  if (written > 0) publishDataChange(collectionName);
   return written;
 }
 
@@ -173,6 +179,7 @@ export async function bulkUpdateDocuments(collectionName, records) {
     await batch.commit();
     updated += chunk.length;
   }
+  if (updated > 0) publishDataChange(collectionName);
   return updated;
 }
 

@@ -3,6 +3,7 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { firebaseConfig } from "./config";
 import { db } from "./config";
+import { publishDataChange } from "./dataChangeEvents";
 import { getCollection, reconcileStudentRecordsForAccount } from "./firestore";
 
 const SECONDARY_APP_NAME = "admin-user-creation";
@@ -75,6 +76,7 @@ export async function createUserAccount({ name, email, password, role, hostelRes
   }
 
   await setDoc(doc(db, "users", uid), profile);
+  publishDataChange("users");
 
   if (role === "Student") {
     await setDoc(doc(db, "students", uid), {
@@ -95,6 +97,7 @@ export async function createUserAccount({ name, email, password, role, hostelRes
       roommates: [],
       createdAt: serverTimestamp(),
     });
+    publishDataChange("students");
     if (finalRegistrationNo) await reconcileStudentRecordsForAccount(finalRegistrationNo, uid);
   }
 

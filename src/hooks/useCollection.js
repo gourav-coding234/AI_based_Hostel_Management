@@ -6,6 +6,35 @@ import { readErrorMessage } from "../firebase/readErrorMessage";
 import { publishReadStatus } from "../firebase/readStatusEvents";
 
 const overviewCache = new Map();
+// Keep the last successful query result for the lifetime of the app. When a
+// dashboard page is revisited, render its known data immediately while the
+// Firestore listener reconnects and refreshes it in the background.
+const queryResultCache = new Map();
+const QUERY_CACHE_LIMIT = 60;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("hostel:firestore-data-changed", () => {
+    overviewCache.clear();
+    queryResultCache.clear();
+  });
+}
+
+function readQueryCache(key) {
+  const entry = queryResultCache.get(key);
+  if (!entry) return null;
+  // Refresh insertion order so active/recent pages survive cache eviction.
+  queryResultCache.delete(key);
+  queryResultCache.set(key, entry);
+  return entry.state;
+}
+
+function writeQueryCache(key, state) {
+  queryResultCache.delete(key);
+  queryResultCache.set(key, { state, savedAt: Date.now() });
+  while (queryResultCache.size > QUERY_CACHE_LIMIT) {
+    queryResultCache.delete(queryResultCache.keys().next().value);
+  }
+}
 
 /**
  * Real-time hook for a whole Firestore collection (used by Admin/Warden/
@@ -22,9 +51,11 @@ const overviewCache = new Map();
  */
 export function useCollection(collectionName, options = {}) {
   const { where: whereClauses = [], orderByField, orderByDirection = "desc", limitCount, skip = false } = options;
-  const depsKey = JSON.stringify({ collectionName, whereClauses, orderByField, orderByDirection, limitCount, skip });
+  const uid = auth?.currentUser?.uid || "";
+  const depsKey = JSON.stringify({ collectionName, whereClauses, orderByField, orderByDirection, limitCount, skip, uid });
+  const cachedState = readQueryCache(`query:${depsKey}`);
 
-  const [state, setState] = useState({ loading: !skip, data: [], error: "" });
+  const [state, setState] = useState(() => cachedState || { loading: !skip, data: [], error: "" });
   const demo = isDemoMode();
 
   useEffect(() => {
@@ -38,7 +69,8 @@ export function useCollection(collectionName, options = {}) {
       return undefined;
     }
 
-    setState((s) => ({ ...s, loading: true, error: "" }));
+    const cached = readQueryCache(`query:${depsKey}`);
+    setState(cached || { loading: true, data: [], error: "" });
 
     const constraints = whereClauses.map(([field, op, value]) => where(field, op, value));
     if (orderByField) constraints.push(orderBy(orderByField, orderByDirection));
@@ -51,7 +83,9 @@ export function useCollection(collectionName, options = {}) {
       q,
       (snap) => {
         publishReadStatus(statusKey, "", collectionName);
-        setState({ loading: false, data: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" });
+        const nextState = { loading: false, data: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" };
+        writeQueryCache(`query:${depsKey}`, nextState);
+        setState(nextState);
       },
       (err) => {
         console.error(`Failed to load ${collectionName}:`, err);
@@ -76,13 +110,29 @@ export function useCollection(collectionName, options = {}) {
  */
 export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 } = {}) {
   const keys = Object.keys(spec);
-  const depsKey = JSON.stringify({ spec, live, maxDocs, uid: auth?.currentUser?.uid || "" });
+  const observedCollections = JSON.stringify(keys.map((key) => spec[key].name).sort());
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const depsKey = JSON.stringify({ spec, live, maxDocs, uid: auth?.currentUser?.uid || "", refreshVersion });
+  const cachedLiveState = live ? readQueryCache(`collections:${depsKey}`) : null;
   const [state, setState] = useState({
-    loading: true,
-    error: "",
-    data: Object.fromEntries(keys.map((k) => [k, []])),
+    ...(cachedLiveState || {
+      loading: true,
+      error: "",
+      data: Object.fromEntries(keys.map((k) => [k, []])),
+    }),
   });
   const demo = isDemoMode();
+
+  useEffect(() => {
+    if (live || demo || typeof window === "undefined") return undefined;
+    const collections = new Set(JSON.parse(observedCollections));
+    function refreshChangedCollection(event) {
+      const changed = event.detail?.collection;
+      if (!changed || collections.has(changed)) setRefreshVersion((version) => version + 1);
+    }
+    window.addEventListener("hostel:firestore-data-changed", refreshChangedCollection);
+    return () => window.removeEventListener("hostel:firestore-data-changed", refreshChangedCollection);
+  }, [live, demo, observedCollections]);
 
   useEffect(() => {
     if (demo) {
@@ -147,7 +197,14 @@ export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 }
     let errored = false;
     let errorMessage = "";
 
-    setState((s) => ({ ...s, loading: true, error: "" }));
+    const cached = readQueryCache(`collections:${depsKey}`);
+    if (cached) {
+      Object.assign(dataRef, cached.data);
+      keys.forEach((k) => { loadedFlags[k] = true; });
+      setState(cached);
+    } else {
+      setState((s) => ({ ...s, loading: true, error: "" }));
+    }
 
     const statusKeys = [];
     const unsubscribers = keys.map((k) => {
@@ -167,7 +224,9 @@ export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 }
           dataRef[k] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           loadedFlags[k] = true;
           const allLoaded = keys.every((kk) => loadedFlags[kk]);
-          setState({ loading: !allLoaded, error: errored ? errorMessage : "", data: { ...dataRef } });
+          const nextState = { loading: !allLoaded, error: errored ? errorMessage : "", data: { ...dataRef } };
+          if (allLoaded) writeQueryCache(`collections:${depsKey}`, nextState);
+          setState(nextState);
         },
         (err) => {
           console.error(`Failed to load ${name}:`, err);
@@ -176,7 +235,9 @@ export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 }
           const message = readErrorMessage(err);
           errorMessage = message;
           publishReadStatus(statusKey, message, name);
-          setState((s) => ({ ...s, loading: false, error: message }));
+          const nextState = { loading: false, error: message, data: { ...dataRef } };
+          writeQueryCache(`collections:${depsKey}`, nextState);
+          setState(nextState);
         }
       );
     });
