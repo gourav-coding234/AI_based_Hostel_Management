@@ -442,6 +442,12 @@ export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
     }
     await batch.commit();
   }
+  // Refresh overview snapshots and student registers after academic imports.
+  // Linked account records also update hostel/student views immediately.
+  if (written > 0) {
+    publishDataChange("studentRegister");
+    publishDataChange("students");
+  }
   return { written, linked: records.filter((r) => uidByEmail.has(String(r.email || "").trim().toLowerCase())).length };
 }
 

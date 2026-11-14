@@ -36,6 +36,10 @@ export default function AdminOverview() {
   // the result briefly instead of holding listeners open on every register.
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
+    // The academic register includes enrolled students who do not yet have a
+    // hostel allocation; `students` below is only the resident/allocation list.
+    studentRegister: { name: "studentRegister" },
+    studentAccounts: { name: "users", options: { where: [["role", "==", "Student"]], limitCount: 100 } },
     students: { name: "students" },
     // Overview only needs the count; avoid role + orderBy composite index.
     wardens: { name: "users", options: { where: [["role", "==", "Warden"]], limitCount: 100 } },
@@ -50,7 +54,11 @@ export default function AdminOverview() {
     movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
 
-  const { blocks, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut } = data;
+  const { blocks, studentRegister, studentAccounts, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut } = data;
+  // Prefer the full academic roster; fall back to student accounts on projects
+  // where an academic roster has not been imported yet. Hostel allocations are
+  // a separate count and must not be presented as total enrollment.
+  const totalStudents = studentRegister.length || studentAccounts.length;
   const loading = snapshotLoading;
   const studentsOut = movementsOut.length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
@@ -120,7 +128,7 @@ export default function AdminOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {students.length} students across {blocks.length} blocks and 2 hostels, managed by {wardens.length} wardens
+              {totalStudents} students · {students.length} hostel residents · {blocks.length} blocks · {wardens.length} wardens
             </p>
           </div>
           <div className="flex gap-2">
@@ -142,8 +150,8 @@ export default function AdminOverview() {
       {overviewError && <ErrorState message={overviewError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : students.length} sub={`${wardens.length} wardens on staff`} tone="teal" /></Link>
-        <Link to="/dashboard/admin/data-import"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled` : "Add blocks in Data Import"} tone="navy" /></Link>
+        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : totalStudents} sub={`${students.length} hostel residents · ${wardens.length} wardens`} tone="teal" /></Link>
+        <Link to="/dashboard/admin/data-import"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled · ${blocks.length} blocks` : `${blocks.length} blocks recorded · Add blocks in Data Import`} tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
         <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints in snapshot" value={openComplaints} sub={`${complaints.length} recent records loaded`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
       </div>
