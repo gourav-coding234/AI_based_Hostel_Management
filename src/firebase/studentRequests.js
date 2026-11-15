@@ -1,3 +1,5 @@
+import { readJsonResponse } from "../utils/readJsonResponse";
+
 export async function createStudentRequest(user, request) {
   if (!user) throw new Error("Your student session has expired. Sign in again.");
   const token = await user.getIdToken();
@@ -6,7 +8,7 @@ export async function createStudentRequest(user, request) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(request),
   });
-  const result = await response.json().catch(() => ({}));
+  const result = await readJsonResponse(response, "The request service returned an invalid response. Please try again.");
   if (!response.ok) throw new Error(result.message || "The request could not be saved.");
   return result;
 }

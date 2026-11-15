@@ -3,7 +3,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { AlertIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { createStudentRequest } from "../../../firebase/studentRequests";
+import { addDocument, getDocument } from "../../../firebase/firestore";
 
 const LEAVE_TYPES = ["Home Visit", "Medical", "Emergency", "Other"];
 
@@ -21,7 +21,7 @@ function validate({ type, reason, from, to }) {
 }
 
 export default function Leave() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const studentId = user?.uid || "";
   const myRequests = useStudentCollection("leaveRequests", studentId, { orderByField: "from", live: true });
 
@@ -47,7 +47,24 @@ export default function Leave() {
     setSubmitting(true);
     setError("");
     try {
-      await createStudentRequest(user, { type: "leave", requestType: type, reason, from, to });
+      if (!user?.uid) throw new Error("Your student session has expired. Sign in again.");
+      const studentProfile = await getDocument("students", studentId).catch(() => null);
+      const registrationNo = String(profile?.registrationNo || profile?.regNo || profile?.studentCode || studentProfile?.registrationNo || studentProfile?.regNo || studentProfile?.studentCode || "").trim();
+      if (!registrationNo) throw new Error("Your Registration ID is missing from your student profile. Contact the hostel office.");
+      await addDocument("leaveRequests", {
+        studentId,
+        registrationNo,
+        studentName: profile?.name || studentProfile?.name || user.displayName || user.email || "Student",
+        hostel: profile?.hostel || profile?.hostelType || studentProfile?.hostel || studentProfile?.hostelType || studentProfile?.gender || "",
+        block: profile?.wing || profile?.block || profile?.hostelResidence || studentProfile?.wing || studentProfile?.block || studentProfile?.hostelResidence || "",
+        room: profile?.room || studentProfile?.room || "",
+        type,
+        reason: reason.trim(),
+        from,
+        to,
+        status: "Pending",
+        parentNotified: false,
+      }, studentId);
       setReason("");
       setFrom("");
       setTo("");

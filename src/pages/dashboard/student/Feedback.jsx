@@ -3,6 +3,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { MegaphoneIcon } from "../../../components/dashboard/student/icons";
 import { LoadingState, ErrorState } from "../../../components/ui/DataState";
+import { readJsonResponse } from "../../../utils/readJsonResponse";
 
 const CATEGORIES = ["Food/Mess", "Cleanliness", "Maintenance", "Security", "Warden/Staff", "Facilities", "Other"];
 const API_URL = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/student/feedback`;
@@ -26,7 +27,7 @@ export default function Feedback() {
     try {
       const token = await user.getIdToken();
       const response = await fetch(API_URL, { headers: { Authorization: `Bearer ${token}` } });
-      const body = await response.json();
+      const body = await readJsonResponse(response, "Feedback history returned an invalid response.");
       if (!response.ok) throw new Error(body.message || `Request failed (${response.status}).`);
       setRecords(Array.isArray(body.records) ? body.records : []);
     } catch (err) { setLoadError(err.message || "Feedback history could not be loaded."); }
@@ -47,7 +48,7 @@ export default function Feedback() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ category, rating, comment: trimmed, anonymous }),
       });
-      const body = await response.json();
+      const body = await readJsonResponse(response, "Feedback service returned an invalid response. Please try again.");
       if (!response.ok) throw new Error(body.message || `Request failed (${response.status}).`);
       setComment(""); setSuccess("Thanks — your feedback has been submitted.");
       await loadHistory();
