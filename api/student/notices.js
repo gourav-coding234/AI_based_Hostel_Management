@@ -1,16 +1,6 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 import { normalizeHostel } from "../../src/utils/hostels.js";
 
-function services() {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!projectId || !clientEmail || !privateKey) throw new Error("Firebase Admin server credentials are not configured.");
-  const app = getApps()[0] || initializeApp({ credential: cert({ projectId, clientEmail, privateKey }), projectId });
-  return { auth: getAuth(app), db: getFirestore(app) };
-}
 
 const respond = (res, status, body) => res.status(status).json(body);
 const clean = (value) => String(value ?? "").trim();
@@ -41,7 +31,7 @@ export default async function studentNotices(req, res) {
   const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
   if (!token) return respond(res, 401, { message: "Sign in to view notices." });
   try {
-    const { auth, db } = services();
+    const { auth, db } = await firebaseAdminServices();
     let caller;
     try { caller = await auth.verifyIdToken(token); } catch { return respond(res, 401, { message: "Your session expired. Sign in again." }); }
     const userSnap = await db.collection("users").doc(caller.uid).get();
@@ -84,6 +74,9 @@ export default async function studentNotices(req, res) {
     return respond(res, 200, { notices });
   } catch (error) {
     console.error("Student/parent notices request failed:", error);
+    if (String(error?.message || "").includes("Firebase Admin server credentials are not configured")) {
+      return respond(res, 500, { message: "Notices are unavailable because Firebase Admin credentials are missing from the server environment. Configure FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PRIVATE_KEY in the deployment settings." });
+    }
     return respond(res, 500, { message: "Notices could not be loaded. Check the server configuration and try again." });
   }
 }

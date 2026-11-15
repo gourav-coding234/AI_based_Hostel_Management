@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
-import { AsyncSection } from "../../../components/ui/DataState";
+import { AsyncSection, ErrorState } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
@@ -84,10 +84,11 @@ export default function ParentNotices() {
         {notifications.markError && <p className="mt-3 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{notifications.markError}</p>}
       </Card>
 
+      {noticesQuery.error && <ErrorState message={noticesQuery.error} onRetry={noticesQuery.reload} />}
       <AsyncSection
-        loading={noticesQuery.loading || notifications.loading}
-        error={noticesQuery.error || notifications.error}
-        isEmpty={filteredNotices.length === 0}
+        loading={notifications.loading || (noticesQuery.loading && notifications.data.length === 0)}
+        error={notifications.error}
+        isEmpty={!noticesQuery.error && filteredNotices.length === 0}
         emptyTitle="No notices yet"
         emptyDescription="Notices posted by the warden or admin office will show up here."
         emptyIcon={<MegaphoneIcon />}

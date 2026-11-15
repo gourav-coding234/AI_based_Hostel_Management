@@ -1,20 +1,5 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 
-function getAdminServices() {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("The secure account editor is not configured. Add the Firebase Admin credentials to the server environment.");
-  }
-  const app = getApps()[0] || initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
-    projectId,
-  });
-  return { auth: getAuth(app), db: getFirestore(app) };
-}
 
 function reply(res, status, body) {
   return res.status(status).json(body);
@@ -27,7 +12,7 @@ export default async function updateAccount(req, res) {
   if (!idToken) return reply(res, 401, { message: "Sign in with an administrator account to continue." });
 
   try {
-    const { auth, db } = getAdminServices();
+    const { auth, db } = await firebaseAdminServices("The secure account editor is not configured. Add the Firebase Admin credentials to the server environment.");
     let caller;
     try {
       caller = await auth.verifyIdToken(idToken);

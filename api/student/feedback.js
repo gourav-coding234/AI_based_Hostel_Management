@@ -1,19 +1,9 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 import { normalizeHostel } from "../../src/utils/hostels.js";
 
 const CATEGORIES = ["Food/Mess", "Cleanliness", "Maintenance", "Security", "Warden/Staff", "Facilities", "Other"];
 const respond = (res, status, body) => res.status(status).json(body);
 
-function services() {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!projectId || !clientEmail || !privateKey) throw new Error("Firebase Admin server credentials are not configured.");
-  const app = getApps()[0] || initializeApp({ credential: cert({ projectId, clientEmail, privateKey }), projectId });
-  return { auth: getAuth(app), db: getFirestore(app) };
-}
 
 function hostelFor(student = {}) {
   return normalizeHostel(student.hostel) || normalizeHostel(student.hostelType) ||
@@ -25,7 +15,7 @@ export default async function studentFeedback(req, res) {
   const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
   if (!token) return respond(res, 401, { message: "Sign in as a student to continue." });
   try {
-    const { auth, db } = services();
+    const { auth, db, FieldValue } = await firebaseAdminServices();
     let caller;
     try { caller = await auth.verifyIdToken(token); } catch { return respond(res, 401, { message: "Your session expired. Sign in again." }); }
     const userRef = db.collection("users").doc(caller.uid);

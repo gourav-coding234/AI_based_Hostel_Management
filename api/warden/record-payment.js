@@ -1,15 +1,5 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 
-function services() {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!projectId || !clientEmail || !privateKey) throw new Error("Secure payment processing is not configured on the server.");
-  const app = getApps()[0] || initializeApp({ credential: cert({ projectId, clientEmail, privateKey }), projectId });
-  return { auth: getAuth(app), db: getFirestore(app) };
-}
 
 function normalizeHostel(value) {
   const text = String(value || "").toLowerCase();
@@ -25,7 +15,7 @@ export default async function recordPayment(req, res) {
   const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
   if (!token) return respond(res, 401, { message: "Sign in again before recording a payment." });
   try {
-    const { auth, db } = services();
+    const { auth, db, FieldValue } = await firebaseAdminServices("Secure payment processing is not configured on the server.");
     let caller;
     try { caller = await auth.verifyIdToken(token); }
     catch { return respond(res, 401, { message: "Your session expired. Sign in again." }); }

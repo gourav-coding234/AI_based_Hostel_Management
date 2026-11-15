@@ -3,6 +3,7 @@ import { collection, doc, getDoc, getDocs, limit as fbLimit, query, where } from
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase/config";
 import aibotImage from "../assets/aibot.png";
+import { mergeRegisteredStudents } from "../utils/hostelResidents";
 
 // Use multiple active Gemini 3.x variants so the app can automatically move to
 // another model when one is temporarily overloaded or rate-limited.
@@ -103,7 +104,7 @@ function toPreviewText(label, rows) {
     return JSON.stringify(cleaned);
   });
 
-  return `${label}: ${preview.join(" | ")}`;
+  return `${label}: ${rows.length} records loaded; examples (up to 4, not the full list): ${preview.join(" | ")}`;
 }
 
 async function fetchCollectionDocs(collectionName, filters = [], limitCount = 25) {
@@ -126,8 +127,11 @@ async function buildRoleScopedContext(user, profile, role) {
 
   try {
     if (role === "Admin" || role === "Warden") {
-      const blocks = await fetchCollectionDocs("blocks");
-      const students = await fetchCollectionDocs("students");
+      const [students, studentRegister] = await Promise.all([
+        fetchCollectionDocs("students", [], 5000),
+        fetchCollectionDocs("studentRegister", [], 5000),
+      ]);
+      const registeredStudents = mergeRegisteredStudents(students, studentRegister);
       const fees = await fetchCollectionDocs("fees");
       const notices = await fetchCollectionDocs("notices");
       const attendance = await fetchCollectionDocs("attendance");
@@ -137,8 +141,9 @@ async function buildRoleScopedContext(user, profile, role) {
       const visitors = await fetchCollectionDocs("visitors");
 
       contextParts.push(
-        toPreviewText("blocks", blocks),
+        `Student directory total: ${registeredStudents.length} unique registered students, matching the admin overview count. This total merges studentRegister records with student allocation records and deduplicates matching students.`,
         toPreviewText("students", students),
+        toPreviewText("studentRegister", studentRegister),
         toPreviewText("fees", fees),
         toPreviewText("notices", notices),
         toPreviewText("attendance", attendance),
@@ -234,6 +239,7 @@ USER QUESTION:
 ${userMessage}
 
 Answer in a concise, helpful, and professional way.
+When asked for the student directory total, use the explicit "Student directory total" value. Example lists are previews and must never be treated as the full collection or used as a total.
 `;
 
   const errors = [];

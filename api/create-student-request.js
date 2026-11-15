@@ -1,15 +1,5 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { firebaseAdminServices } from "../src/firebase/adminServer.js";
 
-function services() {
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (!projectId || !clientEmail || !privateKey) throw new Error("Firebase Admin server credentials are not configured.");
-  const app = getApps()[0] || initializeApp({ credential: cert({ projectId, clientEmail, privateKey }), projectId });
-  return { auth: getAuth(app), db: getFirestore(app) };
-}
 
 const reply = (res, status, body) => res.status(status).json(body);
 
@@ -18,7 +8,7 @@ export default async function createStudentRequest(req, res) {
   const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
   if (!token) return reply(res, 401, { message: "Sign in as a student to submit this request." });
   try {
-    const { auth, db } = services();
+    const { auth, db, FieldValue } = await firebaseAdminServices();
     let caller;
     try { caller = await auth.verifyIdToken(token); } catch { return reply(res, 401, { message: "Your session expired. Sign in again." }); }
     const [userSnap, studentSnap] = await Promise.all([db.collection("users").doc(caller.uid).get(), db.collection("students").doc(caller.uid).get()]);
