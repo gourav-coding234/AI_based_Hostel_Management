@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpdateDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { normalizeHostel } from "../../../utils/hostels";
 import { useCollection } from "../../../hooks/useCollection";
@@ -26,7 +26,7 @@ function validateMixedRecords(records) {
     const has = (...keys) => keys.every((key) => String(record[key] ?? "").trim() !== "");
     const candidates = [
       ["studentRegister", has("regNo", "gender", "branch", "year")],
-      ["students", has("email", "name") && !has("regNo") && ["hostelResidence", "wing", "floor", "room", "bed"].some((key) => String(record[key] ?? "").trim())],
+      ["students", has("email", "name") && !has("regNo") && ["hostel", "floor", "room", "bed"].some((key) => String(record[key] ?? "").trim())],
       ["fees", has("studentId", "studentName", "total", "paid")],
       ["attendance", has("studentId", "studentName", "date", "status")],
       ["complaints", has("studentId", "category", "description")],
@@ -38,7 +38,6 @@ function validateMixedRecords(records) {
       ["emergencyContacts", has("name", "phone")],
       ["expenses", has("category", "description", "amount", "date") && !has("total", "paid")],
       ["feedback", has("subject", "message")],
-      ["blocks", has("name", "totalBeds")],
       ["dutyRoster", has("guardName", "shift")],
       ["notices", has("title", "target")],
     ].filter(([, matches]) => matches);
@@ -162,9 +161,6 @@ async function resolveStudentIds(records, importedRegister = [], allowMissingRef
       studentId: uid,
       studentName: studentName || account.name || "",
       ...(hostel ? { hostel } : {}),
-      ...(record.block || account.wing || account.hostelResidence || roster.wing || roster.hostelResidence
-        ? { block: record.block || account.wing || account.hostelResidence || roster.wing || roster.hostelResidence }
-        : {}),
       ...(record.room || account.room || roster.room ? { room: record.room || account.room || roster.room } : {}),
     });
   }
@@ -204,18 +200,18 @@ function expandStudentBundleRows(records) {
         regNo: record.regNo, name: record.name, gender: record.gender, branch: record.branch,
         branchCode: record.branchCode, year: record.year, batch: record.batch,
         admissionYear: record.admissionYear, email: record.email, phone: record.phone,
-        hostelResidence: record.hostelResidence, wing: record.wing, room: record.room, bed: record.bed,
+        hostel: record.hostel, room: record.room, bed: record.bed,
       });
     }
     if (present(record, "email") && present(record, "name")) {
       add(record, sourceRow, "students", {
-        email: record.email, name: record.name, hostelResidence: record.hostelResidence,
-        wing: record.wing, floor: record.floor, room: record.room, bed: record.bed, allottedOn: record.allottedOn,
+        email: record.email, name: record.name, hostel: record.hostel,
+        floor: record.floor, room: record.room, bed: record.bed, allottedOn: record.allottedOn,
       });
     }
     if (present(record, "studentId") && present(record, "studentName") && present(record, "total") && present(record, "paid")) {
       add(record, sourceRow, "fees", {
-        studentId: record.studentId, studentName: record.studentName, block: record.block, hostel: record.hostel || record.hostelType,
+        studentId: record.studentId, studentName: record.studentName, hostel: record.hostel || record.hostelType,
         total: record.total, paid: record.paid, dueDate: record.dueDate, status: record.status,
       });
     }
@@ -229,13 +225,12 @@ function expandStudentBundleRows(records) {
       const leaveType = /medical|home visit|family function|overnight|leave/i.test(String(record.type));
       add(record, sourceRow, leaveType ? "leaveRequests" : "gatePasses", {
         studentId: record.studentId, studentName: record.studentName, type: record.type,
-        from: record.from, to: record.to, block: record.block || record.hostelResidence,
-        wing: record.wing, status: "Pending",
+        from: record.from, to: record.to, status: "Pending",
       });
     }
     if (present(record, "visitorName") && present(record, "purpose")) {
       add(record, sourceRow, "visitors", {
-        visitorName: record.visitorName, block: record.block, studentId: record.studentId,
+        visitorName: record.visitorName, studentId: record.studentId,
         studentName: record.studentName, purpose: record.purpose, idProof: record.idProof,
         inTime: record.inTime, outTime: record.outTime,
       });
@@ -274,135 +269,17 @@ function expandStudentBundleRows(records) {
         guardName: record.guardName, shift: record.shift, date: record.date, gate: record.gate,
       }, `${record.guardName}|${record.shift}|${record.date}|${record.gate}`);
     }
-    if ((present(record, "name") || present(record, "block")) && present(record, "totalBeds")) {
-      const name = record.name || record.block;
-      add(record, sourceRow, "blocks", {
-        name, type: record.type, totalRooms: record.totalRooms,
-        totalBeds: record.totalBeds, occupiedBeds: record.occupiedBeds,
-      }, `${name}|${record.type || "Boys"}`);
-    }
   });
   return expanded;
 }
 
-function importedBlockName(record) {
-  const raw = record.blockName || record.block || record.wing || record.hostelResidence || "";
-  let name = String(raw).trim()
-    .replace(/\b(?:boys|girls|male|female)\s+hostel\b/ig, " ")
-    .replace(/\bhostel\b/ig, " ")
-    .replace(/[|,;]+/g, " ")
-    .replace(/\s+/g, " ").trim();
-  if (!name) return "";
-  if (/^(?:boys|girls)\s*$/i.test(name)) return "";
-  name = name.replace(/^(?:block|wing)\s+/i, "").replace(/\s+(?:block|wing)$/i, "").trim();
-  if (!name) return "";
-  return /^[a-z0-9]{1,3}$/i.test(name) ? `Block ${name.toUpperCase()}` : name;
-}
-
-function blockKey(name, type) {
-  const compactName = String(name || "").trim().toLowerCase().replace(/^(?:block|wing)\s+/, "").replace(/\s+(?:block|wing)$/, "");
-  return `${compactName}|${normalizeHostel(type)}`;
-}
-
-async function syncImportedStudentBlocks(records, createdBy) {
-  const [blocks, accounts, studentProfiles] = await Promise.all([
-    getCollection("blocks"),
-    getCollection("users", { whereClauses: [["role", "==", "Student"]] }),
-    getCollection("students"),
-  ]);
-  const accountByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account]));
-  const profileByEmail = new Map(studentProfiles.map((student) => [String(student.email || "").trim().toLowerCase(), student]));
-  const recordsWithBlocks = records.map((record) => {
-    const email = String(record.email || "").trim().toLowerCase();
-    const account = accountByEmail.get(email) || {};
-    const student = profileByEmail.get(email) || {};
-    const hostel = normalizeHostel(record.hostel || record.hostelType || record.gender || student.hostel || student.hostelType || student.gender || account.hostel || account.hostelType || account.gender);
-    const name = importedBlockName(record);
-    return hostel && name ? { ...record, hostel, blockName: name } : null;
-  }).filter(Boolean);
-  if (!recordsWithBlocks.length) return { created: 0 };
-
-  const blockByKey = new Map(blocks.map((block) => [blockKey(block.name, block.type), block]));
-  const needed = new Map();
-  recordsWithBlocks.forEach((record) => {
-    const key = blockKey(record.blockName, record.hostel);
-    if (!blockByKey.has(key) && !needed.has(key)) needed.set(key, {
-      name: record.blockName,
-      type: record.hostel === "Girls Hostel" ? "Girls" : "Boys",
-      totalRooms: 0,
-      totalBeds: 0,
-      occupiedBeds: 0,
-      autoCreatedFromImport: true,
-    });
-  });
-  const created = needed.size ? await bulkAddDocuments("blocks", [...needed.values()], createdBy) : 0;
-  const refreshedBlocks = created ? await getCollection("blocks") : blocks;
-  const refreshedByKey = new Map(refreshedBlocks.map((block) => [blockKey(block.name, block.type), block]));
-  const uidByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
-  const studentUpdates = new Map();
-  const rosterUpdates = new Map();
-
-  recordsWithBlocks.forEach((record) => {
-    const block = refreshedByKey.get(blockKey(record.blockName, record.hostel));
-    if (!block) return;
-    const assignment = { hostel: record.hostel, hostelType: record.hostel, block: block.name, wing: block.name, blockId: block.id };
-    const email = String(record.email || "").trim().toLowerCase();
-    const uid = uidByEmail.get(email);
-    if (uid) studentUpdates.set(uid, { id: uid, data: assignment });
-    const registrationNo = String(record.regNo || record.registrationNo || "").trim();
-    if (registrationNo) rosterUpdates.set(registrationNo, { id: registrationNo, data: assignment });
-  });
-
-  await Promise.all([
-    studentUpdates.size ? bulkUpdateDocuments("students", [...studentUpdates.values()]) : Promise.resolve(0),
-    rosterUpdates.size ? bulkUpdateDocuments("studentRegister", [...rosterUpdates.values()]) : Promise.resolve(0),
-  ]);
-  return { created };
-}
-
 async function importRecords(target, records, createdBy) {
-  if (target.key === "blocks") {
-    const current = await getCollection("blocks");
-    const blockKey = (name, type) => `${String(name || "").trim().toLocaleLowerCase()}|${normalizeHostel(type) || String(type || "").trim().toLocaleLowerCase()}`;
-    const currentByKey = new Map(current.map((block) => [blockKey(block.name, block.type), block]));
-    const updatesById = new Map();
-    const newByKey = new Map();
-    const failed = [];
-    records.forEach((record, index) => {
-      const name = String(record.name || "").trim();
-      let type = normalizeHostel(record.type);
-      const matchingByName = current.filter((block) => String(block.name || "").trim().toLowerCase() === name.toLowerCase());
-      if (!type && matchingByName.length === 1) type = normalizeHostel(matchingByName[0].type);
-      if (!name || !type) {
-        failed.push({ target: "Hostel blocks", row: index + 2, reason: !name ? "Block name is required." : "Choose Boys or Girls for a new block so repeated block letters are assigned correctly." });
-        return;
-      }
-      const data = {
-        name,
-        type: type === "Girls Hostel" ? "Girls" : "Boys",
-        totalRooms: Number(record.totalRooms || 0),
-        totalBeds: Number(record.totalBeds || 0),
-        occupiedBeds: Number(record.occupiedBeds || 0),
-      };
-      const key = blockKey(name, type);
-      const existing = currentByKey.get(key);
-      if (existing) updatesById.set(existing.id, { id: existing.id, data });
-      else newByKey.set(key, data);
-    });
-    const updates = [...updatesById.values()];
-    const additions = [...newByKey.values()];
-    const updated = updates.length ? await bulkUpdateDocuments("blocks", updates) : 0;
-    const added = additions.length ? await bulkAddDocuments("blocks", additions, createdBy) : 0;
-    return { written: updated + added, updated, added, failed };
-  }
   if (target.key === "students") {
     const accountResult = await ensureStudentAccounts(records, target.onProgress);
     const result = await bulkUpsertStudentsByEmail(records, createdBy);
-    const blockSync = await syncImportedStudentBlocks(records, createdBy);
     return {
       ...result,
       written: result.written,
-      createdBlocks: blockSync.created,
       createdAccounts: accountResult.createdAccounts,
       failed: result.failed.map((failure) => ({
         ...failure,
@@ -413,8 +290,7 @@ async function importRecords(target, records, createdBy) {
   if (target.key === "studentRegister") {
     const accountResult = await ensureStudentAccounts(records.filter((record) => record.email), target.onProgress);
     const { written, linked } = await bulkUpsertStudentAcademicRecords(records, createdBy);
-    const blockSync = await syncImportedStudentBlocks(records, createdBy);
-    return { written, linked, createdAccounts: accountResult.createdAccounts, createdBlocks: blockSync.created, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
+    return { written, linked, createdAccounts: accountResult.createdAccounts, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
   }
   if (target.key === "visitors") {
     const withSortableTime = records.map((record) => {
@@ -448,11 +324,10 @@ async function ensureStudentAccounts(records, onProgress) {
         gender: record.gender || "",
         branch: record.branch || "",
         year: record.year || "",
-        wing: record.wing || "",
         room: record.room || "",
         bed: record.bed || "",
         phone: record.phone || "",
-        hostelResidence: record.hostelResidence || record.block,
+        hostel: normalizeHostel(record.hostel || record.hostelType || record.gender),
       });
       createdAccounts += 1;
     } catch (error) {
@@ -493,7 +368,6 @@ export default function DataImport() {
   const [parseError, setParseError] = useState("");
   const [validation, setValidation] = useState(null); // { validRecords, errors }
   const [importedCount, setImportedCount] = useState(0);
-  const [createdBlockCount, setCreatedBlockCount] = useState(0);
   const [importFailures, setImportFailures] = useState([]);
   const [importProgress, setImportProgress] = useState(null);
   const [fileAlreadyImported, setFileAlreadyImported] = useState(null);
@@ -519,7 +393,6 @@ export default function DataImport() {
     setParseError("");
     setValidation(null);
     setImportedCount(0);
-    setCreatedBlockCount(0);
     setImportFailures([]);
     setImportProgress(null);
     setFileAlreadyImported(null);
@@ -578,7 +451,6 @@ export default function DataImport() {
       if (isMixedImport) {
         let writtenTotal = 0;
         let createdAccountsTotal = 0;
-        let createdBlocksTotal = 0;
         const failures = [];
         const linkedCollections = new Set(["fees", "attendance", "complaints", "gatePasses", "visitors", "leaveRequests", "feedback"]);
         const priority = { students: 0, studentRegister: 1 };
@@ -605,10 +477,9 @@ export default function DataImport() {
               }
             }
             if (!rowsToImport.length) continue;
-            const { written, failed = [], createdAccounts = 0, createdBlocks = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
+            const { written, failed = [], createdAccounts = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
             writtenTotal += written;
             createdAccountsTotal += createdAccounts || 0;
-            createdBlocksTotal += createdBlocks || 0;
             failures.push(...failed.map((failure) => ({ ...failure, target: item.label })));
           } catch (err) {
             console.error(`Mixed import failed for ${item.collection}:`, err);
@@ -616,7 +487,6 @@ export default function DataImport() {
           }
         }
         setImportedCount(writtenTotal);
-        setCreatedBlockCount(createdBlocksTotal);
         if (writtenTotal > 0) {
           try {
             await logAudit({
@@ -652,9 +522,8 @@ export default function DataImport() {
           })));
         }
       }
-      const { written, failed = [], createdAccounts, createdBlocks = 0 } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
+      const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
       setImportedCount(written);
-      setCreatedBlockCount(createdBlocks);
       if (written > 0) {
         try {
           await logAudit({
@@ -825,7 +694,7 @@ export default function DataImport() {
           {status === "done" && (
             <div className="flex flex-col gap-2">
               <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {createdBlockCount ? `Created ${createdBlockCount} hostel block${createdBlockCount === 1 ? "" : "s"} automatically and linked the imported students to them. ` : ""}{importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
+                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
                 appear on the relevant dashboards automatically as the database syncs; open dashboard pages update without a manual refresh.
                 {importFailures.length > 0 && ` ${importFailures.length} record${importFailures.length === 1 ? "" : "s"} could not be linked or imported; see details below.`}
               </div>

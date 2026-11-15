@@ -9,7 +9,6 @@ import DataTable from "../../../components/ui/DataTable";
 import { DownloadIcon, SearchIcon, TrashIcon, UsersIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { HOSTELS, hostelForStudent, wardenHostel } from "../../../utils/hostels";
-import { residentBlockName } from "../../../utils/hostelResidents";
 import { useCollection } from "../../../hooks/useCollection";
 
 function tsToDate(ts) {
@@ -62,47 +61,12 @@ export default function ManageUsers() {
   const [savingAccount, setSavingAccount] = useState(false);
   const [accountEditError, setAccountEditError] = useState("");
 
-  // Blocks, students and fee references are loaded once; warden rows derive
+  // Student and fee references are loaded once; warden rows derive
   // from the live users listener instead of opening another users query.
   const { data: refData } = useCollections({
-    blocks: { name: "blocks" },
     students: { name: "students" },
     fees: { name: "fees" },
   });
-  const blocks = refData.blocks;
-  const blockCoverage = useMemo(() => {
-    const cleanName = (name) => String(name || "").trim().replace(/^block\s+/i, "").toLowerCase();
-    const keyFor = (name, type) => `${cleanName(name)}|${type || ""}`;
-    const result = new Map();
-    blocks.forEach((block) => {
-      const type = block.type?.startsWith("Girls") ? "Girls" : block.type?.startsWith("Boys") ? "Boys" : "";
-      const key = keyFor(block.name, type);
-      const previous = result.get(key);
-      result.set(key, {
-        ...previous,
-        ...block,
-        id: previous?.id || block.id,
-        name: previous?.name || String(block.name || "").trim().replace(/^block\s+/i, "Block "),
-        type: type ? `${type} Hostel` : block.type || "",
-        occupiedBeds: Math.max(Number(previous?.occupiedBeds) || 0, Number(block.occupiedBeds) || 0),
-        totalBeds: Math.max(Number(previous?.totalBeds) || 0, Number(block.totalBeds) || 0),
-        referenced: false,
-        residentCount: 0,
-      });
-    });
-    [...refData.students, ...refData.fees].forEach((record) => {
-      const name = residentBlockName(record);
-      if (!name || /^(boys|girls) hostel$/i.test(name)) return;
-      const hostel = hostelForStudent(record, blocks);
-      const type = hostel?.startsWith("Girls") ? "Girls" : hostel?.startsWith("Boys") ? "Boys" : "";
-      const key = keyFor(name, type);
-      if (!result.has(key)) result.set(key, { id: `record:${key}`, name: String(name).replace(/^block\s+/i, "Block "), type: type ? `${type} Hostel` : "", occupiedBeds: 0, totalBeds: 0, referenced: true, residentCount: 0 });
-      const entry = result.get(key);
-      if (refData.students.includes(record) && (record.regNo || record.registrationNo || record.email || record.accountUid || record.userId)) entry.residentCount += 1;
-      if (!blocks.some((block) => keyFor(block.name, type) === key)) entry.referenced = true;
-    });
-    return [...result.values()];
-  }, [blocks, refData.students, refData.fees]);
   const [reassignError, setReassignError] = useState("");
 
   async function handleCreateSingle(e) {
@@ -266,8 +230,8 @@ export default function ManageUsers() {
           ...(allocation.gender || student.gender ? { gender: allocation.gender || student.gender } : {}),
           ...(allocation.branch || student.branch ? { branch: allocation.branch || student.branch } : {}),
           ...(allocation.year || student.year ? { year: allocation.year || student.year } : {}),
-          ...(allocation.hostelResidence || allocation.wing || student.hostelResidence
-            ? { hostelResidence: allocation.hostelResidence || allocation.wing || student.hostelResidence }
+          ...(allocation.hostel || student.hostel
+            ? { hostel: allocation.hostel || student.hostel }
             : {}),
         });
       }
@@ -313,10 +277,10 @@ export default function ManageUsers() {
   const wardens = useMemo(() => users.filter((u) => u.role === "Warden").sort((a, b) => (tsToDate(b.createdAt)?.getTime() || 0) - (tsToDate(a.createdAt)?.getTime() || 0) || String(a.name || "").localeCompare(String(b.name || ""))), [users]);
   const hostelOptions = ["Unassigned", ...HOSTELS];
   const studentCountByHostel = useMemo(() => refData.students.reduce((counts, student) => {
-    const hostel = hostelForStudent(student, blocks);
+    const hostel = hostelForStudent(student);
     if (hostel) counts[hostel] = (counts[hostel] || 0) + 1;
     return counts;
-  }, {}), [refData.students, blocks]);
+  }, {}), [refData.students]);
 
   async function reassignWarden(id, hostel) {
     setReassignError("");
@@ -346,7 +310,7 @@ export default function ManageUsers() {
       label: "Assigned hostel",
       render: (w) => (
         <select
-          value={wardenHostel(w, blocks) || "Unassigned"}
+          value={wardenHostel(w) || "Unassigned"}
           onChange={(e) => reassignWarden(w.id, e.target.value)}
           onClick={(e) => e.stopPropagation()}
           className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
@@ -357,7 +321,7 @@ export default function ManageUsers() {
         </select>
       ),
     },
-    { key: "students", label: "Student workload", render: (w) => studentCountByHostel[wardenHostel(w, blocks)] || 0 },
+    { key: "students", label: "Student workload", render: (w) => studentCountByHostel[wardenHostel(w)] || 0 },
     {
       key: "createdAt",
       label: "Joined",
@@ -469,14 +433,16 @@ export default function ManageUsers() {
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Block / hostel (optional)">
-                <input
-                  type="text"
-                  placeholder="E.g. B Wing"
+              <Field label={form.role === "Warden" ? "Assigned hostel (required)" : "Hostel (optional)"}>
+                <select
+                  required={form.role === "Warden"}
                   value={form.hostelResidence}
                   onChange={(e) => setForm({ ...form, hostelResidence: e.target.value })}
                   className={inputCls}
-                />
+                >
+                  <option value="">Select hostel…</option>
+                  {HOSTELS.map((hostel) => <option key={hostel} value={hostel}>{hostel}</option>)}
+                </select>
               </Field>
               {form.role === "Parent" && (
                 <Field label="Linked student">
@@ -579,7 +545,7 @@ export default function ManageUsers() {
               </span>
               <input
                 type="text"
-                placeholder="Search name, email, block…"
+                placeholder="Search name, email, hostel…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={`${inputCls} w-full py-2 pl-9 sm:w-56`}
@@ -718,36 +684,19 @@ export default function ManageUsers() {
         )}
       </Card>
 
-      {/* Warden assignments are hostel-wide; block letters remain room locations. */}
-      <Card title="Warden management" subtitle="Assign each warden to a whole hostel. Blocks are managed within their hostel.">
+      <Card title="Warden management" subtitle="Assign each warden to a whole hostel.">
         {reassignError && <p className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{reassignError}</p>}
         <DataTable
           columns={wardenColumns}
           rows={wardens}
           loading={loadingUsers}
-          searchKeys={["name", "email", "hostel", "block"]}
+          searchKeys={["name", "email", "hostel"]}
           searchPlaceholder="Search wardens…"
           emptyTitle="No wardens added yet"
           emptyDescription="Create a Warden account above to see it here."
           emptyIcon={<UsersIcon />}
           pageSize={12}
         />
-      </Card>
-
-      <Card title="Block coverage">
-        {blockCoverage.length === 0 ? (
-          <EmptyState title="No blocks yet" description="Blocks appear automatically when student records include a block or wing." />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {blockCoverage.map((b) => (
-              <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-sm font-semibold text-ink">{b.name}</p>
-                <p className="mt-1 text-sm text-slate-600">{b.type ? `${b.type} Hostel` : "Hostel type not recorded"}</p>
-                <p className="text-xs text-slate-400">{b.residentCount} residents · {b.totalBeds ? `${b.occupiedBeds || 0}/${b.totalBeds} beds occupied` : "capacity not set"}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </Card>
 
       {editingAccount && (

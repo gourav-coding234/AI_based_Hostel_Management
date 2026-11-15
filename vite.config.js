@@ -10,6 +10,9 @@ export default defineConfig({
     // testing, not just the desktop it runs on.
     host: true,
     port: 5173,
+    proxy: {
+      "/api": { target: "http://127.0.0.1:3001", changeOrigin: false },
+    },
   },
   preview: {
     host: true,

@@ -9,6 +9,7 @@ import DataTable from "../../../components/ui/DataTable";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
+import { normalizeHostel } from "../../../utils/hostels";
 
 const MODES = [
   { id: "day", label: "Day-wise" },
@@ -134,9 +135,8 @@ export default function ParentAttendance() {
     const rows = (log.length ? log : [{}]).map((record) => ({
       studentName: studentUser?.name || "",
       studentId: studentUser?.registrationNo || "",
-      block: studentRecord?.hostelResidence || "",
+      hostel: normalizeHostel(studentRecord?.hostel || studentRecord?.gender || studentRecord?.hostelResidence),
       floor: studentRecord?.floor || "",
-      wing: studentRecord?.wing || "",
       room: studentRecord?.room || "",
       bed: studentRecord?.bed || "",
       attendanceDate: record.date || "",
@@ -145,9 +145,8 @@ export default function ParentAttendance() {
     await downloadXlsxFile(rows, [
       { label: "Student Name", value: (row) => row.studentName },
       { label: "Registration Number", value: (row) => row.studentId },
-      { label: "Block", value: (row) => row.block },
+      { label: "Hostel", value: (row) => row.hostel },
       { label: "Floor", value: (row) => row.floor },
-      { label: "Wing", value: (row) => row.wing },
       { label: "Room", value: (row) => row.room },
       { label: "Bed", value: (row) => row.bed },
       { label: "Attendance Date", value: (row) => row.attendanceDate },

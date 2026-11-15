@@ -9,7 +9,7 @@ import { getCollection, recordWardenFeePayment, sendFeeReminder, logAudit } from
 import { computeFeeStatus } from "../../../utils/fees";
 import { toCsvText } from "../../../utils/csv";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
-import { hostelForBlock, normalizeHostel, hostelForStudent, wardenHostel } from "../../../utils/hostels";
+import { normalizeHostel, hostelForStudent, wardenHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -40,15 +40,12 @@ export default function WardenFees() {
   const resolveFeeHostel = useCallback((fee) => {
     const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
     return normalizeHostel(fee.hostel || fee.hostelType) ||
-      hostelForStudent(student) ||
-      hostelForBlock(fee.block, [], fee.hostel || fee.hostelType);
+      hostelForStudent(student);
   }, [studentByAnyId]);
 
   function feeLocationLabel(fee) {
     const hostel = fee.resolvedHostel || resolveFeeHostel(fee);
-    const block = String(fee.block || "").trim();
-    const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
-    return hostel ? `${hostel} · ${blockLabel}` : blockLabel;
+    return hostel || "Hostel not set";
   }
 
   // Second layer: same block scoping the Warden overview uses. Status is
@@ -181,7 +178,7 @@ export default function WardenFees() {
     { label: "Student", value: (f) => f.studentName || "" },
     { label: "Registration Number", value: (f) => f.registrationNo || "" },
     { label: "Hostel", value: (f) => f.resolvedHostel || "" },
-    { label: "Block", value: (f) => f.block || "" },
+    { label: "Hostel", value: (f) => f.resolvedHostel || resolveFeeHostel(f) || "" },
     { label: "Room", value: (f) => f.room || "" },
     { label: "Semester", value: (f) => f.semester || "" },
     { label: "Total", value: (f) => f.total },
@@ -304,7 +301,7 @@ export default function WardenFees() {
         <DataTable
           columns={[
             { key: "studentName", label: "Student", sortable: true, render: (f) => <><p className="font-medium text-ink">{f.studentName || "—"}</p><p className="text-xs text-slate-400">{f.registrationNo || "Registration number unavailable"}</p></> },
-            { key: "block", label: "Hostel / Block", sortable: true, render: (s) => feeLocationLabel(s) },
+            { key: "hostel", label: "Hostel", sortable: true, render: (s) => feeLocationLabel(s) },
             { key: "room", label: "Room", render: (s) => s.room || "—" },
             { key: "semester", label: "Semester", render: (s) => s.semester || "—" },
             { key: "total", label: "Total", sortable: true, render: (s) => inr(s.total) },
@@ -333,7 +330,7 @@ export default function WardenFees() {
           ]}
           rows={filtered}
           loading={feesQuery.loading}
-          searchKeys={["studentName", "registrationNo", "room", "block"]}
+          searchKeys={["studentName", "registrationNo", "room", "hostel"]}
           searchPlaceholder="Search name or registration number…"
           emptyTitle="No fee records yet"
           emptyDescription="Fee records imported by the admin office will show up here."

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { ROLES } from "../roles";
 import { useAuth } from "../context/AuthContext";
 import { useCollections } from "./useCollection";
+import { useAudienceNotices } from "./useAudienceNotices";
 
 function tsToMillis(ts) {
   if (!ts) return 0;
@@ -58,11 +59,11 @@ export function useNotifications(role) {
   // every render and retrigger the memo below. Pinning it to one shared
   // empty array keeps the dependency stable.
   const watch = ROLE_WATCH[role] || EMPTY_WATCH;
+  const audienceRole = role === ROLES.STUDENT || role === ROLES.PARENT;
+  const audienceNotices = useAudienceNotices(audienceRole);
 
   const spec = useMemo(() => {
-    const next = {
-      notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
-    };
+    const next = audienceRole ? {} : { notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } } };
     watch.forEach((w) => {
       // The badge is a lightweight overview signal, not a full register.
       // Full history is available on the linked page.
@@ -76,12 +77,13 @@ export function useNotifications(role) {
       next[w.key] = { name: w.name, options };
     });
     return next;
-  }, [watch, role, uid]);
+  }, [watch, role, uid, audienceRole]);
 
   const { data, loading } = useCollections(spec);
 
   const items = useMemo(() => {
-    const noticeItems = (data.notices || [])
+    const noticeRows = audienceRole ? audienceNotices.data : (data.notices || []);
+    const noticeItems = noticeRows
       .slice()
       .sort((a, b) => tsToMillis(b.createdAt) - tsToMillis(a.createdAt))
       .slice(0, 3)
@@ -101,7 +103,7 @@ export function useNotifications(role) {
       .filter(Boolean);
 
     return [...pendingItems, ...noticeItems];
-  }, [data, watch, role]);
+  }, [data, watch, role, audienceRole, audienceNotices.data]);
 
-  return { items, loading };
+  return { items, loading: loading || (audienceRole && audienceNotices.loading), error: audienceRole ? audienceNotices.error : "" };
 }

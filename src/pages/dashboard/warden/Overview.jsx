@@ -15,7 +15,7 @@ import {
 } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
-import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
+import { normalizeHostel, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
 import { mergeHostelResidents } from "../../../utils/hostelResidents";
 import { buildHostelOccupancySummary, buildOccupancyReport } from "../../../utils/occupancy";
 
@@ -30,7 +30,6 @@ export default function WardenOverview() {
   const today = new Date().toISOString().slice(0, 10);
 
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
-    blocks: { name: "blocks" },
     students: { name: "students", options: { limitCount: 100 } },
     studentRegister: { name: "studentRegister", options: { limitCount: 100 } },
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
@@ -49,22 +48,17 @@ export default function WardenOverview() {
   const studentsOut = movementsOut.length;
   const recentNotices = [...data.notices].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
 
-  // ---- Occupancy (blocks assigned to this warden's wing) ----
-  const myBlocks = myHostel ? data.blocks.filter((b) =>
-    hostelForBlock(b.name, data.blocks) === myHostel ||
-    data.students.some((student) => studentMatchesHostel(student, myHostel, data.blocks) && String(student.hostelResidence || student.wing || student.block || "").trim().toLowerCase() === String(b.name || "").trim().toLowerCase())
-  ) : data.blocks;
-  // ---- Residents (students model supports block/wing, so scope it) ----
+  // ---- Occupancy by hostel and room ----
   const myStudents = mergeHostelResidents(data.students, data.studentRegister)
-    .filter((s) => studentMatchesHostel(s, myHostel, data.blocks));
-  const totalBeds = myBlocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const recordedOccupiedBeds = myBlocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
+    .filter((s) => studentMatchesHostel(s, myHostel));
+  const hostelOccupancy = buildHostelOccupancySummary(data.students, data.studentRegister);
+  const assignedHostelOccupancy = hostelOccupancy.find((row) => row.hostel === myHostel);
+  const totalBeds = assignedHostelOccupancy?.capacity || 0;
   const assignedResidents = myStudents.filter((student) => student.room).length;
-  const occupiedBeds = Math.max(recordedOccupiedBeds, assignedResidents);
+  const occupiedBeds = assignedHostelOccupancy?.occupied || assignedResidents;
   const vacantBeds = Math.max(totalBeds - occupiedBeds, 0);
   const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-  const occupancyRows = buildOccupancyReport(data.students, data.studentRegister, myBlocks, myHostel);
-  const hostelOccupancy = buildHostelOccupancySummary(data.students, data.studentRegister, data.blocks);
+  const occupancyRows = buildOccupancyReport(data.students, data.studentRegister, [], myHostel);
 
   // ---- Attendance (scoped via each student's wing — the attendance
   // record itself only carries studentId/date/status) ----
@@ -74,14 +68,14 @@ export default function WardenOverview() {
   // record, not the last.
   const latestDate = data.attendance.length ? data.attendance[0].date : null;
   const todayAll = data.attendance.filter((a) => a.date === latestDate);
-  const todayRecords = todayAll.filter((a) => studentMatchesHostel(studentByAnyId[String(a.studentId)], myHostel, data.blocks));
+  const todayRecords = todayAll.filter((a) => studentMatchesHostel(studentByAnyId[String(a.studentId)], myHostel));
   const presentToday = todayRecords.filter((a) => a.status === "Present").length;
   const absentToday = todayRecords.filter((a) => a.status === "Absent").length;
   const markedToday = todayRecords.length;
   const attendancePct = markedToday ? Math.round((presentToday / markedToday) * 100) : null;
 
   // ---- Fees (fee records carry `block`, same scoping as Warden Fees page) ----
-  const myFees = data.fees.filter((f) => studentMatchesHostel(studentByAnyId[String(f.studentId)], myHostel, data.blocks) || (f.block && hostelForBlock(f.block, data.blocks) === myHostel));
+  const myFees = data.fees.filter((f) => studentMatchesHostel(studentByAnyId[String(f.studentId)], myHostel) || normalizeHostel(f.hostel) === myHostel);
   const totalDue = myFees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const totalCollected = myFees.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
   const totalOutstanding = Math.max(totalDue - totalCollected, 0);
@@ -90,13 +84,13 @@ export default function WardenOverview() {
 
   // ---- Gate passes (records carry `wing`, same scoping as Warden Gate
   // Passes page) ----
-  const myGatePasses = gatePasses.filter((p) => studentMatchesHostel(studentByAnyId[String(p.studentId || p.studentUid || p.uid)], myHostel, data.blocks) || (p.block || p.hostelResidence || p.wing) && hostelForBlock(p.block || p.hostelResidence || p.wing, data.blocks) === myHostel);
+  const myGatePasses = gatePasses.filter((p) => studentMatchesHostel(studentByAnyId[String(p.studentId || p.studentUid || p.uid)], myHostel) || normalizeHostel(p.hostel || p.hostelResidence) === myHostel);
   const pendingGatePasses = myGatePasses.filter((p) => p.status === "Pending").length;
   const approvedGatePasses = myGatePasses.filter((p) => p.status === "Approved").length;
 
   // ---- Leave requests (records carry `wing`, same scoping as Warden
   // Leave page) ----
-  const myLeaveRequests = data.leaveRequests.filter((r) => studentMatchesHostel(studentByAnyId[String(r.studentId || r.studentUid || r.uid)], myHostel, data.blocks) || (r.block || r.hostelResidence || r.wing) && hostelForBlock(r.block || r.hostelResidence || r.wing, data.blocks) === myHostel);
+  const myLeaveRequests = data.leaveRequests.filter((r) => studentMatchesHostel(studentByAnyId[String(r.studentId || r.studentUid || r.uid)], myHostel) || normalizeHostel(r.hostel || r.hostelResidence) === myHostel);
   const pendingLeave = myLeaveRequests.filter((r) => r.status === "Pending").length;
   const approvedLeave = myLeaveRequests.filter((r) => r.status === "Approved").length;
   const rejectedLeave = myLeaveRequests.filter((r) => r.status === "Rejected").length;
@@ -352,7 +346,7 @@ export default function WardenOverview() {
       )}
 
       <Card title="Room occupancy">
-        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Block</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.block}-${row.room}`}><td className="py-2.5">{row.block}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Imported student room assignments will appear here." />}
+        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Hostel</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.hostel}-${row.room}`}><td className="py-2.5">{row.hostel}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Imported student room assignments will appear here." />}
       </Card>
 
       <Card title="Occupancy by hostel">

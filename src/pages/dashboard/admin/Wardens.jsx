@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { Card, Pill } from "../../../components/dashboard/student/ui";
-import { EmptyState } from "../../../components/ui/DataState";
 import DataTable from "../../../components/ui/DataTable";
 import { UsersIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { updateDocument } from "../../../firebase/firestore";
-import { HOSTELS, hostelForBlock, hostelForStudent, wardenHostel } from "../../../utils/hostels";
+import { HOSTELS, hostelForStudent, wardenHostel } from "../../../utils/hostels";
 
 function tsToDate(ts) {
   if (!ts) return null;
@@ -16,11 +15,9 @@ function tsToDate(ts) {
 export default function Wardens() {
   const { data, loading } = useCollections({
     wardens: { name: "users", options: { where: [["role", "==", "Warden"]] } },
-    blocks: { name: "blocks" },
     students: { name: "students" },
   });
   const wardens = data.wardens;
-  const blocks = data.blocks;
   const hostelOptions = ["Unassigned", ...HOSTELS];
   const [assignments, setAssignments] = useState({});
   const [savingWardenId, setSavingWardenId] = useState("");
@@ -29,12 +26,12 @@ export default function Wardens() {
   const studentCountByHostel = useMemo(() => {
     const counts = {};
     data.students.forEach((s) => {
-      const key = hostelForStudent(s, blocks);
+      const key = hostelForStudent(s);
       if (!key) return;
       counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
-  }, [data.students, blocks]);
+  }, [data.students]);
 
   async function reassign(id, hostel) {
     const previous = assignments[id];
@@ -77,7 +74,7 @@ export default function Wardens() {
       render: (w) => (
         <div>
           <select
-            value={assignments[w.id] ?? (wardenHostel(w, blocks) || "Unassigned")}
+            value={assignments[w.id] ?? (wardenHostel(w) || "Unassigned")}
             disabled={savingWardenId === w.id}
             onChange={(e) => reassign(w.id, e.target.value)}
             onClick={(e) => e.stopPropagation()}
@@ -91,7 +88,7 @@ export default function Wardens() {
         </div>
       ),
     },
-    { key: "students", label: "Students", render: (w) => studentCountByHostel[wardenHostel({ ...w, hostel: assignments[w.id] ?? w.hostel }, blocks)] || 0 },
+    { key: "students", label: "Students", render: (w) => studentCountByHostel[wardenHostel({ ...w, hostel: assignments[w.id] ?? w.hostel })] || 0 },
     {
       key: "createdAt",
       label: "Joined",
@@ -117,7 +114,7 @@ export default function Wardens() {
           </span>
           <div>
             <p className="font-display text-base font-semibold text-ink">Warden roster</p>
-            <p className="text-sm text-slate-500">Assign wardens to a hostel; Boys Hostel covers Blocks A and B, Girls Hostel covers Block C.</p>
+            <p className="text-sm text-slate-500">Assign each warden to the Boys Hostel or Girls Hostel.</p>
           </div>
         </div>
       </Card>
@@ -137,22 +134,6 @@ export default function Wardens() {
         />
       </Card>
 
-      <Card title="Block coverage">
-        {blocks.length === 0 ? (
-          <EmptyState title="No blocks yet" description="Add blocks on the Blocks page or via Data Import." />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {blocks.map((b) => (
-              <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-sm font-semibold text-ink">{b.name}</p>
-                <p className="text-xs text-slate-400">{b.type} hostel</p>
-                <p className="mt-3 text-sm text-slate-600">Hostel: <span className="font-medium text-ink">{hostelForBlock(b.name, blocks) || b.type || "Unspecified"}</span></p>
-                <p className="text-xs text-slate-400">{b.occupiedBeds || 0}/{b.totalBeds || 0} beds occupied</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

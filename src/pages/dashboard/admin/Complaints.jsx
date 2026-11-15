@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
-import { Card, Pill, Button, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { WrenchIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
@@ -34,7 +34,7 @@ const columns = [
     render: (c) => (
       <>
         <p>{c.studentName}</p>
-        <p className="text-xs text-slate-400">{c.block || "—"}, {c.room || "—"}</p>
+        <p className="text-xs text-slate-400">{c.hostel || "—"}, Room {c.room || "—"}</p>
       </>
     ),
   },
@@ -47,21 +47,17 @@ const columns = [
 export default function Complaints() {
   const { data, loading } = useCollections({
     complaints: { name: "complaints", options: { orderByField: "date" } },
-    blocks: { name: "blocks" },
   });
   const allComplaints = data.complaints;
-  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
 
-  const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
     return allComplaints.filter((c) => {
-      const blockOk = blockFilter === "All Blocks" || c.block === blockFilter;
       const statusOk = statusFilter === "All Statuses" || c.status === statusFilter;
-      return blockOk && statusOk;
+      return statusOk;
     });
-  }, [allComplaints, blockFilter, statusFilter]);
+  }, [allComplaints, statusFilter]);
 
   const openCount = allComplaints.filter((c) => c.status === "Open").length;
   const inProgressCount = allComplaints.filter((c) => c.status === "In Progress").length;
@@ -70,7 +66,7 @@ export default function Complaints() {
   const complaintCsvHeaders = [
     { label: "Complaint", value: (c) => c.title },
     { label: "Student", value: (c) => c.studentName },
-    { label: "Block", value: (c) => c.block },
+    { label: "Hostel", value: (c) => c.hostel },
     { label: "Room", value: (c) => c.room },
     { label: "Category", value: (c) => c.category },
     { label: "Date", value: (c) => c.date },
@@ -107,9 +103,6 @@ export default function Complaints() {
       <Card>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
             <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -123,7 +116,7 @@ export default function Complaints() {
           columns={columns}
           rows={filtered}
           loading={loading}
-          searchKeys={["title", "studentName", "category", "block", "room"]}
+          searchKeys={["title", "studentName", "category", "hostel", "room"]}
           searchPlaceholder="Search complaints…"
           emptyTitle="No complaints yet"
           emptyDescription="Complaints filed by students institute-wide will show up here."

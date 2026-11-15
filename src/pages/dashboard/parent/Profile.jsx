@@ -133,7 +133,7 @@ export default function ParentProfile() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Room</p>
                 <p className="mt-1 text-sm text-ink">
-                  {studentRecord?.room ? `${studentRecord.room}${studentRecord.wing ? `, ${studentRecord.wing}` : ""}` : "Not yet allotted"}
+                  {studentRecord?.room ? `Room ${studentRecord.room}` : "Not yet allotted"}
                 </p>
               </div>
             </div>

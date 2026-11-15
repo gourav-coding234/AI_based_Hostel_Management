@@ -611,6 +611,30 @@ img {
   font-size: 13.5px;
   color: var(--ink);
 }
+
+/* Keep native date controls readable even when the operating system or
+   browser prefers dark form controls while the portal itself is in light mode. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"] {
+  color-scheme: light;
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+/* Shared table search field used throughout Admin, Warden, Student, Parent,
+   and Security pages. */
+.panel-search-input {
+  appearance: none;
+  color-scheme: light;
+  background-color: #fff;
+  color: #14243b;
+}
+.panel-search-input::placeholder {
+  color: #718096;
+  opacity: 1;
+}
 /* Native select controls need an explicit surface and browser scheme. Some
    compact table selectors do not use .input, so cover every select here. */
 select:not([multiple]) {
@@ -3433,6 +3457,20 @@ button,
   background-color: var(--surface);
   border-color: var(--border);
   color: var(--ink);
+}
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="datetime-local"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="month"] {
+  color-scheme: dark;
+}
+[data-theme="dark"] .panel-search-input {
+  color-scheme: dark;
+  background-color: var(--surface);
+  color: var(--ink);
+}
+[data-theme="dark"] .panel-search-input::placeholder {
+  color: var(--text-faint);
 }
 [data-theme="dark"] select:not([multiple]) {
   color-scheme: dark;

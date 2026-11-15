@@ -3,19 +3,18 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
 import { BedIcon } from "../../../components/dashboard/student/icons";
-import { useCollection } from "../../../hooks/useCollection";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
+import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
+import { hostelForStudent } from "../../../utils/hostels";
 import { addDocument } from "../../../firebase/firestore";
 
 export default function RoomBed() {
   const { user, profile } = useAuth();
   const studentId = user?.uid || "";
 
-  const wing = profile?.wing;
-  const wingmates = useCollection("students", {
-    where: wing ? [["wing", "==", wing]] : [],
-    skip: !wing,
-  });
+  const { directory, loading: directoryLoading } = useStudentDirectory();
+  const hostel = hostelForStudent(profile);
+  const residents = directory.filter((student) => hostelForStudent(student) === hostel);
   const waitlistQuery = useStudentCollection("roomRequests", studentId, { orderByField: "createdAt" });
 
   const [reason, setReason] = useState("");
@@ -23,19 +22,19 @@ export default function RoomBed() {
   const [submitted, setSubmitted] = useState(false);
 
   const roommates = useMemo(
-    () => wingmates.data.filter((s) => s.id !== studentId && s.room && s.room === profile?.room),
-    [wingmates.data, studentId, profile?.room]
+    () => residents.filter((s) => s.id !== studentId && s.room && s.room === profile?.room),
+    [residents, studentId, profile?.room]
   );
 
-  const roomsInWing = useMemo(() => {
+  const roomsInHostel = useMemo(() => {
     const map = new Map();
-    wingmates.data.forEach((s) => {
+    residents.forEach((s) => {
       if (!s.room) return;
       if (!map.has(s.room)) map.set(s.room, []);
       map.get(s.room).push(s);
     });
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [wingmates.data]);
+  }, [residents]);
 
   async function submitRequest(e) {
     e.preventDefault();
@@ -79,7 +78,7 @@ export default function RoomBed() {
               <p className="font-display text-lg font-semibold text-ink">
                 {profile.room} · {profile.bed || "—"}
               </p>
-              <p className="text-sm text-slate-500">{profile.wing}{profile.floor ? `, ${profile.floor}` : ""}</p>
+              <p className="text-sm text-slate-500">{profile.floor ? `Floor ${profile.floor}` : hostel}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -103,15 +102,15 @@ export default function RoomBed() {
         </div>
       </Card>
 
-      {wing && (
-        <Card title={`Students in ${wing}`} subtitle="Grouped by room — from the live student roster." className="overflow-x-auto">
-          {wingmates.loading ? (
+      {hostel && (
+        <Card title={`${hostel} room directory`} subtitle="Grouped by room — from the live student roster." className="overflow-x-auto">
+          {directoryLoading ? (
             <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
-          ) : roomsInWing.length === 0 ? (
-            <EmptyState title="No room allocations recorded yet" description="Once the warden allots rooms in your wing, they'll show up here." />
+          ) : roomsInHostel.length === 0 ? (
+            <EmptyState title="No room allocations recorded yet" description="Once the warden allots rooms, they'll show up here." />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {roomsInWing.map(([room, occupants]) => (
+              {roomsInHostel.map(([room, occupants]) => (
                 <div key={room} className="rounded-xl border border-slate-200 p-4">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="font-display text-sm font-semibold text-ink">{room}</p>
@@ -163,7 +162,7 @@ export default function RoomBed() {
             <Field label="Reason for request">
               <textarea
                 className={`${inputCls} min-h-[96px] resize-none`}
-                placeholder="E.g. requesting a bed closer to the wing washroom, or a room change due to a roommate conflict…"
+                placeholder="E.g. requesting a bed closer to the washroom, or a room change due to a roommate conflict…"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />

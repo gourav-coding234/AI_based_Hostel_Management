@@ -19,6 +19,7 @@ import { db } from "./config";
 import { publishDataChange } from "./dataChangeEvents";
 import { computeFeeStatus } from "../utils/fees";
 import { normalizeHostel, hostelForStudent } from "../utils/hostels";
+import { readJsonResponse } from "../utils/readJsonResponse";
 
 /**
  * Fetches a user's profile document from the `users` collection.
@@ -638,7 +639,7 @@ export async function recordWardenFeePayment(user, feeId, amount, details = {}) 
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ feeId, amount, ...details }),
   });
-  const result = await response.json().catch(() => ({}));
+  const result = await readJsonResponse(response, "The payment service returned an invalid response.");
   if (!response.ok) {
     const error = new Error(result.message || "The payment could not be saved.");
     error.code = result.code || "PAYMENT_SAVE_FAILED";

@@ -14,9 +14,8 @@ import {
   AlertIcon,
 } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { useCollection } from "../../../hooks/useCollection";
+import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 import { useDocument } from "../../../hooks/useDocument";
-import { noticeAppliesTo, noticeQueryTargets, hostelForNoticeProfile } from "../../../utils/notices";
 import { computeFeeStatus } from "../../../utils/fees";
 import { isPassOut, isPassExpired, passStatus } from "../../../utils/gatePass";
 
@@ -48,16 +47,8 @@ export default function Overview() {
   const gatePasses = useStudentCollection("gatePasses", studentId, { live: true });
   const movement = useStudentCollection("inOutStatus", studentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", studentId, { live: true });
-  // Fetch a bit more than we display — filtering by wing happens client-side
-  // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
-  // silently drop relevant notices behind irrelevant ones targeted at a
-  // different wing.
-  const noticesQuery = useCollection("notices", { where: [["target", "in", noticeQueryTargets(profile || {})]], limitCount: 10 });
-  const filteredNoticeData = noticesQuery.data
-    .filter((n) => noticeAppliesTo(n.target, hostelForNoticeProfile(profile)))
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-    .slice(0, 3);
-  const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
+  const notices = useAudienceNotices();
+  const recentNotices = [...notices.data].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 3);
   const attendanceError = attendance.error;
 
   // Room/bed allotment lives on the student's own `students/{uid}` document
@@ -66,7 +57,7 @@ export default function Overview() {
   // what makes this card reflect the student's actual, current allotment.
   const myAllocation = studentRecord?.room
     ? studentRecord
-    : { status: "Waiting", room: "—", bed: "—", wing: "Not allotted", floor: "" };
+    : { status: "Waiting", room: "—", bed: "—", floor: "" };
   const roomStatus = studentRecord?.room ? "Allotted" : "Waiting";
 
   const feeTotal = fees.items.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -118,7 +109,7 @@ export default function Overview() {
               <span className="text-slate-500">·</span>
               <span>{myAllocation.bed}</span>
               <span className="text-slate-500">·</span>
-              <span>{myAllocation.wing}, {myAllocation.floor}</span>
+              <span>{myAllocation.floor ? `Floor ${myAllocation.floor}` : "Room not assigned"}</span>
             </p>
           </div>
           <div className="flex gap-2">
@@ -134,8 +125,8 @@ export default function Overview() {
         </div>
       </Card>
 
-      {(studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error) && (
-        <ErrorState message={studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error || notices.error} />
+      {(studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error) && (
+        <ErrorState message={studentRecordError || attendanceError || fees.error || complaints.error || gatePasses.error || leaveRequests.error} />
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -190,11 +181,13 @@ export default function Overview() {
         }>
           {notices.loading ? (
             <p className="py-6 text-center text-sm text-slate-400">Loading notices…</p>
+          ) : notices.error ? (
+            <p role="alert" className="py-6 text-center text-sm text-rose-600">{notices.error}</p>
           ) : notices.isEmpty ? (
             <EmptyState icon={<MegaphoneIcon />} title="No notices yet" description="Notices from the warden or admin will show up here." />
           ) : (
           <ul className="flex flex-col divide-y divide-slate-100">
-            {notices.data.map((n) => (
+            {recentNotices.map((n) => (
               <li key={n.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div>
                   <p className="text-sm font-medium text-ink">{n.title}</p>

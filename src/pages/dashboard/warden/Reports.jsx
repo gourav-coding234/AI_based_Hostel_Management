@@ -27,14 +27,13 @@ export default function Reports() {
   const { data, loading } = useCollections({
     students: { name: "students" },
     studentRegister: { name: "studentRegister" },
-    blocks: { name: "blocks" },
     complaints: { name: "complaints" },
     leaveRequests: { name: "leaveRequests" },
     visitors: { name: "visitors" },
   });
 
   const reports = [
-    { id: "RPT-OCC", name: "Room occupancy", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister, data.blocks, hostel) },
+    { id: "RPT-OCC", name: "Room occupancy", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister, [], hostel) },
     { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed with current status.", rows: data.complaints },
     { id: "RPT-LV", name: "Leave requests", description: "Leave applications and their approval status.", rows: data.leaveRequests },
     { id: "RPT-VIS", name: "Visitor log", description: "Visitor check-ins and check-outs.", rows: data.visitors },
@@ -49,7 +48,7 @@ export default function Reports() {
           </span>
           <div>
             <p className="font-display text-base font-semibold text-ink">Reports &amp; export</p>
-            <p className="text-sm text-slate-500">Download data for your wings as Excel workbooks for offline review or sharing.</p>
+            <p className="text-sm text-slate-500">Download data for your hostel as Excel workbooks for offline review or sharing.</p>
           </div>
         </div>
       </Card>

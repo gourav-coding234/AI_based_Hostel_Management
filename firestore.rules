@@ -106,10 +106,9 @@ service cloud.firestore {
 
     function noticeTargetMatches(profile) {
       let hostel = hostelForUser(profile);
-      let wing = profile.get('wing', profile.get('block', profile.get('hostelResidence', '')));
-      return resource.data.get('target', '') in ['Both', 'Both Hostels', 'All Hostels'] ||
-        (hostel in ['Boys Hostel', 'Girls Hostel'] && resource.data.get('target', '') == hostel) ||
-        (wing is string && wing != '' && resource.data.get('target', '') == wing);
+      let target = resource.data.get('target', '');
+      return target == '' || target in ['Both', 'Both Hostels', 'All Hostels', 'General'] ||
+        (hostel in ['Boys Hostel', 'Girls Hostel'] && target == hostel);
     }
 
     function linkedStudentProfile() {

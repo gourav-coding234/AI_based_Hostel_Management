@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
-import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button, StatCard } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { CalendarClockIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
@@ -18,28 +18,24 @@ const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected"];
 export default function Leave() {
   const { data, loading } = useCollections({
     requests: { name: "leaveRequests", options: { orderByField: "from" } },
-    blocks: { name: "blocks" },
   });
   const requests = data.requests;
-  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
 
-  const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
-      const blockOk = blockFilter === "All Blocks" || r.block === blockFilter;
       const statusOk = statusFilter === "All Statuses" || r.status === statusFilter;
-      return blockOk && statusOk;
+      return statusOk;
     });
-  }, [requests, blockFilter, statusFilter]);
+  }, [requests, statusFilter]);
 
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
 
   const leaveCsvHeaders = [
     { label: "Student", value: (r) => r.studentName },
-    { label: "Block", value: (r) => r.block },
+    { label: "Hostel", value: (r) => r.hostel },
     { label: "Room", value: (r) => r.room },
     { label: "Type", value: (r) => r.type },
     { label: "Reason", value: (r) => r.reason },
@@ -64,7 +60,7 @@ export default function Leave() {
             <span className="font-medium text-ink">{r.studentName}</span>
             <Pill tone="General">{r.type}</Pill>
           </div>
-          <p className="text-xs text-slate-400">{r.block || "—"}, {r.room || "—"}</p>
+          <p className="text-xs text-slate-400">{r.hostel || "—"}, Room {r.room || "—"}</p>
         </>
       ),
     },
@@ -101,9 +97,6 @@ export default function Leave() {
       <Card title="Leave requests">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
             <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -117,7 +110,7 @@ export default function Leave() {
           columns={columns}
           rows={filtered}
           loading={loading}
-          searchKeys={["studentName", "reason", "block", "room"]}
+          searchKeys={["studentName", "reason", "hostel", "room"]}
           searchPlaceholder="Search leave requests…"
           emptyTitle="No leave requests yet"
           emptyDescription="Leave applications submitted by students will show up here."

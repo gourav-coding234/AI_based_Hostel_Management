@@ -5,9 +5,8 @@ import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon, Megaphone
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { useCollection } from "../../../hooks/useCollection";
+import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 import { useParentNotifications } from "../../../hooks/useParentNotifications";
-import { noticeAppliesTo } from "../../../utils/notices";
 import { isPassActive, passStatus } from "../../../utils/gatePass";
 import { inr, feeTone, summarizeChildFees, notificationToNotice } from "./parentData";
 
@@ -51,7 +50,7 @@ export default function ParentOverview() {
   const movement = useStudentCollection("inOutStatus", linkedStudentId, { live: true });
   const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId, { live: true });
   const complaints = useStudentCollection("complaints", linkedStudentId, { live: true });
-  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
+  const noticesQuery = useAudienceNotices(!linked.loading && !linked.notLinked && !linked.notFound && !linked.error);
   const notifications = useParentNotifications();
 
   if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
@@ -78,7 +77,7 @@ export default function ParentOverview() {
 
   // Latest notices AND the parent's own notifications in one short list,
   // newest first — same merge the Notices page uses.
-  const generalNotices = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, studentUser?.hostelResidence));
+  const generalNotices = noticesQuery.data.slice(0, 10);
   const latest = [...notifications.data.map(notificationToNotice), ...generalNotices]
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     .slice(0, 3);
@@ -107,7 +106,7 @@ export default function ParentOverview() {
             <p className="mt-1 text-xs text-slate-300">{studentUser?.registrationNo || "Registration number unavailable"}{studentUser?.branch ? ` · ${studentUser.branch}` : ""}{studentUser?.year ? ` · ${studentUser.year}` : ""}</p>
             {room?.room ? (
               <p className="mt-0.5 text-xs text-slate-400">
-                {room.wing} · {room.room}, {room.bed}
+                Room {room.room}, {room.bed}
               </p>
             ) : (
               <p className="mt-0.5 text-xs text-slate-400">Room not yet allotted</p>
@@ -120,14 +119,26 @@ export default function ParentOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Link to="/dashboard/parent/attendance" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
-            <CheckSquareIcon />
-          </span>
-          <p className="mt-4 font-display text-2xl font-semibold text-ink">{statsLoading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`}</p>
-          <p className="mt-0.5 text-sm text-slate-500">Attendance this month</p>
-          <p className="mt-0.5 text-xs text-slate-400">
-            {monthLog.length ? `${monthCounts.Present} present · ${monthCounts.Absent} absent · ${monthCounts.Leave} leave` : "No records this month"}
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
+                <CheckSquareIcon />
+              </span>
+              <p className="mt-4 font-display text-2xl font-semibold text-ink">{statsLoading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`}</p>
+              <p className="mt-0.5 text-sm text-slate-500">Attendance this month</p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {monthLog.length ? `${monthCounts.Present} present · ${monthCounts.Absent} absent · ${monthCounts.Leave} leave` : "No records this month"}
+              </p>
+            </div>
+            <div className="min-w-[88px] border-l border-slate-100 pl-4 text-right">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-navy-950/5 text-navy-900">
+                <BedIcon />
+              </span>
+              <p className="mt-4 font-display text-xl font-semibold text-ink">{room?.room || "—"}</p>
+              <p className="mt-0.5 text-sm text-slate-500">Room number</p>
+              {room?.bed && <p className="mt-0.5 text-xs text-slate-400">Bed {room.bed}</p>}
+            </div>
+          </div>
         </Link>
         <Link to="/dashboard/parent/fees" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600">
@@ -146,13 +157,6 @@ export default function ParentOverview() {
           {pass && <p className="mt-0.5 text-xs text-slate-400">{pass.type}</p>}
           {movement.items[0]?.status === "OUT" && <p className="mt-0.5 text-xs text-slate-400">Exit recorded {movement.items[0].exitTime?.toDate ? movement.items[0].exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
           {pass && passStatus(pass) === "Completed" && <p className="mt-0.5 text-xs text-slate-400">Returned {pass.returnedAt?.toDate ? pass.returnedAt.toDate().toLocaleString("en-IN") : pass.entryTime?.toDate ? pass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
-        </Link>
-        <Link to="/dashboard/parent/room" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
-            <BedIcon />
-          </span>
-          <p className="mt-4 font-display text-lg font-semibold text-ink">{room?.room || "—"}</p>
-          <p className="mt-0.5 text-sm text-slate-500">{room?.bed || "Not allotted"} {room?.wing ? `· ${room.wing}` : ""}</p>
         </Link>
         <Link to="/dashboard/parent/leave" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600"><AlertIcon /></span>

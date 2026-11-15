@@ -39,7 +39,6 @@ export default function AdminOverview() {
   // Keep the overview a lightweight snapshot: cap activity lists and reuse
   // the result briefly instead of holding listeners open on every register.
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
-    blocks: { name: "blocks" },
     studentRegister: { name: "studentRegister" },
     students: { name: "students" },
     // Reuse the user list for account totals and the warden count.
@@ -56,7 +55,7 @@ export default function AdminOverview() {
     attendanceToday: { name: "attendance", options: { where: [["date", "==", todayKey]], limitCount: 500 } },
   }, { live: false, maxDocs: 5000, cacheMs: 60_000 });
 
-  const { blocks, studentRegister, students, users, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut, attendanceToday } = data;
+  const { studentRegister, students, users, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut, attendanceToday } = data;
   // Count unique students from the academic register and resident profiles.
   // A room assignment is tracked separately and must not make registered
   // students disappear from the headline total.
@@ -65,10 +64,10 @@ export default function AdminOverview() {
   const wardens = useMemo(() => users.filter((account) => account.role === "Warden"), [users]);
   const totalStudents = registeredStudents.length;
   const hostelResidentCounts = useMemo(() => residents.reduce((counts, student) => {
-    const hostel = hostelForStudent(student, blocks);
+    const hostel = hostelForStudent(student);
     if (hostel) counts[hostel] += 1;
     return counts;
-  }, { "Boys Hostel": 0, "Girls Hostel": 0 }), [residents, blocks]);
+  }, { "Boys Hostel": 0, "Girls Hostel": 0 }), [residents]);
   const loading = snapshotLoading;
   const studentsOut = movementsOut.length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
@@ -78,11 +77,8 @@ export default function AdminOverview() {
   const recentNotices = recentByDate(notices, "date").slice(0, 3);
 
   // Occupancy
-  const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const recordedOccupiedBeds = blocks.reduce((sum, block) => sum + (Number(block.occupiedBeds) || 0), 0);
-  const residentBedsInUse = residents.filter((student) => String(student.room || "").trim() && String(student.bed || "").trim()).length;
-  const occupiedBeds = residentBedsInUse || recordedOccupiedBeds;
-  const occupancyRows = useMemo(() => buildOccupancyReport(students, studentRegister, blocks), [students, studentRegister, blocks]);
+  const residentRoomsAssigned = residents.filter((student) => String(student.room || "").trim()).length;
+  const occupancyRows = useMemo(() => buildOccupancyReport(students, studentRegister), [students, studentRegister]);
 
   // Fees
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -236,10 +232,10 @@ export default function AdminOverview() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
             <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="text-slate-500">Bed occupancy</span>
-              <span className="font-semibold text-ink">{occupiedBeds}/{totalBeds}</span>
+              <span className="text-slate-500">Students with a room</span>
+              <span className="font-semibold text-ink">{residentRoomsAssigned}/{residents.length}</span>
             </div>
-            <ProgressBar value={occupiedBeds} max={totalBeds || 1} tone="teal" />
+            <ProgressBar value={residentRoomsAssigned} max={residents.length || 1} tone="teal" />
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between text-sm">
@@ -270,7 +266,7 @@ export default function AdminOverview() {
       </Card>
 
       <Card title="Room occupancy by hostel">
-        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Hostel</th><th className="pb-2">Block</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.hostel}-${row.block}-${row.room}`}><td className="py-2.5">{row.hostel}</td><td className="py-2.5">{row.block}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Import student records with hostel, block, room and bed fields to build this report." />}
+        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Hostel</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.hostel}-${row.room}`}><td className="py-2.5">{row.hostel}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Import student records with hostel and room details to build this report." />}
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -287,7 +283,7 @@ export default function AdminOverview() {
                 <li key={c.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{c.title}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">{c.studentName || "—"} · {c.block || "—"} · {c.date || "—"}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">{c.studentName || "—"} · Room {c.room || "—"} · {c.date || "—"}</p>
                   </div>
                   <Pill tone={c.status}>{c.status}</Pill>
                 </li>
@@ -309,7 +305,7 @@ export default function AdminOverview() {
                 <li key={p.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{p.studentName || "—"}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">{p.block || "—"} · {p.from} → {p.to}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Room {p.room || "—"} · {p.from} → {p.to}</p>
                   </div>
                   <Pill tone={p.status}>{p.status}</Pill>
                 </li>
@@ -331,7 +327,7 @@ export default function AdminOverview() {
                 <li key={r.id} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
                   <div>
                     <p className="text-sm font-medium text-ink">{r.studentName || "—"}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">{r.block || "—"} · {r.from} → {r.to}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Room {r.room || "—"} · {r.from} → {r.to}</p>
                   </div>
                   <Pill tone={r.status}>{r.status}</Pill>
                 </li>
@@ -370,7 +366,7 @@ export default function AdminOverview() {
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Users & wardens</p>
-            <p className="truncate text-xs text-slate-400">Manage accounts & reassign block wardens</p>
+            <p className="truncate text-xs text-slate-400">Manage accounts and hostel assignments</p>
           </div>
         </Link>
         <Link to="/dashboard/admin/complaints" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">
@@ -379,7 +375,7 @@ export default function AdminOverview() {
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-ink">Escalated complaints</p>
-            <p className="truncate text-xs text-slate-400">{openComplaints} open across all blocks</p>
+            <p className="truncate text-xs text-slate-400">{openComplaints} open across both hostels</p>
           </div>
         </Link>
         <Link to="/dashboard/admin/gate-passes" className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300">

@@ -5,77 +5,47 @@ import { EmptyState } from "../../../components/ui/DataState";
 import { BedIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { updateDocument, deleteDocument, logAudit } from "../../../firebase/firestore";
-import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
+import { studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
 
 export default function RoomAllotment() {
   const { profile, user } = useAuth();
   const { data, loading } = useCollections({
-    blocks: { name: "blocks" },
     students: { name: "students" },
     requests: { name: "roomRequests", options: { orderByField: "createdAt" } },
   });
-  const assignedHostel = wardenHostel(profile, data.blocks);
-  const students = data.students.filter((student) => studentMatchesHostel(student, assignedHostel, data.blocks));
-  const blocks = data.blocks.filter((block) => !assignedHostel ||
-    hostelForBlock(block.name, data.blocks) === assignedHostel ||
-    students.some((student) => String(student.hostelResidence || student.wing || student.block || "").trim().toLowerCase() === String(block.name || "").trim().toLowerCase()));
+  const assignedHostel = wardenHostel(profile);
+  const students = data.students.filter((student) => studentMatchesHostel(student, assignedHostel));
   const studentByAnyId = Object.fromEntries(data.students.flatMap((student) => [student.id, student.accountUid, student.userId, student.regNo, student.registrationNo, student.email].filter(Boolean).map((id) => [String(id), student])));
   const pendingRequests = data.requests.filter((request) => {
     if (request.status !== "Pending") return false;
     const student = studentByAnyId[String(request.studentId || request.studentUid || request.uid || "")];
-    const requestWing = request.block || request.hostelResidence || request.wing;
-    return !assignedHostel || studentMatchesHostel(student, assignedHostel, data.blocks) || (requestWing && hostelForBlock(requestWing, data.blocks) === assignedHostel);
+    return !assignedHostel || studentMatchesHostel(student, assignedHostel);
   });
 
-  const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const occupiedBeds = blocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
-  const vacantBeds = Math.max(totalBeds - occupiedBeds, 0);
-  const blockByName = useMemo(() => Object.fromEntries(blocks.map((b) => [b.name, b])), [blocks]);
-
-  const [activeWing, setActiveWing] = useState(blocks[0]?.name || "");
-  const wingNames = blocks.map((b) => b.name);
-  const currentWing = activeWing || wingNames[0];
-
-  const roomsInWing = useMemo(() => {
+  const assignedStudents = students.filter((student) => student.room);
+  const rooms = useMemo(() => {
     const map = new Map();
-    students
-      .filter((s) => (s.hostelResidence || s.wing) === currentWing && s.room)
-      .forEach((s) => {
-        if (!map.has(s.room)) map.set(s.room, []);
-        map.get(s.room).push(s);
+    assignedStudents.forEach((student) => {
+        if (!map.has(student.room)) map.set(student.room, []);
+        map.get(student.room).push(student);
       });
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [students, currentWing]);
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [assignedStudents]);
 
   const [allotDraft, setAllotDraft] = useState({});
   const [allotError, setAllotError] = useState({});
 
-  async function adjustOccupancy(wingName, delta) {
-    const block = blockByName[wingName];
-    if (!block) return; // no matching block doc — nothing to sync, but don't block the allotment itself
-    const next = Math.max(0, (Number(block.occupiedBeds) || 0) + delta);
-    try {
-      await updateDocument("blocks", block.id, { occupiedBeds: next });
-    } catch (err) {
-      // Occupancy sync failing shouldn't be silent, but it also shouldn't be
-      // treated the same as the allotment itself failing — log and move on.
-      console.error("Failed to sync block occupancy:", err);
-    }
-  }
-
   async function allot(requestId, studentId) {
     const draft = allotDraft[requestId];
     if (!draft?.room || !draft?.bed || !studentId) return;
-    const wing = draft.wing || currentWing;
-    const targetBlock = blockByName[wing];
     const requestStudent = studentByAnyId[String(studentId)];
-    if (!targetBlock || (assignedHostel && !blocks.some((block) => block.id === targetBlock.id)) || !studentMatchesHostel(requestStudent, assignedHostel, data.blocks)) {
-      setAllotError((e) => ({ ...e, [requestId]: "Choose a block and student within your assigned hostel." }));
+    if (!studentMatchesHostel(requestStudent, assignedHostel)) {
+      setAllotError((e) => ({ ...e, [requestId]: "Choose a student within your assigned hostel." }));
       return;
     }
 
     const clash = students.find(
-      (s) => s.id !== studentId && (s.hostelResidence || s.wing) === wing && s.room === draft.room && String(s.bed) === String(draft.bed)
+      (s) => s.id !== studentId && s.room === draft.room && String(s.bed) === String(draft.bed)
     );
     if (clash) {
       setAllotError((e) => ({ ...e, [requestId]: `Bed ${draft.bed} in ${draft.room} is already occupied by ${clash.name}.` }));
@@ -87,11 +57,10 @@ export default function RoomAllotment() {
       await updateDocument("students", studentId, {
         room: draft.room,
         bed: draft.bed,
-        wing,
+        ...(assignedHostel ? { hostel: assignedHostel, hostelType: assignedHostel } : {}),
         allottedOn: new Date().toISOString().slice(0, 10),
       });
       await deleteDocument("roomRequests", requestId);
-      await adjustOccupancy(wing, 1);
       logAudit({
         actor: profile?.name || user?.email || "Warden",
         action: "Allotted room",
@@ -105,10 +74,8 @@ export default function RoomAllotment() {
 
   async function vacate(student) {
     if (!student?.room) return;
-    const wing = student.hostelResidence || student.wing;
     try {
       await updateDocument("students", student.id, { room: "", bed: "", vacatedOn: new Date().toISOString().slice(0, 10) });
-      await adjustOccupancy(wing, -1);
       logAudit({
         actor: profile?.name || user?.email || "Warden",
         action: "Vacated room",
@@ -131,16 +98,16 @@ export default function RoomAllotment() {
     <div className="flex flex-col gap-6 animate-fade-in">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
-          <p className="font-display text-2xl font-semibold text-ink">{totalBeds || "—"}</p>
-          <p className="text-sm text-slate-500">Total beds across the hostel</p>
+          <p className="font-display text-2xl font-semibold text-ink">{assignedStudents.length}</p>
+          <p className="text-sm text-slate-500">Students with a room assigned</p>
         </Card>
         <Card>
-          <p className="font-display text-2xl font-semibold text-teal-600">{totalBeds ? vacantBeds : "—"}</p>
-          <p className="text-sm text-slate-500">Vacant beds right now</p>
+          <p className="font-display text-2xl font-semibold text-teal-600">{rooms.length}</p>
+          <p className="text-sm text-slate-500">Rooms currently occupied</p>
         </Card>
         <Card>
-          <p className="font-display text-2xl font-semibold text-ink">{totalBeds ? occupiedBeds : "—"}</p>
-          <p className="text-sm text-slate-500">Beds occupied</p>
+          <p className="font-display text-2xl font-semibold text-ink">{students.length - assignedStudents.length}</p>
+          <p className="text-sm text-slate-500">Students awaiting room assignment</p>
         </Card>
       </div>
 
@@ -161,19 +128,10 @@ export default function RoomAllotment() {
                   <p className="mt-0.5 text-xs text-slate-500">{r.reason}</p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
-                  <Field label="Wing">
-                    <select
-                      className={`${inputCls} w-32`}
-                      value={allotDraft[r.id]?.wing || currentWing || ""}
-                      onChange={(e) => setAllotDraft((d) => ({ ...d, [r.id]: { ...d[r.id], wing: e.target.value } }))}
-                    >
-                      {wingNames.map((w) => <option key={w} value={w}>{w}</option>)}
-                    </select>
-                  </Field>
                   <Field label="Room">
                     <input
                       className={`${inputCls} w-24`}
-                      placeholder="e.g. B-204"
+                      placeholder="e.g. 204"
                       value={allotDraft[r.id]?.room || ""}
                       onChange={(e) => setAllotDraft((d) => ({ ...d, [r.id]: { ...d[r.id], room: e.target.value } }))}
                     />
@@ -201,29 +159,11 @@ export default function RoomAllotment() {
       </Card>
 
       <Card title={`${assignedHostel || "Hostel"} occupancy — room by room`}>
-        {blocks.length === 0 ? (
-          <EmptyState icon={<BedIcon />} title="No blocks added yet" description="Ask the admin to add this hostel’s blocks in Data Import." />
-        ) : (
-          <>
-            <div className="mb-4 flex flex-wrap gap-2">
-              {wingNames.map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setActiveWing(w)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                    currentWing === w ? "bg-navy-950 text-white" : "border border-slate-200 text-slate-500"
-                  }`}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-            {roomsInWing.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-400">No students recorded in {currentWing} yet.</p>
+        {rooms.length === 0 ? (
+              <EmptyState icon={<BedIcon />} title="No room allocations yet" description="Students with an assigned room will appear here." />
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {roomsInWing.map(([room, occupants]) => (
+                {rooms.map(([room, occupants]) => (
                   <div key={room} className="rounded-xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <p className="font-display text-sm font-semibold text-ink">{room}</p>
@@ -248,8 +188,6 @@ export default function RoomAllotment() {
                 ))}
               </div>
             )}
-          </>
-        )}
       </Card>
     </div>
   );

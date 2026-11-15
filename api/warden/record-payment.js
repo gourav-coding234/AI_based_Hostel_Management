@@ -36,7 +36,7 @@ export default async function recordPayment(req, res) {
     if (!callerSnap.exists || callerProfile.role !== "Warden" || callerProfile.status === "Inactive") {
       return respond(res, 403, { message: "Only an active warden can record hostel payments." });
     }
-    const hostel = normalizeHostel(callerProfile.hostel || callerProfile.assignedHostel || callerProfile.wardenHostel);
+    const hostel = normalizeHostel(callerProfile.hostel || callerProfile.assignedHostel || callerProfile.wardenHostel || callerProfile.hostelResidence);
     if (!hostel) return respond(res, 403, { message: "Your account needs a Boys Hostel or Girls Hostel assignment before recording payments." });
 
     const feeId = String(req.body?.feeId || "").trim();
@@ -57,7 +57,16 @@ export default async function recordPayment(req, res) {
       if (!studentId) throw new Error("STUDENT_LINK_MISSING");
       const studentRef = db.collection("students").doc(studentId);
       const studentSnap = await tx.get(studentRef);
-      const student = studentSnap.data() || {};
+      let student = studentSnap.data() || {};
+      // Imported fee rows may use a Registration ID while the student
+      // profile is keyed by Auth UID. Resolve the same student's profile by
+      // its canonical identifier before validating the hostel.
+      if (!studentSnap.exists) {
+        for (const field of ["registrationNo", "regNo", "studentCode"]) {
+          const match = await db.collection("students").where(field, "==", studentId).limit(1).get();
+          if (!match.empty) { student = match.docs[0].data(); break; }
+        }
+      }
       const recordHostel = normalizeHostel(fee.hostel || fee.hostelType || student.hostel || student.hostelType || student.gender);
       if (recordHostel !== hostel) throw new Error("WARDEN_HOSTEL_MISMATCH");
 

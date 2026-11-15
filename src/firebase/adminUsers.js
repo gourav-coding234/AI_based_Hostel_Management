@@ -1,5 +1,6 @@
 import { reconcileStudentRecordsForAccount } from "./firestore";
 import { publishDataChange } from "./dataChangeEvents";
+import { readJsonResponse } from "../utils/readJsonResponse";
 
 async function managedAccountRequest(user, payload) {
   if (!user) throw new Error("Your administrator session has expired. Sign in again.");
@@ -9,13 +10,7 @@ async function managedAccountRequest(user, payload) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(import.meta.env.DEV
-      ? "The account API isn't running. Vite serves the website but not the /api serverless functions. Start the project with `vercel dev` to create or manage accounts locally."
-      : "The account service returned an invalid response. Check the deployed API function and its server logs.");
-  }
-  const result = await response.json().catch(() => ({}));
+  const result = await readJsonResponse(response, "The account service returned an invalid response.");
   if (!response.ok) throw new Error(result.message || "The account could not be updated.");
   return result;
 }
@@ -53,13 +48,7 @@ export async function updateManagedUserAccount({ user, targetUid, name, email, p
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ targetUid, name, email, password }),
   });
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(import.meta.env.DEV
-      ? "The account API isn't running. Vite serves the website but not the /api serverless functions. Start the project with `vercel dev` to create or manage accounts locally."
-      : "The account service returned an invalid response. Check the deployed API function and its server logs.");
-  }
-  const result = await response.json().catch(() => ({}));
+  const result = await readJsonResponse(response, "The account service returned an invalid response.");
   if (!response.ok) throw new Error(result.message || "The account could not be updated.");
   return Promise.resolve(result).then((updated) => {
     publishDataChange("users");

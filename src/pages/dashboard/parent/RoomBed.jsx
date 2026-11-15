@@ -32,7 +32,7 @@ export default function ParentRoomBed() {
               <p className="font-display text-lg font-semibold text-ink">
                 {room.room} · {room.bed}
               </p>
-              <p className="text-sm text-slate-500">{room.wing}{room.floor ? `, ${room.floor}` : ""}</p>
+              <p className="text-sm text-slate-500">{room.hostel || "Hostel not assigned"}{room.floor ? `, Floor ${room.floor}` : ""}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -56,7 +56,7 @@ export default function ParentRoomBed() {
 
       <Card>
         <p className="text-sm text-slate-500">
-          Room and bed changes are requested and reviewed between your child and the wing warden. If you have a
+          Room and bed changes are requested and reviewed by your child's warden. If you have a
           concern about the current allocation, the fastest way to reach the warden is via the Emergency Contacts tab.
         </p>
       </Card>

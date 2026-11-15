@@ -11,6 +11,7 @@ const project = process.env.VITE_FIREBASE_PROJECT_ID;
 const apiKey = process.env.VITE_FIREBASE_API_KEY;
 if (!project || !apiKey) throw new Error("Set VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_API_KEY in .env.");
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+const appBase = (process.env.FIREBASE_SMOKE_APP_URL || "https://ai-based-hostel-management.vercel.app").replace(/\/$/, "");
 
 async function login(label, email, password) {
   if (!email || !password) throw new Error(`Set FIREBASE_SMOKE_${label.toUpperCase()}_EMAIL and _PASSWORD.`);
@@ -39,16 +40,12 @@ async function query(token, collectionId, studentId) {
   return { status: response.status, count: Array.isArray(data) ? data.filter((row) => row.document).length : 0, body: data };
 }
 
-async function queryNotices(token, studentProfile) {
-  const values = ["Both", "Both Hostels", "All Hostels"];
-  const rawHostel = [studentProfile.hostel, studentProfile.hostelType, studentProfile.gender, studentProfile.hostelResidence]
-    .map((value) => String(value || "").trim().toLowerCase());
-  if (rawHostel.some((value) => value.includes("girl") || value.includes("female") || value === "f")) values.push("Girls Hostel");
-  if (rawHostel.some((value) => value.includes("boy") || value.includes("male") || value === "m")) values.push("Boys Hostel");
-  const body = { structuredQuery: { from: [{ collectionId: "notices" }], where: { fieldFilter: { field: { fieldPath: "target" }, op: "IN", value: { arrayValue: { values: values.map((value) => ({ stringValue: value })) } } } } } };
-  const response = await fetch(`${base}:runQuery`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = await response.json().catch(() => ({}));
-  return { status: response.status, count: Array.isArray(data) ? data.filter((row) => row.document).length : 0, body: data };
+async function apiNotices(token) {
+  const response = await fetch(`${appBase}/api/student/notices`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await response.json().catch(async () => ({ message: await response.text().catch(() => "Non-JSON response") }));
+  return { status: response.status, count: Array.isArray(body.notices) ? body.notices.length : 0, body };
 }
 
 function assertOk(label, result) {
@@ -65,13 +62,11 @@ async function runRole(label, email, password, role) {
   if (!linkedId) throw new Error("Parent profile is missing linkedStudentId.");
   const student = await firestore(auth.idToken, `students/${linkedId}`);
   assertOk(`${label} linked student profile`, student);
-  const studentFields = Object.fromEntries(Object.entries(student.result.fields || {}).map(([key, value]) => [key, value.stringValue ?? value.integerValue ?? ""]));
-
   const checks = role === "Parent"
     ? ["attendance", "fees", "gatePasses", "leaveRequests", "complaints"]
     : ["attendance", "fees", "gatePasses", "leaveRequests", "complaints"];
   for (const collectionId of checks) assertOk(`${label} ${collectionId}`, await query(auth.idToken, collectionId, linkedId));
-  assertOk(`${label} notices`, await queryNotices(auth.idToken, { ...user.result.fields, ...studentFields }));
+  assertOk(`${label} notices API ${appBase}/api/student/notices`, await apiNotices(auth.idToken));
   const contacts = await firestore(auth.idToken, "emergencyContacts?pageSize=100");
   // Firestore collection listing may return 404 when the collection has no records.
   console.log(`${label} emergency contacts: HTTP ${contacts.status}${contacts.status === 404 ? " · empty" : ""}`);

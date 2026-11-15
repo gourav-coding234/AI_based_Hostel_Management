@@ -8,7 +8,7 @@ import { WalletIcon, AlertIcon, CheckIcon, CalendarClockIcon, DownloadIcon } fro
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, recordFeePayment, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
-import { hostelForBlock, hostelForStudent, normalizeHostel } from "../../../utils/hostels";
+import { hostelForStudent, normalizeHostel } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -20,9 +20,7 @@ function compareFeeGroups(a, b) {
   const order = (label) => {
     const value = String(label || "");
     const hostelRank = /^Girls Hostel\b/i.test(value) ? 0 : /^Boys Hostel\b/i.test(value) ? 1 : 2;
-    const blockMatch = value.match(/\bBlock\s+([A-Z]+)\b/i);
-    const blockRank = blockMatch ? blockMatch[1].toUpperCase().charCodeAt(0) - 65 : 99;
-    return [hostelRank, blockRank, value.toLowerCase()];
+    return [hostelRank, value.toLowerCase()];
   };
   const left = order(a);
   const right = order(b);
@@ -43,9 +41,7 @@ export default function Fees() {
   const paymentsQuery = useCollection("payments", { orderByField: "createdAt", limitCount: 100 });
   const studentsQuery = useCollection("students");
   const registerQuery = useCollection("studentRegister");
-  const blocksQuery = useCollection("blocks", { limitCount: 200 });
   const students = studentsQuery.data;
-  const blocks = blocksQuery.data;
 
   const studentById = useMemo(() => {
     const map = new Map();
@@ -71,9 +67,8 @@ export default function Fees() {
     const student = studentById.get(String(fee.studentId || fee.studentUid || fee.uid || fee.registrationNo || fee.regNo || "")) ||
       studentByName.get(String(fee.studentName || fee.name || "").trim().toLowerCase());
     return normalizeHostel(fee.hostel || fee.hostelType) ||
-      hostelForStudent({ ...student, gender: fee.gender || student?.gender }, blocks) ||
-      hostelForBlock(fee.block, blocks, fee.hostel || fee.hostelType);
-  }, [studentById, studentByName, blocks]);
+      hostelForStudent({ ...student, gender: fee.gender || student?.gender });
+  }, [studentById, studentByName]);
 
   const feeGroupLabel = useCallback((fee) => {
     return hostelForFee(fee);
@@ -240,8 +235,7 @@ export default function Fees() {
       await addDocument("fees", {
         studentId: student.id,
         studentName: student.name,
-        block: student.hostelResidence || student.wing || "",
-        hostel: hostelForStudent(student, blocks),
+        hostel: hostelForStudent(student),
         room: student.room || "",
         total,
         paid: 0,
@@ -328,7 +322,7 @@ export default function Fees() {
               >
                 <option value="">Select a student…</option>
                 {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} {hostelForStudent(s, blocks) ? `(${hostelForStudent(s, blocks)}${s.hostelResidence || s.wing ? ` · ${s.hostelResidence || s.wing}` : ""})` : ""}</option>
+                  <option key={s.id} value={s.id}>{s.name} {hostelForStudent(s) ? `(${hostelForStudent(s)})` : ""}</option>
                 ))}
               </select>
             </Field>
@@ -419,7 +413,7 @@ export default function Fees() {
           columns={allRecordsColumns}
           rows={filtered}
           loading={feesQuery.loading}
-          searchKeys={["studentName", "block", "room"]}
+          searchKeys={["studentName", "hostel", "room"]}
           searchPlaceholder="Search fee records…"
           emptyTitle="No fee records yet"
           emptyDescription="Records you create here, or import via Data Import, will show up in this list."
@@ -433,7 +427,7 @@ export default function Fees() {
           columns={defaulterColumns}
           rows={defaulters}
           loading={feesQuery.loading}
-          searchKeys={["studentName", "block", "room"]}
+          searchKeys={["studentName", "hostel", "room"]}
           searchPlaceholder="Search defaulters…"
           emptyTitle="No outstanding dues"
           emptyDescription="Students with a pending balance will show up here."

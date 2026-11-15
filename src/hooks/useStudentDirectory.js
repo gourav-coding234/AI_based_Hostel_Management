@@ -18,16 +18,13 @@ function clean(value) {
 /**
  * One shared resident directory for Warden, Security and the room directory.
  * The academic register is queried only for rows explicitly assigned to a
- * hostel wing/block; institute-wide non-residents are not downloaded here.
+ * hostel assignment or room; institute-wide non-residents are not downloaded here.
  */
 export function useStudentDirectory() {
   const { data, loading, error } = useCollections({
     students: { name: "students" },
     users: { name: "users", options: { where: [["role", "==", "Student"]] } },
-    registerByWing: { name: "studentRegister", options: { where: [["wing", "!=", ""]] } },
-    registerByResidence: { name: "studentRegister", options: { where: [["hostelResidence", "!=", ""]] } },
-    registerByBlock: { name: "studentRegister", options: { where: [["block", "!=", ""]] } },
-    blocks: { name: "blocks", options: { limitCount: 200 } },
+    register: { name: "studentRegister", options: { limitCount: 2000 } },
   }, { live: false, maxDocs: 2000, cacheMs: 10_000 });
 
   const directory = useMemo(() => {
@@ -35,9 +32,8 @@ export function useStudentDirectory() {
     const byEmail = new Map();
     const byUid = new Map();
     const rows = new Map();
-    const blockTypeByName = new Map(data.blocks.map((block) => [clean(block.name).toLowerCase(), clean(block.type)]));
     const registerRecords = new Map();
-    [...data.registerByWing, ...data.registerByResidence, ...data.registerByBlock].forEach((record) => {
+    data.register.forEach((record) => {
       const key = record.id || normalizeRegistration(record.regNo || record.registrationNo);
       if (key) registerRecords.set(key, { ...(registerRecords.get(key) || {}), ...record });
     });
@@ -55,7 +51,7 @@ export function useStudentDirectory() {
       const regNo = clean(source.regNo || source.registrationNo || source.registrationNumber);
       const sourceUid = uid || clean(source.studentId || source.userId || source.uid || (kind === "student" ? source.id : ""));
       let row = findMatch(source, sourceUid);
-      if (!row && kind === "register" && !clean(source.wing || source.hostelResidence)) return;
+      if (!row && kind === "register" && !clean(source.hostel || source.hostelType || source.hostelResidence || source.wing || source.block || source.room)) return;
       if (!row) {
         const stableReg = normalizeRegistration(regNo);
         const id = sourceUid && kind === "student" ? sourceUid : stableReg ? `reg:${stableReg}` : `register:${source.id}`;
@@ -70,7 +66,6 @@ export function useStudentDirectory() {
           gender: "",
           branch: "",
           year: "",
-          wing: "",
           room: "",
           bed: "",
           phone: "",
@@ -89,8 +84,7 @@ export function useStudentDirectory() {
         gender: clean(source.gender) || row.gender,
         branch: clean(source.branch) || row.branch,
         year: clean(source.year) || row.year,
-        wing: clean(source.wing || source.block || source.hostelResidence) || row.wing,
-        hostelResidence: clean(source.hostelResidence || source.wing || source.block) || row.hostelResidence,
+        hostelResidence: hostelForStudent(source) || row.hostelResidence,
         room: clean(source.room) || row.room,
         bed: clean(source.bed) || row.bed,
         phone: clean(source.phone) || row.phone,
@@ -109,14 +103,7 @@ export function useStudentDirectory() {
         merged.id = row.accountUid;
       }
 
-      // Use hostel block configuration to classify old roster entries that
-      // carry a Boys/Girls wing but no gender field.
-      if (!merged.gender) {
-        const type = blockTypeByName.get(merged.wing.toLowerCase()) || blockTypeByName.get(merged.hostelResidence.toLowerCase());
-        if (type === "Boys") merged.gender = "Male";
-        else if (type === "Girls") merged.gender = "Female";
-      }
-      merged.hostelType = hostelForStudent(merged, data.blocks);
+      merged.hostelType = hostelForStudent(merged);
 
       if (row.id !== merged.id) rows.delete(row.id);
       rows.set(merged.id, merged);
@@ -132,8 +119,7 @@ export function useStudentDirectory() {
     registerRecords.forEach((record) => addSource(record, "register"));
 
     // This shared directory is for hostel operations; an Auth account by
-    // itself is not a resident until the roster/allocation assigns a hostel,
-    // block or room.
+    // itself is not a resident until the roster/allocation assigns a hostel or room.
     const toMillis = (value) => {
       if (value?.toDate) return value.toDate().getTime();
       const parsed = value ? Date.parse(value) : NaN;
@@ -142,7 +128,7 @@ export function useStudentDirectory() {
     return [...rows.values()]
       .filter(isHostelResident)
       .sort((a, b) => toMillis(b.createdAt || b.registeredAt || b.registrationDate) - toMillis(a.createdAt || a.registeredAt || a.registrationDate) || a.name.localeCompare(b.name));
-  }, [data.users, data.students, data.registerByWing, data.registerByResidence, data.registerByBlock, data.blocks]);
+  }, [data.users, data.students, data.register]);
 
   return { directory, loading, error };
 }

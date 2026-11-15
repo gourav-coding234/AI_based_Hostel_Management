@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
-import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button, StatCard } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
@@ -19,28 +19,24 @@ const statusFilters = ["All Statuses", "Pending", "Approved", "Out", "Rejected",
 export default function GatePasses() {
   const { data, loading } = useCollections({
     passes: { name: "gatePasses", options: { orderByField: "from" } },
-    blocks: { name: "blocks" },
   }, { live: true, cacheMs: 0 });
   const passes = data.passes;
-  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
 
-  const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
     return passes.filter((p) => {
-      const blockOk = blockFilter === "All Blocks" || p.block === blockFilter;
       const statusOk = statusFilter === "All Statuses" || passStatus(p) === statusFilter;
-      return blockOk && statusOk;
+      return statusOk;
     });
-  }, [passes, blockFilter, statusFilter]);
+  }, [passes, statusFilter]);
 
   const pendingCount = passes.filter((p) => p.status === "Pending").length;
   const outCount = passes.filter(isPassOut).length;
 
   const gatePassCsvHeaders = [
     { label: "Student", value: (p) => p.studentName },
-    { label: "Block", value: (p) => p.block },
+    { label: "Hostel", value: (p) => p.hostel },
     { label: "Room", value: (p) => p.room },
     { label: "Type", value: (p) => p.type },
     { label: "Reason", value: (p) => p.reason },
@@ -62,7 +58,7 @@ export default function GatePasses() {
       render: (p) => (
         <>
           <p className="font-medium text-ink">{p.studentName}</p>
-          <p className="text-xs text-slate-400">{p.block || "—"}, {p.room || "—"}</p>
+          <p className="text-xs text-slate-400">{p.hostel || "—"}, Room {p.room || "—"}</p>
         </>
       ),
     },
@@ -108,9 +104,6 @@ export default function GatePasses() {
       <Card title="All gate passes">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
             <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -124,7 +117,7 @@ export default function GatePasses() {
           columns={columns}
           rows={filtered}
           loading={loading}
-          searchKeys={["studentName", "type", "block", "room"]}
+          searchKeys={["studentName", "type", "hostel", "room"]}
           searchPlaceholder="Search gate passes…"
           emptyTitle="No gate passes yet"
           emptyDescription="Requests submitted by students will show up here."

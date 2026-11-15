@@ -24,15 +24,14 @@ export default function Reports() {
     students: { name: "students" },
     studentRegister: { name: "studentRegister" },
     fees: { name: "fees" },
-    blocks: { name: "blocks" },
     complaints: { name: "complaints" },
     expenses: { name: "expenses" },
   });
 
   const reports = [
-    { id: "RPT-STU", name: "Student directory", description: "Full list of residents with room, block and contact details.", rows: data.students },
+    { id: "RPT-STU", name: "Student directory", description: "Full list of residents with hostel, room and contact details.", rows: data.students },
     { id: "RPT-FEE", name: "Fee collection summary", description: "Per-student dues, collections and outstanding balances.", rows: data.fees },
-    { id: "RPT-OCC", name: "Occupancy report", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister, data.blocks) },
+    { id: "RPT-OCC", name: "Occupancy report", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister) },
     { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed institute-wide with current status.", rows: data.complaints },
     { id: "RPT-EXP", name: "Hostel expenses", description: "Recorded expenses with category, date, and payment method.", rows: data.expenses },
   ];
@@ -70,7 +69,7 @@ export default function Reports() {
         ))}
       </div>
 
-      {!loading && data.students.length === 0 && data.fees.length === 0 && data.blocks.length === 0 && data.complaints.length === 0 && data.expenses.length === 0 && (
+      {!loading && data.students.length === 0 && data.fees.length === 0 && data.complaints.length === 0 && data.expenses.length === 0 && (
         <EmptyState icon={<ChartIcon />} title="No data to export yet" description="Once records exist in the database, they'll be downloadable here." />
       )}
     </div>

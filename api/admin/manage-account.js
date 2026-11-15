@@ -12,6 +12,12 @@ function services() {
 }
 
 const respond = (res, status, body) => res.status(status).json(body);
+const normalizeHostel = (value) => {
+  const text = String(value || "").trim().toLowerCase();
+  if (text.includes("girl") || text.includes("female")) return "Girls Hostel";
+  if (text.includes("boy") || text.includes("male")) return "Boys Hostel";
+  return "";
+};
 
 export default async function manageAccount(req, res) {
   if (req.method !== "POST") return respond(res, 405, { message: "Method not allowed." });
@@ -35,6 +41,8 @@ export default async function manageAccount(req, res) {
       if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return respond(res, 400, { message: "Enter a name and valid email address." });
       if (password.length < 6 || password.length > 128) return respond(res, 400, { message: "Password must be between 6 and 128 characters." });
       const linkedStudentId = String(req.body.linkedStudentId || "").trim();
+      const assignedHostel = normalizeHostel(req.body.hostel || req.body.hostelResidence);
+      if (role === "Warden" && !assignedHostel) return respond(res, 400, { message: "Choose Boys Hostel or Girls Hostel for this warden." });
       if (role === "Parent") {
         if (!linkedStudentId) return respond(res, 400, { message: "Select the student's account for this parent." });
         if (!(await db.collection("students").doc(linkedStudentId).get()).exists) return respond(res, 400, { message: "The selected student profile was not found." });
@@ -89,6 +97,7 @@ export default async function manageAccount(req, res) {
         name, email, role, status: "Active", hostelResidence: String(req.body.hostelResidence || "").trim(),
         createdAt: FieldValue.serverTimestamp(), createdBy: caller.uid,
       };
+      if (role === "Warden") Object.assign(profile, { hostel: assignedHostel, assignedHostel });
       if (role === "Parent") profile.linkedStudentId = linkedStudentId;
       if (role === "Student") Object.assign(profile, {
         studentCode: regNo, hostel: studentHostel, hostelType: studentHostel,

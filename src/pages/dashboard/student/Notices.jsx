@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill } from "../../../components/dashboard/student/ui";
 import { AsyncSection } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/student/icons";
-import { useCollection } from "../../../hooks/useCollection";
-import { noticeAppliesTo, noticeQueryTargets, hostelForNoticeProfile } from "../../../utils/notices";
+import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 
 export default function Notices() {
-  const { profile } = useAuth();
-  const noticesQuery = useCollection("notices", { where: [["target", "in", noticeQueryTargets(profile || {})]] });
-  const notices = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, hostelForNoticeProfile(profile)));
+  const noticesQuery = useAudienceNotices();
+  const notices = noticesQuery.data;
   const [openId, setOpenId] = useState(null);
 
   return (

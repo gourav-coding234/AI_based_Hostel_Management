@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
-import { Card, Pill, StatCard, Button, inputCls } from "../../../components/dashboard/student/ui";
+import { Card, Pill, StatCard, Button } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { EyeIcon, UsersIcon, QrIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
@@ -23,7 +23,7 @@ const columns = [
     render: (v) => (
       <>
         <p className="font-medium text-ink">{v.visitorName}</p>
-        <p className="text-xs text-slate-400">{v.block || "—"}</p>
+        <p className="text-xs text-slate-400">{v.hostel || "—"}</p>
       </>
     ),
   },
@@ -36,21 +36,17 @@ const columns = [
 export default function Visitors() {
   const { data, loading } = useCollections({
     visitors: { name: "visitors", options: { orderByField: "inTimeSort" } },
-    blocks: { name: "blocks" },
   });
   const visitors = data.visitors.map((v) => ({ ...v, status: v.outTime ? "Checked out" : "On premises" }));
-  const blockFilters = ["All Blocks", ...data.blocks.map((b) => b.name)];
 
-  const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const filtered = useMemo(() => {
     return visitors.filter((v) => {
-      const blockOk = blockFilter === "All Blocks" || v.block === blockFilter;
       const statusOk = statusFilter === "All Statuses" || v.status === statusFilter;
-      return blockOk && statusOk;
+      return statusOk;
     });
-  }, [visitors, blockFilter, statusFilter]);
+  }, [visitors, statusFilter]);
 
   const onPremises = visitors.filter((v) => v.status === "On premises").length;
 
@@ -58,7 +54,7 @@ export default function Visitors() {
     { label: "Visitor Name", value: (v) => v.visitorName },
     { label: "Purpose", value: (v) => v.purpose },
     { label: "ID Proof", value: (v) => v.idProof },
-    { label: "Block", value: (v) => v.block },
+    { label: "Hostel", value: (v) => v.hostel },
     { label: "Student/Host", value: (v) => v.hostName || v.studentName },
     { label: "In Time", value: (v) => v.inTime },
     { label: "Out Time", value: (v) => v.outTime },
@@ -84,7 +80,7 @@ export default function Visitors() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={<UsersIcon />} label="On premises now" value={onPremises} sub="Across all blocks" tone={onPremises > 0 ? "amber" : "teal"} />
+        <StatCard icon={<UsersIcon />} label="On premises now" value={onPremises} sub="Across the hostels" tone={onPremises > 0 ? "amber" : "teal"} />
         <StatCard icon={<EyeIcon />} label="Logged total" value={visitors.length} sub="Visitor check-ins recorded" tone="navy" />
         <StatCard icon={<QrIcon />} label="QR passes issued" value={visitors.length} sub="One per registered visitor" tone="teal" />
       </div>
@@ -92,9 +88,6 @@ export default function Visitors() {
       <Card title="Visitor log">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
             <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -108,7 +101,7 @@ export default function Visitors() {
           columns={columns}
           rows={filtered}
           loading={loading}
-          searchKeys={["visitorName", "purpose", "block"]}
+          searchKeys={["visitorName", "purpose", "hostel"]}
           searchPlaceholder="Search visitors…"
           emptyTitle="No visitors logged yet"
           emptyDescription="Visitor check-ins logged by security will show up here."

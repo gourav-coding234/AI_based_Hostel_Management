@@ -3,19 +3,6 @@
 // and the "expected columns" hint shown in the upload UI.
 
 export const IMPORT_SCHEMAS = {
-  blocks: {
-    dedupeKeys: ["name", "type"],
-    label: "Hostel blocks",
-    collection: "blocks",
-    description: "One row per hostel block/wing (A, B and C for Boys Hostel; A and B for Girls Hostel). Include hostel type because block letters can repeat.",
-    columns: [
-      { key: "name", label: "Block name", required: true, type: "string" },
-      { key: "type", label: "Hostel type (Boys/Girls)", required: false, type: "enum", enumValues: ["Boys", "Girls"] },
-      { key: "totalRooms", label: "Total rooms", required: false, type: "number" },
-      { key: "totalBeds", label: "Total beds", required: true, type: "number" },
-      { key: "occupiedBeds", label: "Occupied beds", required: false, type: "number" },
-    ],
-  },
   students: {
     dedupeKeys: ["email"],
     label: "Student roster (room/bed)",
@@ -24,8 +11,7 @@ export const IMPORT_SCHEMAS = {
     columns: [
       { key: "email", label: "Student's account email", required: true, type: "email" },
       { key: "name", label: "Name", required: true, type: "string" },
-      { key: "hostelResidence", label: "Block", required: false, type: "string" },
-      { key: "wing", label: "Wing", required: false, type: "string" },
+      { key: "hostel", label: "Hostel (Boys Hostel/Girls Hostel)", required: false, type: "string" },
       { key: "floor", label: "Floor", required: false, type: "string" },
       { key: "room", label: "Room", required: false, type: "string" },
       { key: "bed", label: "Bed", required: false, type: "string" },
@@ -40,7 +26,6 @@ export const IMPORT_SCHEMAS = {
     columns: [
       { key: "studentId", label: "Student ID", required: true, type: "string" },
       { key: "studentName", label: "Student name", required: true, type: "string" },
-      { key: "block", label: "Block", required: false, type: "string" },
       { key: "hostel", label: "Hostel (Boys Hostel/Girls Hostel)", required: false, type: "string" },
       { key: "room", label: "Room", required: false, type: "string" },
       { key: "total", label: "Total amount", required: true, type: "number" },
@@ -96,8 +81,6 @@ export const IMPORT_SCHEMAS = {
       { key: "type", label: "Type", required: true, type: "string" },
       { key: "from", label: "From", required: false, type: "date" },
       { key: "to", label: "To", required: false, type: "date" },
-      { key: "block", label: "Block", required: false, type: "string" },
-      { key: "wing", label: "Wing", required: false, type: "string" },
       { key: "status", label: "Status", required: false, type: "enum", enumValues: ["Pending", "Approved", "Rejected"] },
     ],
   },
@@ -107,7 +90,6 @@ export const IMPORT_SCHEMAS = {
     collection: "visitors",
     columns: [
       { key: "visitorName", label: "Visitor name", required: true, type: "string" },
-      { key: "block", label: "Block", required: false, type: "string" },
       { key: "studentId", label: "Student ID (host)", required: false, type: "string" },
       { key: "studentName", label: "Student name (host)", required: false, type: "string" },
       { key: "purpose", label: "Purpose", required: false, type: "string" },
@@ -137,8 +119,6 @@ export const IMPORT_SCHEMAS = {
       { key: "type", label: "Leave type", required: false, type: "string" },
       { key: "from", label: "From", required: false, type: "date" },
       { key: "to", label: "To", required: false, type: "date" },
-      { key: "block", label: "Block", required: false, type: "string" },
-      { key: "wing", label: "Wing", required: false, type: "string" },
       { key: "status", label: "Status", required: false, type: "enum", enumValues: ["Pending", "Approved", "Rejected"] },
     ],
   },
@@ -207,8 +187,7 @@ export const IMPORT_SCHEMAS = {
       { key: "admissionYear", label: "Admission year", required: false, type: "number" },
       { key: "email", label: "Email", required: false, type: "email" },
       { key: "phone", label: "Phone", required: false, type: "string" },
-      { key: "hostelResidence", label: "Hostel block (hostel residents only)", required: false, type: "string" },
-      { key: "wing", label: "Wing / block", required: false, type: "string" },
+      { key: "hostel", label: "Hostel (Boys Hostel/Girls Hostel)", required: false, type: "string" },
       { key: "room", label: "Room", required: false, type: "string" },
       { key: "bed", label: "Bed", required: false, type: "string" },
     ],

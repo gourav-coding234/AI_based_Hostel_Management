@@ -200,7 +200,7 @@ export default function DataTable({
             setPage(1);
           }}
           placeholder={searchPlaceholder}
-          className="w-full max-w-xs rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-ink placeholder:text-slate-400 shadow-sm shadow-slate-100 transition-colors focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
+          className="panel-search-input w-full max-w-xs rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-ink placeholder:text-slate-400 shadow-sm shadow-slate-100 transition-colors focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-400/20"
         />
       )}
 

@@ -8,31 +8,22 @@ export function normalizeHostel(value) {
   return "";
 }
 
-export function hostelForBlock(value, blocks = [], preferredHostel = "") {
-  const name = String(value || "").trim();
-  if (!name) return "";
-  const matches = blocks.filter((block) => String(block.name || "").trim().toLowerCase() === name.toLowerCase());
-  const preferred = normalizeHostel(preferredHostel);
-  const configured = (preferred && matches.find((block) => normalizeHostel(block.type) === preferred)) || (matches.length === 1 ? matches[0] : null);
-  const configuredType = normalizeHostel(configured?.type);
-  if (configuredType) return configuredType;
-  // Block letters can repeat between hostels. Never guess an assignment from
-  // the letter alone; use the block's configured type or the student's hostel.
-  return "";
+export function hostelForBlock(_value, _blocks = [], preferredHostel = "") {
+  // Compatibility shim for old records: legacy location labels never identify
+  // a hostel. Only an explicit canonical hostel value is safe to use.
+  return normalizeHostel(preferredHostel);
 }
 
-export function hostelForStudent(student, blocks = []) {
+export function hostelForStudent(student, _blocks = []) {
   return normalizeHostel(student?.hostel) ||
     normalizeHostel(student?.hostelType) ||
     normalizeHostel(student?.gender) ||
-    normalizeHostel(student?.hostelResidence) ||
-    hostelForBlock(student?.wing || student?.hostelResidence || student?.block, blocks);
+    normalizeHostel(student?.hostelResidence);
 }
 
-export function wardenHostel(profile, blocks = []) {
+export function wardenHostel(profile, _blocks = []) {
   return normalizeHostel(profile?.hostel) || normalizeHostel(profile?.hostelResidence) ||
-    normalizeHostel(profile?.hostelType) || normalizeHostel(profile?.assignedHostel) ||
-    hostelForBlock(profile?.block, blocks);
+    normalizeHostel(profile?.hostelType) || normalizeHostel(profile?.assignedHostel);
 }
 
 export function studentMatchesHostel(student, hostel, blocks = []) {

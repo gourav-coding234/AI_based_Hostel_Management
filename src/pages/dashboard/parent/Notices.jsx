@@ -4,10 +4,9 @@ import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
 import { AsyncSection } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
-import { useCollection } from "../../../hooks/useCollection";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useParentNotifications } from "../../../hooks/useParentNotifications";
-import { noticeAppliesTo, noticeQueryTargets, hostelForNoticeProfile } from "../../../utils/notices";
+import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 import { inr, notificationToNotice } from "./parentData";
 
 // `date` is normally a "YYYY-MM-DD" string, but imported/older records may hold
@@ -46,11 +45,9 @@ function compareNotices(a, b) {
 // controls. Admin and Warden manage the shared `notices` collection.
 export default function ParentNotices() {
   const linked = useLinkedStudent();
-  const { studentUser } = linked;
   // No orderBy on the query: Firestore silently drops documents that lack the
   // ordered field, which would hide notices with a missing date. Sorted below.
-  const noticeProfile = { ...(studentUser || {}), ...(linked.studentRecord || {}) };
-  const noticesQuery = useCollection("notices", { where: [["target", "in", noticeQueryTargets(noticeProfile)]] });
+  const noticesQuery = useAudienceNotices(!linked.loading && !linked.notLinked && !linked.notFound && !linked.error);
   // Messages sent by the warden to THIS parent account only (fee reminders,
   // leave decisions) — shown in the same list, same card style. Rules
   // restrict this query to notifications addressed to the signed-in parent.
@@ -61,7 +58,7 @@ export default function ParentNotices() {
 
   const filteredNotices = [
     ...notifications.data.map(notificationToNotice),
-    ...noticesQuery.data.filter((n) => noticeAppliesTo(n.target, hostelForNoticeProfile(noticeProfile))),
+    ...noticesQuery.data,
   ].sort(compareNotices);
 
   return (

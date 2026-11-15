@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
+import { normalizeHostel } from "../../../utils/hostels";
 import { updateUserProfile } from "../../../firebase/firestore";
 import { Card, Pill, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
 import { UserIcon } from "../../../components/dashboard/student/icons";
@@ -76,7 +77,7 @@ export default function Profile() {
 
       <Card title="Edit your profile">
         <p className="-mt-2 mb-4 text-sm text-slate-500">
-          Only you can see and change these details. Your email, role and hostel block are managed by the warden/admin office.
+          Only you can see and change these details. Your email, role and hostel are managed by the warden/admin office.
         </p>
 
         <form onSubmit={handleSave} className="space-y-4">
@@ -181,8 +182,8 @@ export default function Profile() {
             <p className="mt-1 text-sm text-ink">{profile?.role || "—"}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hostel block</p>
-            <p className="mt-1 text-sm text-ink">{profile?.hostelResidence || "Not assigned yet"}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Hostel</p>
+            <p className="mt-1 text-sm text-ink">{normalizeHostel(profile?.hostel || profile?.hostelType || profile?.gender) || "Not assigned yet"}</p>
           </div>
         </div>
         <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
