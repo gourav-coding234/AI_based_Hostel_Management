@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, ProgressBar, Field, inputCls } from "../../../components/dashboard/student/ui";
@@ -25,6 +25,10 @@ export default function WardenFees() {
   // contain several blocks (A+B or C). The rules restrict reads to staff;
   // the UI still scopes every displayed row before rendering.
   const feesQuery = useCollection("fees", { skip: authLoading });
+  const paymentsQuery = useCollection("payments", {
+    where: [["hostel", "==", myHostel]], orderByField: "createdAt", limitCount: 100,
+    skip: authLoading || !myHostel,
+  });
   const { directory } = useStudentDirectory();
   const studentByAnyId = useMemo(() => {
     const map = new Map();
@@ -33,12 +37,12 @@ export default function WardenFees() {
   }, [directory]);
   const registrationByStudent = useMemo(() => new Map(directory.map((student) => [student.id, student.regNo || ""])), [directory]);
 
-  function resolveFeeHostel(fee) {
+  const resolveFeeHostel = useCallback((fee) => {
     const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
     return normalizeHostel(fee.hostel || fee.hostelType) ||
       hostelForStudent(student) ||
       hostelForBlock(fee.block, [], fee.hostel || fee.hostelType);
-  }
+  }, [studentByAnyId]);
 
   function feeLocationLabel(fee) {
     const hostel = fee.resolvedHostel || resolveFeeHostel(fee);
@@ -53,7 +57,6 @@ export default function WardenFees() {
   const studentFees = useMemo(() => {
     const scoped = feesQuery.data.filter((fee) => {
       if (!myHostel) return true;
-      const student = studentByAnyId.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
       return resolveFeeHostel(fee) === myHostel;
     });
     return scoped.map((f) => {
@@ -61,7 +64,7 @@ export default function WardenFees() {
       const paid = Math.max(Number(f.paid) || 0, 0);
       return { ...f, resolvedHostel: resolveFeeHostel(f), registrationNo: f.registrationNo || registrationByStudent.get(f.studentId) || "", total, paid, pending: Math.max(total - paid, 0), status: computeFeeStatus(f) };
     });
-  }, [feesQuery.data, myHostel, studentByAnyId, registrationByStudent]);
+  }, [feesQuery.data, myHostel, registrationByStudent, resolveFeeHostel]);
 
   const [filter, setFilter] = useState("All");
 
@@ -72,27 +75,27 @@ export default function WardenFees() {
 
   // --- Payment update -------------------------------------------------
   const [payingId, setPayingId] = useState(null);
-  const [payAmount, setPayAmount] = useState("");
+  const [payDetails, setPayDetails] = useState({ amount: "", paymentDate: new Date().toISOString().slice(0, 10), paymentMethod: "Cash", transactionId: "", remarks: "", paymentId: "" });
   const [payError, setPayError] = useState("");
   const [paySaving, setPaySaving] = useState(false);
   const payingFee = studentFees.find((f) => f.id === payingId);
 
   function startPayment(f) {
     setPayingId(f.id);
-    setPayAmount("");
+    setPayDetails({ amount: "", paymentDate: new Date().toISOString().slice(0, 10), paymentMethod: "Cash", transactionId: "", remarks: "", paymentId: crypto.randomUUID() });
     setPayError("");
   }
 
   function cancelPayment() {
     setPayingId(null);
-    setPayAmount("");
+    setPayDetails({ amount: "", paymentDate: new Date().toISOString().slice(0, 10), paymentMethod: "Cash", transactionId: "", remarks: "", paymentId: "" });
     setPayError("");
   }
 
   async function savePayment(e) {
     e.preventDefault();
     if (paySaving || !payingFee) return;
-    const amount = Number(payAmount);
+    const amount = Number(payDetails.amount);
     if (!(amount > 0) || amount > payingFee.pending) {
       setPayError(`Enter an amount between ₹1 and ${inr(payingFee.pending)}.`);
       return;
@@ -100,10 +103,9 @@ export default function WardenFees() {
     setPaySaving(true);
     setPayError("");
     try {
-      // Updates the existing fees/{id} document in a transaction — paid,
-      // status and updatedAt are recomputed from its current values;
-      // no new fee record is ever created.
-      await recordFeePayment(payingFee.id, amount, staffName);
+      await recordFeePayment(payingFee.id, amount, staffName, "Warden", {
+        ...payDetails, actorUid: user?.uid,
+      });
       logAudit({
         actor: staffName,
         action: "Recorded fee payment",
@@ -256,10 +258,16 @@ export default function WardenFees() {
                 min="1"
                 max={payingFee.pending}
                 className={`${inputCls} sm:w-56`}
-                value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
+                value={payDetails.amount}
+                onChange={(e) => setPayDetails((current) => ({ ...current, amount: e.target.value }))}
               />
             </Field>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Payment date"><input type="date" className={inputCls} value={payDetails.paymentDate} onChange={(e) => setPayDetails((current) => ({ ...current, paymentDate: e.target.value }))} required /></Field>
+              <Field label="Payment method"><select className={inputCls} value={payDetails.paymentMethod} onChange={(e) => setPayDetails((current) => ({ ...current, paymentMethod: e.target.value }))}><option>Cash</option><option>UPI</option><option>Bank transfer</option><option>Cheque</option><option>Other</option></select></Field>
+              <Field label="Transaction / reference ID"><input className={inputCls} value={payDetails.transactionId} onChange={(e) => setPayDetails((current) => ({ ...current, transactionId: e.target.value }))} maxLength={100} /></Field>
+              <Field label="Remarks"><input className={inputCls} value={payDetails.remarks} onChange={(e) => setPayDetails((current) => ({ ...current, remarks: e.target.value }))} maxLength={300} /></Field>
+            </div>
             {payError && <p className="text-sm text-rose-600">{payError}</p>}
             <div className="flex gap-2">
               <Button type="submit" disabled={paySaving}>{paySaving ? "Saving…" : "Save payment"}</Button>
@@ -330,6 +338,25 @@ export default function WardenFees() {
           emptyIcon={<WalletIcon />}
           pageSize={10}
           rowActions={(f) => (f.status === "Paid" ? [] : [{ label: "Record payment", onClick: () => startPayment(f) }])}
+        />
+      </Card>
+
+      <Card title="Recent payment history" subtitle="Payment entries are stored separately from the balance and remain visible to the student and linked parent.">
+        <DataTable
+          columns={[
+            { key: "studentName", label: "Student", sortable: true },
+            { key: "amount", label: "Amount", sortable: true, render: (payment) => inr(payment.amount) },
+            { key: "paymentDate", label: "Date" },
+            { key: "paymentMethod", label: "Method" },
+            { key: "transactionId", label: "Reference", render: (payment) => payment.transactionId || "—" },
+            { key: "receivedBy", label: "Received by" },
+          ]}
+          rows={paymentsQuery.data}
+          loading={paymentsQuery.loading}
+          error={paymentsQuery.error}
+          searchable={false}
+          emptyTitle="No payments recorded yet"
+          pageSize={10}
         />
       </Card>
     </div>

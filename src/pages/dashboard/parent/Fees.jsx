@@ -14,7 +14,8 @@ export default function ParentFees() {
   // Fee records are one document per billing period, with `total`/`paid`
   // set directly on each doc — matching the admin/warden Fees pages and
   // the CSV import schema, not a separate list of payment line-items.
-  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate" });
+  const fees = useStudentCollection("fees", linkedStudentId, { orderByField: "dueDate", live: true });
+  const payments = useStudentCollection("payments", linkedStudentId, { orderByField: "createdAt", live: true });
 
   if (linked.loading || linked.notLinked || linked.notFound || linked.error) return <LinkedStudentStatus {...linked} />;
 
@@ -126,6 +127,11 @@ export default function ParentFees() {
         <p className="mt-4 text-xs text-slate-400">
           Fees are recorded by the hostel office. This view is read-only; please clear any balance at the hostel office.
         </p>
+      </Card>
+      <Card title="Payment history">
+        {payments.loading ? <PortalLoader label="Loading payment history…" /> : payments.error ? <ErrorState message={payments.error} /> : payments.items.length === 0 ? <EmptyState icon={<WalletIcon />} title="No payments recorded yet" description="Payments recorded by the hostel office will appear here." /> : (
+          <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="text-xs uppercase tracking-wide text-slate-400"><th className="pb-2 font-medium">Date</th><th className="pb-2 font-medium">Amount</th><th className="pb-2 font-medium">Method</th><th className="pb-2 font-medium">Reference</th><th className="pb-2 pr-0 font-medium">Received by</th></tr></thead><tbody className="divide-y divide-slate-100">{payments.items.map((payment) => <tr key={payment.id}><td className="py-2.5">{payment.paymentDate || payment.createdAt?.toDate?.().toLocaleDateString("en-IN") || "—"}</td><td className="py-2.5 font-medium text-ink">{inr(payment.amount)}</td><td className="py-2.5">{payment.paymentMethod || "—"}</td><td className="py-2.5">{payment.transactionId || "—"}</td><td className="py-2.5 pr-0">{payment.receivedBy || "—"}</td></tr>)}</tbody></table></div>
+        )}
       </Card>
     </div>
   );

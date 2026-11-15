@@ -171,6 +171,7 @@ export default function SecurityOverview() {
           value={stats.currentlyOut}
           sub={stats.overdue > 0 ? `${stats.overdue} past their return time` : "Gate pass or approved leave"}
           tone="amber"
+          to="/dashboard/security/gate-desk"
         />
         <StatCard
           icon={<ScanIcon />}
@@ -178,6 +179,7 @@ export default function SecurityOverview() {
           value={stats.activePasses}
           sub="Approved, valid and not yet returned"
           tone="navy"
+          to="/dashboard/security/gate-desk"
         />
         <StatCard
           icon={<UserPlusIcon />}
@@ -185,6 +187,7 @@ export default function SecurityOverview() {
           value={stats.inside}
           sub={stats.insideFromEarlier > 0 ? `${stats.insideFromEarlier} not checked out from earlier days` : "Checked in, not yet out"}
           tone="teal"
+          to="/dashboard/security/visitors"
         />
         <StatCard
           icon={<SirenIcon />}
@@ -192,19 +195,21 @@ export default function SecurityOverview() {
           value={stats.openIncidents}
           sub={stats.openHigh > 0 ? `${stats.openHigh} high severity · ${incidents.length} logged total` : `${incidents.length} logged total`}
           tone="rose"
+          to="/dashboard/security/incidents"
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard icon={<ListIcon />} label="Visitors today" value={stats.visitorsToday} sub={`${visitors.length} in the visitor log`} tone="teal" />
+        <StatCard icon={<ListIcon />} label="Visitors today" value={stats.visitorsToday} sub={`${visitors.length} in the visitor log`} tone="teal" to="/dashboard/security/visitors" />
         <StatCard
           icon={<CheckSquareIcon />}
           label="Attendance records today"
           value={stats.marked}
           sub={stats.marked === 0 ? "Not taken yet today" : `${stats.present} present · ${stats.absent} absent · ${stats.leave} leave`}
           tone="navy"
+          to="/dashboard/security/attendance"
         />
-        <StatCard icon={<CalendarClockIcon />} label="Students on leave today" value={stats.leave} sub="Marked Leave in today's attendance" tone="amber" />
+        <StatCard icon={<CalendarClockIcon />} label="Students on leave today" value={stats.leave} sub="Approved leave departures and returns" tone="amber" to="/dashboard/security/leave-exit" />
       </div>
 
       <Card title="Today's attendance" subtitle={`Same records the Warden and Security attendance pages use · ${attendanceDate}`}>

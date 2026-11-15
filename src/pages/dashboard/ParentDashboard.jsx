@@ -7,6 +7,8 @@ const Profile = lazy(() => import("./parent/Profile"));
 const Attendance = lazy(() => import("./parent/Attendance"));
 const Fees = lazy(() => import("./parent/Fees"));
 const GatePass = lazy(() => import("./parent/GatePass"));
+const Leave = lazy(() => import("./parent/Leave"));
+const Complaints = lazy(() => import("./parent/Complaints"));
 const Notices = lazy(() => import("./parent/Notices"));
 const EmergencyContacts = lazy(() => import("./parent/EmergencyContacts"));
 
@@ -19,6 +21,8 @@ export default function ParentDashboard() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<Fees />} />
         <Route path="gate-pass" element={<GatePass />} />
+        <Route path="leave" element={<Leave />} />
+        <Route path="complaints" element={<Complaints />} />
         <Route path="notices" element={<Notices />} />
         <Route path="emergency" element={<EmergencyContacts />} />
       </Routes>

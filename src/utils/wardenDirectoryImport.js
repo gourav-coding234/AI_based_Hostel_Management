@@ -14,7 +14,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Room/bed labels in this app look like "B-204" or "12" — letters, digits,
 // spaces and a hyphen/slash, nothing that could be a formula or garbage.
 const ROOM_RE = /^[A-Za-z0-9][A-Za-z0-9 /-]{0,19}$/;
-const BED_RE = /^[A-Za-z0-9][A-Za-z0-9\-]{0,9}$/;
+const BED_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,9}$/;
 
 /**
  * Validates one already-parsed row against the live roster (`directory`,

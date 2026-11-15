@@ -16,6 +16,7 @@ import {
 import { useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
 import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
+import { mergeHostelResidents } from "../../../utils/hostelResidents";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -30,6 +31,7 @@ export default function WardenOverview() {
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students", options: { limitCount: 100 } },
+    studentRegister: { name: "studentRegister", options: { limitCount: 100 } },
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees", options: { limitCount: 100 } },
     attendance: { name: "attendance", options: { where: [["date", "==", today]], limitCount: 500 } },
@@ -57,7 +59,8 @@ export default function WardenOverview() {
   const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
   // ---- Residents (students model supports block/wing, so scope it) ----
-  const myStudents = data.students.filter((s) => studentMatchesHostel(s, myHostel, data.blocks));
+  const myStudents = mergeHostelResidents(data.students, data.studentRegister)
+    .filter((s) => studentMatchesHostel(s, myHostel, data.blocks));
 
   // ---- Attendance (scoped via each student's wing — the attendance
   // record itself only carries studentId/date/status) ----
@@ -143,17 +146,17 @@ export default function WardenOverview() {
       {overviewError && <ErrorState message={overviewError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myHostel || "Across both hostels"} tone="navy" />
-        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : myHostel ? `No capacity data for ${myHostel}` : "No hostel assigned"} tone="teal" />
-        <StatCard icon={<CheckSquareIcon />} label="Attendance today" value={loading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`} sub={markedToday ? `${presentToday}/${markedToday} present` : "Not marked yet"} tone={attendancePct !== null && attendancePct < 75 ? "rose" : "teal"} />
-        <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalOutstanding)} pending` : "No fee records yet"} tone="amber" />
+        <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myHostel || "Across both hostels"} tone="navy" to="/dashboard/warden/directory" />
+        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : myHostel ? `No capacity data for ${myHostel}` : "No hostel assigned"} tone="teal" to="/dashboard/warden/directory" />
+        <StatCard icon={<CheckSquareIcon />} label="Attendance today" value={loading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`} sub={markedToday ? `${presentToday}/${markedToday} present` : "Not marked yet"} tone={attendancePct !== null && attendancePct < 75 ? "rose" : "teal"} to="/dashboard/warden/attendance" />
+        <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalOutstanding)} pending` : "No fee records yet"} tone="amber" to="/dashboard/warden/fees" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${myGatePasses.length} total · ${studentsOut} students out`} tone={pendingGatePasses > 0 ? "amber" : "teal"} />
-        <StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeave} sub={`${myLeaveRequests.length} total`} tone={pendingLeave > 0 ? "amber" : "teal"} />
-        <StatCard icon={<WrenchIcon />} label="Open complaints" value={loading ? "…" : openComplaints} sub={`${complaints.length} total filed`} tone={openComplaints > 0 ? "rose" : "teal"} />
-        <StatCard icon={<PackageIcon />} label="Pending inventory requests" value={loading ? "…" : pendingInventoryRequests} sub={`${data.inventoryRequests.length} total`} tone={pendingInventoryRequests > 0 ? "amber" : "teal"} />
+        <StatCard icon={<QrIcon />} label="Pending gate passes" value={loading ? "…" : pendingGatePasses} sub={`${myGatePasses.length} total · ${studentsOut} students out`} tone={pendingGatePasses > 0 ? "amber" : "teal"} to="/dashboard/warden/gate-passes" />
+        <StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeave} sub={`${myLeaveRequests.length} total`} tone={pendingLeave > 0 ? "amber" : "teal"} to="/dashboard/warden/leave" />
+        <StatCard icon={<WrenchIcon />} label="Open complaints" value={loading ? "…" : openComplaints} sub={`${complaints.length} total filed`} tone={openComplaints > 0 ? "rose" : "teal"} to="/dashboard/warden/complaints" />
+        <StatCard icon={<PackageIcon />} label="Pending inventory requests" value={loading ? "…" : pendingInventoryRequests} sub={`${data.inventoryRequests.length} total`} tone={pendingInventoryRequests > 0 ? "amber" : "teal"} to="/dashboard/warden/inventory" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

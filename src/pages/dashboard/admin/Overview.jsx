@@ -17,6 +17,8 @@ import {
   MegaphoneIcon,
 } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { mergeHostelResidents, mergeRegisteredStudents, residentBlockName } from "../../../utils/hostelResidents";
+import { hostelForStudent } from "../../../utils/hostels";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -31,18 +33,16 @@ function tsToDate(ts) {
 export default function AdminOverview() {
   const { profile, user } = useAuth();
   const displayName = profile?.name || user?.email?.split("@")[0] || "Admin";
+  const todayKey = new Date().toISOString().slice(0, 10);
 
   // Keep the overview a lightweight snapshot: cap activity lists and reuse
   // the result briefly instead of holding listeners open on every register.
   const { data, loading: snapshotLoading, error: overviewError } = useCollections({
     blocks: { name: "blocks" },
-    // The academic register includes enrolled students who do not yet have a
-    // hostel allocation; `students` below is only the resident/allocation list.
     studentRegister: { name: "studentRegister" },
-    studentAccounts: { name: "users", options: { where: [["role", "==", "Student"]], limitCount: 100 } },
     students: { name: "students" },
-    // Overview only needs the count; avoid role + orderBy composite index.
-    wardens: { name: "users", options: { where: [["role", "==", "Warden"]], limitCount: 100 } },
+    // Reuse the user list for account totals and the warden count.
+    users: { name: "users", options: { limitCount: 100 } },
     complaints: { name: "complaints", options: { orderByField: "date", limitCount: 100 } },
     fees: { name: "fees" },
     notices: { name: "notices", options: { orderByField: "date", limitCount: 5 } },
@@ -52,13 +52,38 @@ export default function AdminOverview() {
     feedback: { name: "feedback", options: { limitCount: 100 } },
     gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
     movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
+    attendanceToday: { name: "attendance", options: { where: [["date", "==", todayKey]], limitCount: 500 } },
   }, { live: false, maxDocs: 100, cacheMs: 60_000 });
 
-  const { blocks, studentRegister, studentAccounts, students, wardens, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut } = data;
-  // Prefer the full academic roster; fall back to student accounts on projects
-  // where an academic roster has not been imported yet. Hostel allocations are
-  // a separate count and must not be presented as total enrollment.
-  const totalStudents = studentRegister.length || studentAccounts.length;
+  const { blocks, studentRegister, students, users, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut, attendanceToday } = data;
+  // Count unique students from the academic register and resident profiles.
+  // A room assignment is tracked separately and must not make registered
+  // students disappear from the headline total.
+  const registeredStudents = useMemo(() => mergeRegisteredStudents(students, studentRegister), [students, studentRegister]);
+  const residents = useMemo(() => mergeHostelResidents(students, studentRegister), [students, studentRegister]);
+  const wardens = useMemo(() => users.filter((account) => account.role === "Warden"), [users]);
+  const totalStudents = registeredStudents.length;
+  const overviewBlocks = useMemo(() => {
+    const blockKey = (name, type) => `${String(name || "").trim().toLowerCase()}|${String(type || "").trim().toLowerCase()}`;
+    const result = new Map(blocks.map((block) => [blockKey(block.name, block.type), { ...block, residentCount: 0, recordedBeds: Number(block.occupiedBeds) || 0 }]));
+    const addReference = (record, isResident) => {
+      const name = residentBlockName(record);
+      if (!name || /^(boys|girls) hostel$/i.test(name)) return;
+      const hostel = hostelForStudent(record, blocks);
+      const type = hostel?.startsWith("Girls") ? "Girls" : hostel?.startsWith("Boys") ? "Boys" : "";
+      const key = blockKey(name, type);
+      const current = result.get(key) || { id: `assigned:${key}`, name, type, totalBeds: 0, totalRooms: 0, occupiedBeds: 0, inferred: true, residentCount: 0 };
+      if (isResident) current.residentCount += 1;
+      else if (Number.isFinite(Number(record.totalBeds))) current.totalBeds = Math.max(Number(current.totalBeds) || 0, Number(record.totalBeds));
+      result.set(key, current);
+    };
+    residents.forEach((resident) => addReference(resident, true));
+    // Fee imports retain their hostel and block labels. Include these
+    // Firestore references so real blocks remain visible when the legacy
+    // blocks collection has not yet been backfilled; capacities remain blank.
+    fees.forEach((fee) => addReference(fee, false));
+    return [...result.values()];
+  }, [blocks, residents, fees]);
   const loading = snapshotLoading;
   const studentsOut = movementsOut.length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
@@ -69,7 +94,11 @@ export default function AdminOverview() {
 
   // Occupancy
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const occupiedBeds = blocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
+  const occupiedBeds = blocks.reduce((sum, b) => {
+    const key = `${String(b.name || "").trim().toLowerCase()}|${String(b.type || "").trim().toLowerCase()}`;
+    const linked = overviewBlocks.find((entry) => `${String(entry.name || "").trim().toLowerCase()}|${String(entry.type || "").trim().toLowerCase()}` === key);
+    return sum + (linked?.residentCount || Number(b.occupiedBeds) || 0);
+  }, 0);
   const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
   // Fees
@@ -90,6 +119,10 @@ export default function AdminOverview() {
   // Leave requests
   const pendingLeaveRequests = leaveRequests.filter((r) => r.status === "Pending").length;
 
+  const attendanceCount = attendanceToday.length;
+  const presentToday = attendanceToday.filter((row) => row.status === "Present").length;
+  const attendancePct = attendanceCount ? Math.round((presentToday / attendanceCount) * 100) : null;
+
   // Visitors currently inside
   const visitorsInside = visitors.length;
 
@@ -101,19 +134,19 @@ export default function AdminOverview() {
       months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: d.toLocaleDateString("en-IN", { month: "short" }) });
     }
     const counts = Object.fromEntries(months.map((m) => [m.key, 0]));
-    students.forEach((s) => {
+    registeredStudents.forEach((s) => {
       const created = tsToDate(s.createdAt);
       if (!created) return;
       const key = `${created.getFullYear()}-${created.getMonth()}`;
       if (key in counts) counts[key] += 1;
     });
     // cumulative headcount up to each month, ending at current total
-    let running = students.length - months.reduce((sum, m) => sum + counts[m.key], 0);
+    let running = registeredStudents.length - months.reduce((sum, m) => sum + counts[m.key], 0);
     return months.map((m) => {
       running += counts[m.key];
       return { month: m.month, students: Math.max(running, 0) };
     });
-  }, [students]);
+  }, [registeredStudents]);
   const maxEnrollment = Math.max(1, ...enrollmentTrend.map((d) => d.students));
 
   return (
@@ -128,7 +161,7 @@ export default function AdminOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {totalStudents} students · {students.length} hostel residents · {blocks.length} blocks · {wardens.length} wardens
+              {totalStudents} registered students · {overviewBlocks.length} hostel blocks · {wardens.length} wardens
             </p>
           </div>
           <div className="flex gap-2">
@@ -150,10 +183,11 @@ export default function AdminOverview() {
       {overviewError && <ErrorState message={overviewError} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : totalStudents} sub={`${students.length} hostel residents · ${wardens.length} wardens`} tone="teal" /></Link>
-        <Link to="/dashboard/admin/data-import"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled · ${blocks.length} blocks` : `${blocks.length} blocks recorded · Add blocks in Data Import`} tone="navy" /></Link>
+        <Link to="/dashboard/admin/directory"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : totalStudents} sub="Unique students in the register and resident records" tone="teal" /></Link>
+        <Link to="/dashboard/admin/data-import#hostel-blocks"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled · ${overviewBlocks.length} blocks` : `${overviewBlocks.length} blocks · capacity ${overviewBlocks.length ? "not set" : "not recorded"}`} tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
         <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints in snapshot" value={openComplaints} sub={`${complaints.length} recent records loaded`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
+        <Link to="/dashboard/admin/attendance"><StatCard icon={<CalendarClockIcon />} label="Attendance today" value={attendancePct === null ? "—" : `${attendancePct}%`} sub={attendanceCount ? `${presentToday}/${attendanceCount} marked present` : "No records for today"} tone="teal" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -161,7 +195,8 @@ export default function AdminOverview() {
         <Link to="/dashboard/admin/gate-passes"><StatCard icon={<QrIcon />} label="Students currently out" value={loading ? "…" : studentsOut} sub="Live gate movement status" tone={studentsOut > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/leave"><StatCard icon={<CalendarClockIcon />} label="Pending leave requests" value={loading ? "…" : pendingLeaveRequests} sub={`${leaveRequests.length} filed overall`} tone={pendingLeaveRequests > 0 ? "amber" : "teal"} /></Link>
         <Link to="/dashboard/admin/visitors"><StatCard icon={<EyeIcon />} label="Visitors on premises" value={loading ? "…" : visitorsInside} sub="Checked in and not yet checked out" tone={visitorsInside > 0 ? "amber" : "teal"} /></Link>
-        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub="Boys Hostel and Girls Hostel" tone="navy" /></Link>
+        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total accounts" value={loading ? "…" : users.length} sub="Manage role, account and warden access" tone="navy" /></Link>
+        <Link to="/dashboard/admin/users"><StatCard icon={<UsersIcon />} label="Total wardens" value={loading ? "…" : wardens.length} sub="Warden accounts" tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<AlertIcon />} label="Students with dues" value={loading ? "…" : studentsWithDues} sub={totalPending ? `${inr(totalPending)} pending` : "No dues pending"} tone={studentsWithDues > 0 ? "rose" : "teal"} /></Link>
       </div>
 
@@ -177,7 +212,7 @@ export default function AdminOverview() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card title="Enrollment trend — last 6 months" className="lg:col-span-2">
-          {students.length === 0 ? (
+          {registeredStudents.length === 0 ? (
             <EmptyState title="No students yet" description="Once students are added, the enrollment trend will show here." />
           ) : (
             <div className="flex items-end gap-3 sm:gap-5">
@@ -199,13 +234,13 @@ export default function AdminOverview() {
         </Card>
 
         <Card title="Blocks at a glance">
-          {blocks.length === 0 ? (
+          {overviewBlocks.length === 0 ? (
             <EmptyState icon={<BuildingIcon />} title="No blocks yet" description="Add blocks in Data Import." />
           ) : (
             <ul className="flex flex-col divide-y divide-slate-100">
-              {blocks.map((b) => {
+              {overviewBlocks.map((b) => {
                 const total = Number(b.totalBeds) || 0;
-                const occupied = Number(b.occupiedBeds) || 0;
+                const occupied = b.residentCount || Number(b.occupiedBeds) || 0;
                 const pct = total ? Math.round((occupied / total) * 100) : 0;
                 return (
                   <li key={b.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
@@ -215,13 +250,13 @@ export default function AdminOverview() {
                         <p className="text-xs text-slate-400">{b.type || "Hostel type not set"} Hostel</p>
                       </div>
                       <Pill tone={total && occupied / total > 0.95 ? "Urgent" : "General"}>
-                        {occupied}/{total}
+                        {total ? `${occupied}/${total}` : `${occupied} residents`}
                       </Pill>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <ProgressBar value={occupied} max={total || 1} tone={pct > 95 ? "amber" : "teal"} />
+                    {total > 0 && <div className="flex items-center gap-2">
+                      <ProgressBar value={occupied} max={total} tone={pct > 95 ? "amber" : "teal"} />
                       <span className="w-9 shrink-0 text-right text-xs text-slate-400">{pct}%</span>
-                    </div>
+                    </div>}
                   </li>
                 );
               })}

@@ -10,6 +10,11 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    function activeAccount() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'Active') != 'Inactive';
+    }
+
     function myLinkedStudentId() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.linkedStudentId;
     }
@@ -59,7 +64,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && userRole() == "Admin";
+      return activeAccount() && userRole() == "Admin";
     }
 
     // Admin console functions need access to every document, including
@@ -70,19 +75,19 @@ service cloud.firestore {
     }
 
     function isWarden() {
-      return signedIn() && userRole() == "Warden";
+      return activeAccount() && userRole() == "Warden";
     }
 
     function isSecurity() {
-      return signedIn() && userRole() == "Security";
+      return activeAccount() && userRole() == "Security";
     }
 
     function isStudent() {
-      return signedIn() && userRole() == "Student";
+      return activeAccount() && userRole() == "Student";
     }
 
     function isParent() {
-      return signedIn() && userRole() == "Parent";
+      return activeAccount() && userRole() == "Parent";
     }
 
     // True for staff roles that legitimately need to see every student's
@@ -156,13 +161,41 @@ service cloud.firestore {
       allow update: if isAdmin() ||
         (isWarden() && feeBelongsToMyHostel() &&
          request.resource.data.diff(resource.data).affectedKeys()
-           .hasOnly(['paid', 'status', 'lastPaymentAt', 'reminderSent', 'reminderSentAt',
-                     'updatedBy', 'updatedByRole', 'updatedAt']) &&
+         .hasOnly(['paid', 'status', 'lastPaymentAt', 'reminderSent', 'reminderSentAt',
+                     'updatedBy', 'updatedByUid', 'updatedByRole', 'updatedAt', 'lastPaymentId']) &&
          request.resource.data.get('paid', 0) is number &&
          request.resource.data.get('total', 0) is number &&
          request.resource.data.get('paid', 0) >= resource.data.get('paid', 0) &&
          request.resource.data.get('paid', 0) <= request.resource.data.get('total', 0) &&
+         request.resource.data.updatedByUid == request.auth.uid &&
+         request.resource.data.lastPaymentAt == request.time &&
+         request.resource.data.updatedAt == request.time &&
+         request.resource.data.lastPaymentId is string &&
+         existsAfter(/databases/$(database)/documents/payments/$(request.resource.data.lastPaymentId)) &&
+         getAfter(/databases/$(database)/documents/payments/$(request.resource.data.lastPaymentId)).data.feeId == feeId &&
+         getAfter(/databases/$(database)/documents/payments/$(request.resource.data.lastPaymentId)).data.amount == request.resource.data.get('paid', 0) - resource.data.get('paid', 0) &&
+         getAfter(/databases/$(database)/documents/payments/$(request.resource.data.lastPaymentId)).data.receivedByUid == request.auth.uid &&
          request.resource.data.get('status', '') in ['Pending', 'Partial', 'Paid', 'Overdue']);
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAdmin() ||
+        (isWarden() && resource.data.hostel == myHostel()) ||
+        isOwnRecord(resource.data.studentId);
+      allow create: if isAdmin() ||
+        (isWarden() &&
+         request.resource.data.receivedByUid == request.auth.uid &&
+         request.resource.data.receivedByRole == 'Warden' &&
+         request.resource.data.hostel == myHostel() &&
+         request.resource.data.createdAt == request.time &&
+         request.resource.data.amount is number && request.resource.data.amount > 0 &&
+         request.resource.data.feeId is string && request.resource.data.studentId is string &&
+         feeStudentId(get(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data) == request.resource.data.studentId &&
+         request.resource.data.amount <= get(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('total', 0) - get(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('paid', 0) &&
+         getAfter(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('paid', 0) == get(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('paid', 0) + request.resource.data.amount &&
+         getAfter(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('updatedByUid', '') == request.auth.uid &&
+         getAfter(/databases/$(database)/documents/fees/$(request.resource.data.feeId)).data.get('lastPaymentId', '') == paymentId);
+      allow update, delete: if isAdmin();
     }
 
     // Persistent messages from staff to ONE parent account (fee reminders and

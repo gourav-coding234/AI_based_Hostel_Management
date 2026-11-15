@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
-import { createUserAccount, friendlyCreateAccountError, updateManagedUserAccount } from "../../../firebase/adminUsers";
-import { getCollection, deleteUserProfile, updateDocument, logAudit } from "../../../firebase/firestore";
+import { createUserAccount, deleteManagedUserAccount, friendlyCreateAccountError, setManagedUserDisabled, updateManagedUserAccount } from "../../../firebase/adminUsers";
+import { updateDocument, logAudit } from "../../../firebase/firestore";
 import { parseUsersCsv, CSV_TEMPLATE, downloadTextFile } from "../../../utils/csv";
 import { ROLE_LIST } from "../../../roles";
 import { Card, Button, Field, inputCls, Pill, EmptyState } from "../../../components/dashboard/student/ui";
@@ -9,6 +9,8 @@ import DataTable from "../../../components/ui/DataTable";
 import { DownloadIcon, SearchIcon, TrashIcon, UsersIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
 import { HOSTELS, hostelForStudent, wardenHostel } from "../../../utils/hostels";
+import { residentBlockName } from "../../../utils/hostelResidents";
+import { useCollection } from "../../../hooks/useCollection";
 
 function tsToDate(ts) {
   if (!ts) return null;
@@ -35,8 +37,7 @@ function initials(name, email) {
 
 export default function ManageUsers() {
   const { profile, user: currentUser } = useAuth();
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  const { data: users, loading: loadingUsers, error: usersError } = useCollection("users");
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
@@ -51,6 +52,7 @@ export default function ManageUsers() {
   const [roleFilter, setRoleFilter] = useState("All");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [statusSavingId, setStatusSavingId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [parentLinkDrafts, setParentLinkDrafts] = useState({});
   const [parentLinkSaving, setParentLinkSaving] = useState("");
@@ -60,31 +62,28 @@ export default function ManageUsers() {
   const [savingAccount, setSavingAccount] = useState(false);
   const [accountEditError, setAccountEditError] = useState("");
 
-  // Blocks & students only — the "users" collection is already loaded above
-  // via loadUsers(), so warden rows are derived from that same list instead
-  // of opening a second listener on the same data.
+  // Blocks, students and fee references are loaded once; warden rows derive
+  // from the live users listener instead of opening another users query.
   const { data: refData } = useCollections({
     blocks: { name: "blocks" },
     students: { name: "students" },
+    fees: { name: "fees" },
   });
   const blocks = refData.blocks;
+  const blockCoverage = useMemo(() => {
+    const keyFor = (name, type) => `${String(name || "").trim().toLowerCase()}|${String(type || "").trim().toLowerCase()}`;
+    const result = new Map(blocks.map((block) => [keyFor(block.name, block.type), { ...block, referenced: false }]));
+    [...refData.students, ...refData.fees].forEach((record) => {
+      const name = residentBlockName(record);
+      if (!name || /^(boys|girls) hostel$/i.test(name)) return;
+      const hostel = hostelForStudent(record, blocks);
+      const type = hostel?.startsWith("Girls") ? "Girls" : hostel?.startsWith("Boys") ? "Boys" : "";
+      const key = keyFor(name, type);
+      if (!result.has(key)) result.set(key, { id: `record:${key}`, name, type, occupiedBeds: 0, totalBeds: 0, referenced: true });
+    });
+    return [...result.values()];
+  }, [blocks, refData.students, refData.fees]);
   const [reassignError, setReassignError] = useState("");
-
-  async function loadUsers() {
-    setLoadingUsers(true);
-    try {
-      const list = await getCollection("users", { orderByField: "name", orderByDirection: "asc" });
-      setUsers(list);
-    } catch (err) {
-      console.error("Failed to load users:", err);
-    } finally {
-      setLoadingUsers(false);
-    }
-  }
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
 
   async function handleCreateSingle(e) {
     e.preventDefault();
@@ -92,10 +91,9 @@ export default function ManageUsers() {
     setFormSuccess("");
     setCreating(true);
     try {
-      await createUserAccount(form);
+      await createUserAccount(form, currentUser);
       setFormSuccess(`Account created for ${form.name} (${form.role}).`);
       setForm(EMPTY_FORM);
-      loadUsers();
       logAudit({
         actor: profile?.name || currentUser?.email || "Admin",
         action: "Created account",
@@ -126,7 +124,7 @@ export default function ManageUsers() {
     // itself and makes per-row error attribution straightforward.
     for (const row of rows) {
       try {
-        const account = await createUserAccount(row);
+        const account = await createUserAccount(row, currentUser);
         created.push(account);
       } catch (err) {
         failed.push({ email: row.email, error: friendlyCreateAccountError(err) });
@@ -135,7 +133,6 @@ export default function ManageUsers() {
 
     setBulkResults({ created, failed });
     setBulkRunning(false);
-    loadUsers();
     if (created.length > 0) {
       logAudit({
         actor: profile?.name || currentUser?.email || "Admin",
@@ -162,8 +159,7 @@ export default function ManageUsers() {
     setDeletingId(uid);
     const target = users.find((u) => u.id === uid);
     try {
-      await deleteUserProfile(uid);
-      setUsers((list) => list.filter((u) => u.id !== uid));
+      await deleteManagedUserAccount(currentUser, uid);
       logAudit({
         actor: profile?.name || currentUser?.email || "Admin",
         action: "Removed account",
@@ -175,6 +171,25 @@ export default function ManageUsers() {
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
+    }
+  }
+
+  async function toggleAccountStatus(account) {
+    const disabled = account.status !== "Inactive";
+    setStatusSavingId(account.id);
+    setDeleteError("");
+    try {
+      await setManagedUserDisabled(currentUser, account.id, disabled);
+      logAudit({
+        actor: profile?.name || currentUser?.email || "Admin",
+        action: disabled ? "Deactivated account" : "Activated account",
+        target: `${account.name || account.email} (${account.role})`,
+      }).catch(() => {});
+    } catch (error) {
+      console.error("Could not change account status:", error);
+      setDeleteError(error?.message || "Could not change this account status.");
+    } finally {
+      setStatusSavingId("");
     }
   }
 
@@ -196,9 +211,6 @@ export default function ManageUsers() {
         email: accountDraft.email,
         password: accountDraft.password,
       });
-      setUsers((list) => list.map((account) => account.id === editingAccount.id
-        ? { ...account, email: updated.email }
-        : account));
       logAudit({
         actor: profile?.name || currentUser?.email || "Admin",
         action: "Updated account credentials",
@@ -239,7 +251,6 @@ export default function ManageUsers() {
         });
       }
       await updateDocument("users", parent.id, { linkedStudentId });
-      setUsers((list) => list.map((u) => u.id === parent.id ? { ...u, linkedStudentId } : u));
       setParentLinkFeedback((current) => ({ ...current, [parent.id]: linkedStudentId ? (repair ? "Student profile repaired and link saved. Ask the parent to reload." : "Student profile is ready and link saved. Ask the parent to reload.") : "Student link removed." }));
       logAudit({ actor: profile?.name || currentUser?.email || "Admin", action: "Updated parent-student link", target: `${parent.email} → ${linkedStudentId || "unlinked"}` }).catch(() => {});
     } catch (err) {
@@ -278,7 +289,7 @@ export default function ManageUsers() {
 
   // Warden management — the same "users" list, just the Warden rows,
   // enriched with hostel assignment + workload for reassignment.
-  const wardens = useMemo(() => users.filter((u) => u.role === "Warden"), [users]);
+  const wardens = useMemo(() => users.filter((u) => u.role === "Warden").sort((a, b) => (tsToDate(b.createdAt)?.getTime() || 0) - (tsToDate(a.createdAt)?.getTime() || 0) || String(a.name || "").localeCompare(String(b.name || ""))), [users]);
   const hostelOptions = ["Unassigned", ...HOSTELS];
   const studentCountByHostel = useMemo(() => refData.students.reduce((counts, student) => {
     const hostel = hostelForStudent(student, blocks);
@@ -291,7 +302,6 @@ export default function ManageUsers() {
     try {
       const value = hostel === "Unassigned" ? "" : hostel;
       await updateDocument("users", id, { hostel: value });
-      setUsers((list) => list.map((u) => (u.id === id ? { ...u, hostel: value } : u)));
     } catch (err) {
       console.error("Failed to reassign warden:", err);
       setReassignError("Couldn't reassign this warden. Please try again.");
@@ -358,7 +368,7 @@ export default function ManageUsers() {
             <div>
               <h2 className="font-display text-xl font-semibold">Manage users &amp; wardens</h2>
               <p className="mt-0.5 text-sm text-slate-300">
-                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"} · {wardens.length} warden{wardens.length === 1 ? "" : "s"} for 2 hostels
+                {users.length} account{users.length === 1 ? "" : "s"} across {Object.keys(roleCounts).length || 0} role{Object.keys(roleCounts).length === 1 ? "" : "s"} · {wardens.length} warden{wardens.length === 1 ? "" : "s"} for {HOSTELS.length} hostels
               </p>
             </div>
           </div>
@@ -563,6 +573,7 @@ export default function ManageUsers() {
         </div>
 
         {deleteError && <p className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{deleteError}</p>}
+        {usersError && <p role="alert" className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{usersError}</p>}
 
         {loadingUsers ? (
           <p className="py-6 text-center text-sm text-slate-400">Loading…</p>
@@ -603,6 +614,12 @@ export default function ManageUsers() {
                   <div className="flex items-center gap-2 sm:shrink-0">
                     <Pill tone="General">{u.role}</Pill>
                     <span className="hidden text-xs text-slate-400 sm:inline">{u.hostelResidence || "—"}</span>
+
+                    <Pill tone={u.status === "Inactive" ? "Pending" : "Approved"}>{u.status || "Active"}</Pill>
+
+                    {u.id !== currentUser?.uid && <Button variant="outline" className="px-3 py-1.5 text-xs" disabled={statusSavingId === u.id} onClick={() => toggleAccountStatus(u)}>
+                      {statusSavingId === u.id ? "Saving…" : u.status === "Inactive" ? "Activate" : "Deactivate"}
+                    </Button>}
 
                     <Button
                       variant="outline"
@@ -696,16 +713,15 @@ export default function ManageUsers() {
       </Card>
 
       <Card title="Block coverage">
-        {blocks.length === 0 ? (
+        {blockCoverage.length === 0 ? (
           <EmptyState title="No blocks yet" description="Add blocks in Data Import." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {blocks.map((b) => (
+            {blockCoverage.map((b) => (
               <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-ink">{b.name}</p>
-                <p className="text-xs text-slate-400">{b.type} hostel</p>
-                <p className="mt-3 text-sm text-slate-600">{hostelForStudent({ wing: b.name }, blocks) || `${b.type || "Hostel"} Hostel`}</p>
-                <p className="text-xs text-slate-400">{b.occupiedBeds || 0}/{b.totalBeds || 0} beds occupied</p>
+                <p className="mt-1 text-sm text-slate-600">{b.type ? `${b.type} Hostel` : "Hostel type not recorded"}</p>
+                <p className="text-xs text-slate-400">{b.referenced ? "Referenced by student or fee records · capacity not set" : `${b.occupiedBeds || 0}/${b.totalBeds || 0} beds occupied`}</p>
               </div>
             ))}
           </div>

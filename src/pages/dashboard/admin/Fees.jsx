@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, ProgressBar, StatCard, Button, Field, inputCls } from "../../../components/dashboard/student/ui";
@@ -6,7 +6,7 @@ import { EmptyState } from "../../../components/ui/DataState";
 import DataTable from "../../../components/ui/DataTable";
 import { WalletIcon, AlertIcon, CheckIcon, CalendarClockIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { addDocument, updateDocument, logAudit } from "../../../firebase/firestore";
+import { addDocument, recordFeePayment, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
 import { hostelForBlock, hostelForStudent, normalizeHostel } from "../../../utils/hostels";
 
@@ -40,6 +40,7 @@ function toCsv(headers, rows) {
 export default function Fees() {
   const { profile, user } = useAuth();
   const feesQuery = useCollection("fees");
+  const paymentsQuery = useCollection("payments", { orderByField: "createdAt", limitCount: 100 });
   const studentsQuery = useCollection("students");
   const blocksQuery = useCollection("blocks", { limitCount: 200 });
   const students = studentsQuery.data;
@@ -53,30 +54,32 @@ export default function Fees() {
     return map;
   }, [students]);
 
-  function hostelForFee(fee) {
+  const hostelForFee = useCallback((fee) => {
     const student = studentById.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
     return normalizeHostel(fee.hostel || fee.hostelType) ||
       hostelForStudent(student, blocks) ||
       hostelForBlock(fee.block, blocks, fee.hostel || fee.hostelType);
-  }
+  }, [studentById, blocks]);
 
-  function feeGroupLabel(fee) {
+  const feeGroupLabel = useCallback((fee) => {
     const hostel = hostelForFee(fee);
     const block = String(fee.block || "").trim();
     const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
     return hostel ? `${hostel} · ${blockLabel}` : blockLabel;
-  }
+  }, [hostelForFee]);
 
   // Recalculate status (and the remaining balance) from total/paid/dueDate
   // on every render, rather than trusting whatever was last written to the
   // record — a due date can pass without anyone touching the record.
   const fees = useMemo(
-    () =>
-      feesQuery.data.map((f) => ({
+    () => feesQuery.data.map((f) => ({
         ...f,
         status: computeFeeStatus(f),
         remaining: Math.max((Number(f.total) || 0) - (Number(f.paid) || 0), 0),
-      })),
+      })).sort((a, b) => {
+        const millis = (value) => value?.toDate ? value.toDate().getTime() : value ? Date.parse(value) || 0 : 0;
+        return millis(b.createdAt || b.registrationDate) - millis(a.createdAt || a.registrationDate);
+      }),
     [feesQuery.data]
   );
 
@@ -84,13 +87,14 @@ export default function Fees() {
   const [createForm, setCreateForm] = useState({ studentId: "", total: "", dueDate: "" });
   const [createError, setCreateError] = useState("");
   const [paymentDrafts, setPaymentDrafts] = useState({});
+  const [paymentErrors, setPaymentErrors] = useState({});
   const [recordingId, setRecordingId] = useState("");
   const [blockFilter, setBlockFilter] = useState("All Blocks");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
   const blockFilters = useMemo(() => {
     return ["All Blocks", ...Array.from(new Set(fees.map(feeGroupLabel))).sort(compareFeeGroups)];
-  }, [fees, studentById, blocks]);
+  }, [fees, feeGroupLabel]);
 
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
   const totalCollected = fees.reduce((sum, f) => sum + (Number(f.paid) || 0), 0);
@@ -112,7 +116,7 @@ export default function Fees() {
       entry.collected += Number(f.paid) || 0;
     });
     return Array.from(map.values()).sort((a, b) => compareFeeGroups(a.block, b.block));
-  }, [fees, studentById, blocks]);
+  }, [fees, feeGroupLabel]);
 
   // A defaulter is anyone with an outstanding balance — cleared fees never
   // show up here, whatever their status.
@@ -127,7 +131,7 @@ export default function Fees() {
       const statusOk = statusFilter === "All Statuses" || f.status === statusFilter;
       return blockOk && statusOk;
     });
-  }, [fees, blockFilter, statusFilter, studentById, blocks]);
+  }, [fees, blockFilter, statusFilter, feeGroupLabel]);
 
   const feeCsvHeaders = [
     { label: "Student", value: (f) => f.studentName },
@@ -185,24 +189,27 @@ export default function Fees() {
       render: (d) => {
         if (d.remaining <= 0) return <span className="text-xs text-slate-300">Fully paid</span>;
         return (
-          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="number"
-              min="0"
-              max={d.remaining}
-              placeholder="₹ amount"
-              className={`${inputCls} w-24 py-1 text-xs`}
-              value={paymentDrafts[d.id] ?? ""}
-              onChange={(e) => setPaymentDrafts((p) => ({ ...p, [d.id]: e.target.value }))}
-            />
-            <Button
-              variant="outline"
-              className="px-2 py-1 text-xs"
-              disabled={recordingId === d.id}
-              onClick={() => recordPayment(d)}
-            >
-              {recordingId === d.id ? "…" : "Record"}
-            </Button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min="1"
+                max={d.remaining}
+                placeholder="₹ amount"
+                className={`${inputCls} w-24 py-1 text-xs`}
+                value={paymentDrafts[d.id] ?? ""}
+                onChange={(e) => { setPaymentDrafts((p) => ({ ...p, [d.id]: e.target.value })); setPaymentErrors((p) => ({ ...p, [d.id]: "" })); }}
+              />
+              <Button
+                variant="outline"
+                className="px-2 py-1 text-xs"
+                disabled={recordingId === d.id}
+                onClick={() => recordPayment(d)}
+              >
+                {recordingId === d.id ? "Saving…" : "Record"}
+              </Button>
+            </div>
+            {paymentErrors[d.id] && <p role="alert" className="mt-1 max-w-56 text-xs text-rose-600">{paymentErrors[d.id]}</p>}
           </div>
         );
       },
@@ -245,14 +252,18 @@ export default function Fees() {
 
   async function recordPayment(record) {
     const amount = Number(paymentDrafts[record.id]);
-    if (!amount || amount <= 0 || amount > record.remaining) return;
+    if (!amount || amount <= 0 || amount > record.remaining) {
+      setPaymentErrors((errors) => ({ ...errors, [record.id]: `Enter an amount between ₹1 and ${inr(record.remaining)}.` }));
+      return;
+    }
     setRecordingId(record.id);
+    setPaymentErrors((errors) => ({ ...errors, [record.id]: "" }));
     try {
-      const newPaid = (Number(record.paid) || 0) + amount;
-      await updateDocument("fees", record.id, {
-        paid: newPaid,
-        status: computeFeeStatus({ total: record.total, paid: newPaid, dueDate: record.dueDate }),
-        lastPaymentAt: new Date().toISOString(),
+      await recordFeePayment(record.id, amount, profile?.name || user?.email || "Admin", "Admin", {
+        actorUid: user?.uid,
+        paymentId: crypto.randomUUID(),
+        paymentDate: new Date().toISOString().slice(0, 10),
+        paymentMethod: "Cash",
       });
       setPaymentDrafts((p) => ({ ...p, [record.id]: "" }));
       logAudit({
@@ -262,6 +273,14 @@ export default function Fees() {
       }).catch(() => {});
     } catch (err) {
       console.error("Failed to record payment:", err);
+      setPaymentErrors((errors) => ({
+        ...errors,
+        [record.id]: err?.message === "INVALID_AMOUNT"
+          ? "The balance changed. Refresh the record and enter an amount within the current balance."
+          : err?.code === "permission-denied"
+            ? "Firebase denied this payment. Check the admin fee rules."
+            : "Payment could not be saved. Check the connection and try again.",
+      }));
     } finally {
       setRecordingId("");
     }
@@ -348,6 +367,26 @@ export default function Fees() {
             })}
           </div>
         )}
+      </Card>
+
+      <Card title="Recent payment history" subtitle="Most recent payment transactions recorded across both hostels.">
+        <DataTable
+          columns={[
+            { key: "studentName", label: "Student", sortable: true, render: (payment) => <><p className="font-medium text-ink">{payment.studentName || "—"}</p><p className="text-xs text-slate-400">{payment.registrationNo || ""}</p></> },
+            { key: "hostel", label: "Hostel / Block", render: (payment) => `${payment.hostel || "Hostel not set"} · ${payment.block || "Block not set"}` },
+            { key: "amount", label: "Amount", sortable: true, render: (payment) => inr(payment.amount) },
+            { key: "paymentDate", label: "Payment date" },
+            { key: "paymentMethod", label: "Method" },
+            { key: "transactionId", label: "Reference", render: (payment) => payment.transactionId || "—" },
+            { key: "receivedBy", label: "Received by" },
+          ]}
+          rows={paymentsQuery.data}
+          loading={paymentsQuery.loading}
+          error={paymentsQuery.error}
+          emptyTitle="No payments recorded yet"
+          emptyDescription="Successful payments will appear here as an auditable history."
+          pageSize={10}
+        />
       </Card>
 
       <Card title="All fee records">

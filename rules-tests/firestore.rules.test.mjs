@@ -1,7 +1,7 @@
 // Run:  npm i -D @firebase/rules-unit-testing firebase vitest   (or use node:test as below)
 //       firebase emulators:exec --only firestore "node --test rules-tests/"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
-import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where, setDoc, updateDoc, deleteDoc, serverTimestamp, runTransaction } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { before, after, describe, it } from "node:test";
 
@@ -17,7 +17,7 @@ before(async () => {
     const d = ctx.firestore();
     const u = (id, o) => setDoc(doc(d, "users", id), o);
     await u("admin", { role: "Admin" });
-    await u("warden", { role: "Warden" });
+    await u("warden", { role: "Warden", hostel: "Boys Hostel" });
     await u("sec", { role: "Security" });
     await u("stu1", { role: "Student" });
     await u("stu2", { role: "Student" });
@@ -31,7 +31,9 @@ before(async () => {
     await setDoc(doc(d, "gatePasses", "done"), { ...pass, tripState: "Returned", status: "Completed" });
     await setDoc(doc(d, "attendance", "stu1_2026-09-28"), { studentId: "stu1", date: "2026-09-28", status: "Present", markedBy: "warden" });
     await setDoc(doc(d, "fees", "f1"), { studentId: "stu1", total: 100, paid: 0 });
-    await setDoc(doc(d, "students", "stu1"), { room: "101", bed: "A" });
+    await setDoc(doc(d, "students", "stu1"), { room: "101", bed: "A", hostel: "Boys Hostel" });
+    await setDoc(doc(d, "students", "stu2"), { room: "202", bed: "B", hostel: "Girls Hostel" });
+    await setDoc(doc(d, "payments", "girls-payment"), { studentId: "stu2", hostel: "Girls Hostel", amount: 25, createdAt: new Date() });
     await setDoc(doc(d, "notices", "n1"), { title: "t", isPublic: false });
     await setDoc(doc(d, "leaveRequests", "L1"), { studentId: "stu1", status: "Approved" });
     await setDoc(doc(d, "leaveRequests", "L2"), { studentId: "stu1", status: "Pending" });
@@ -78,6 +80,33 @@ describe("profile photos", () => {
     await assertSucceeds(updateDoc(doc(db("stu1"), "users", "stu1"), { photoURL: `data:image/jpeg;base64,${"a".repeat(1000)}` }));
     await assertFails(updateDoc(doc(db("stu1"), "users", "stu2"), { photoURL: "data:image/jpeg;base64,abc" }));
     await assertFails(updateDoc(doc(db("stu1"), "users", "stu1"), { photoURL: `data:image/jpeg;base64,${"a".repeat(280001)}` }));
+  });
+});
+
+describe("fee payment ledger", () => {
+  it("records payment and balance atomically for the assigned hostel", async () => {
+    await runTransaction(db("warden"), async (tx) => {
+      tx.update(doc(db("warden"), "fees", "f1"), {
+        paid: 40, status: "Partial", lastPaymentAt: serverTimestamp(), updatedBy: "Warden",
+        updatedByUid: "warden", updatedByRole: "Warden", updatedAt: serverTimestamp(), lastPaymentId: "boys-payment",
+      });
+      tx.set(doc(db("warden"), "payments", "boys-payment"), {
+        feeId: "f1", studentId: "stu1", hostel: "Boys Hostel", amount: 40,
+        paymentDate: "2026-11-15", paymentMethod: "Cash", receivedBy: "Warden",
+        receivedByUid: "warden", receivedByRole: "Warden", createdAt: serverTimestamp(),
+      });
+    });
+    await assertSucceeds(getDoc(doc(db("warden"), "payments", "boys-payment")));
+    await assertFails(getDoc(doc(db("warden"), "payments", "girls-payment")));
+    await assertSucceeds(getDoc(doc(db("stu1"), "payments", "boys-payment")));
+    await assertSucceeds(getDoc(doc(db("par1"), "payments", "boys-payment")));
+    await assertFails(getDoc(doc(db("stu2"), "payments", "boys-payment")));
+  });
+  it("does not let a warden create a payment without its matching fee increment", async () => {
+    await assertFails(setDoc(doc(db("warden"), "payments", "forged-payment"), {
+      feeId: "f1", studentId: "stu1", hostel: "Boys Hostel", amount: 40,
+      receivedByUid: "warden", receivedByRole: "Warden", createdAt: serverTimestamp(),
+    }));
   });
 });
 

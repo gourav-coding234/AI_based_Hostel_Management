@@ -8,6 +8,20 @@ import { dateKey } from "../utils/dateKey";
 
 const studentDataCache = new Map();
 const STUDENT_CACHE_MS = 20_000;
+function sortStudentRecords(items, field, direction = "desc") {
+  const key = field || "createdAt";
+  const dir = direction === "asc" ? 1 : -1;
+  const millis = (value) => value?.toMillis ? value.toMillis() : value?.toDate ? value.toDate().getTime() : Date.parse(value) || 0;
+  return [...items].sort((a, b) => {
+    const preferred = direction === "asc" ? key : "createdAt";
+    const fallback = direction === "asc" ? "createdAt" : key;
+    const leftValue = a[preferred] ?? a[fallback] ?? a.registrationDate ?? a.registeredAt ?? a.date ?? a.from ?? "";
+    const rightValue = b[preferred] ?? b[fallback] ?? b.registrationDate ?? b.registeredAt ?? b.date ?? b.from ?? "";
+    const left = millis(leftValue); const right = millis(rightValue);
+    if (left || right) return (left - right) * dir;
+    return String(leftValue).localeCompare(String(rightValue)) * dir;
+  });
+}
 export function clearStudentCollectionCache(studentId = "") {
   for (const key of studentDataCache.keys()) {
     if (!studentId || key.endsWith(`:${studentId}`)) studentDataCache.delete(key);
@@ -108,16 +122,8 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
           const data = d.data();
           return { id: d.id, ...data, ...(data.date ? { date: dateKey(data.date) || data.date } : {}) };
         });
-        if (orderByField) {
-          const sortValue = (value) => value?.toDate ? value.toDate().getTime() : value;
-          const direction = orderByDirection === "asc" ? 1 : -1;
-          items.sort((a, b) => {
-            const left = sortValue(a[orderByField]); const right = sortValue(b[orderByField]);
-            if (typeof left === "number" && typeof right === "number") return (left - right) * direction;
-            return String(left ?? "").localeCompare(String(right ?? "")) * direction;
-          });
-        }
-        setState({ loading: false, items, error: "" });
+        const sortedItems = sortStudentRecords(items, orderByField, orderByDirection);
+        setState({ loading: false, items: sortedItems, error: "" });
       }, (err) => {
         if (cancelled) return;
         console.error(`Failed to load ${collectionName}:`, err);
@@ -135,18 +141,9 @@ export function useStudentCollection(collectionName, studentId, options = {}) {
           const data = d.data();
           return { id: d.id, ...data, ...(data.date ? { date: dateKey(data.date) || data.date } : {}) };
         });
-        if (orderByField) {
-          const sortValue = (value) => value?.toDate ? value.toDate().getTime() : value;
-          const direction = orderByDirection === "asc" ? 1 : -1;
-          items.sort((a, b) => {
-            const left = sortValue(a[orderByField]);
-            const right = sortValue(b[orderByField]);
-            if (typeof left === "number" && typeof right === "number") return (left - right) * direction;
-            return String(left ?? "").localeCompare(String(right ?? "")) * direction;
-          });
-        }
-        if (items.length) studentDataCache.set(statusKey, { savedAt: Date.now(), items });
-        setState({ loading: false, items, error: "" });
+        const sortedItems = sortStudentRecords(items, orderByField, orderByDirection);
+        if (sortedItems.length) studentDataCache.set(statusKey, { savedAt: Date.now(), items: sortedItems });
+        setState({ loading: false, items: sortedItems, error: "" });
       })
       .catch((err) => {
         if (cancelled) return;

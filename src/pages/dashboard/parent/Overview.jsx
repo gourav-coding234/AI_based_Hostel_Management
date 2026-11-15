@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Card, Pill, ProgressBar } from "../../../components/dashboard/student/ui";
 import { EmptyState, ErrorState } from "../../../components/ui/DataState";
-import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon, MegaphoneIcon } from "../../../components/dashboard/parent/icons";
+import { BedIcon, WalletIcon, CheckSquareIcon, QrIcon, ArrowRightIcon, MegaphoneIcon, WrenchIcon, AlertIcon } from "../../../components/dashboard/parent/icons";
 import LinkedStudentStatus from "../../../components/dashboard/parent/LinkedStudentStatus";
 import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
@@ -45,11 +45,12 @@ export default function ParentOverview() {
   const linked = useLinkedStudent();
   const { studentUser, studentRecord, linkedStudentId } = linked;
 
-  const fees = useStudentCollection("fees", linkedStudentId);
+  const fees = useStudentCollection("fees", linkedStudentId, { live: true });
   const attendance = useStudentCollection("attendance", linkedStudentId, { orderByField: "date" });
   const gatePasses = useStudentCollection("gatePasses", linkedStudentId, { live: true });
   const movement = useStudentCollection("inOutStatus", linkedStudentId, { live: true });
-  const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId);
+  const leaveRequests = useStudentCollection("leaveRequests", linkedStudentId, { live: true });
+  const complaints = useStudentCollection("complaints", linkedStudentId, { live: true });
   const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
   const notifications = useParentNotifications();
 
@@ -58,8 +59,8 @@ export default function ParentOverview() {
   // Only real data, straight from Firestore, scoped to the linked child.
   const room = studentRecord;
   const childName = studentUser?.name || "Your child";
-  const dataError = fees.error || attendance.error || gatePasses.error || movement.error || leaveRequests.error;
-  const statsLoading = fees.loading || attendance.loading || gatePasses.loading || movement.loading || leaveRequests.loading;
+  const dataError = fees.error || attendance.error || gatePasses.error || movement.error || leaveRequests.error || complaints.error;
+  const statsLoading = fees.loading || attendance.loading || gatePasses.loading || movement.loading || leaveRequests.loading || complaints.loading;
 
   const feeSummary = summarizeChildFees(fees.items);
   const { total: totalFee, paid, pending: feeRemaining } = feeSummary;
@@ -153,11 +154,18 @@ export default function ParentOverview() {
           <p className="mt-4 font-display text-lg font-semibold text-ink">{room?.room || "—"}</p>
           <p className="mt-0.5 text-sm text-slate-500">{room?.bed || "Not allotted"} {room?.wing ? `· ${room.wing}` : ""}</p>
         </Link>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <Link to="/dashboard/parent/leave" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400/15 text-amber-600"><AlertIcon /></span>
           <p className="mt-4 font-display text-lg font-semibold text-ink">{statsLoading ? "…" : leaveRequests.items.filter((r) => r.status === "Pending").length}</p>
           <p className="mt-0.5 text-sm text-slate-500">Pending leave requests</p>
           <p className="mt-0.5 text-xs text-slate-400">{leaveRequests.items.length} total for {childName}</p>
-        </div>
+        </Link>
+        <Link to="/dashboard/parent/complaints" className="group rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600"><WrenchIcon /></span>
+          <p className="mt-4 font-display text-lg font-semibold text-ink">{statsLoading ? "…" : complaints.items.filter((c) => !["Resolved", "Rejected"].includes(c.status)).length}</p>
+          <p className="mt-0.5 text-sm text-slate-500">Open complaints</p>
+          <p className="mt-0.5 text-xs text-slate-400">{complaints.items.length} total for {childName}</p>
+        </Link>
       </div>
 
       <Card title="Fee status" action={feeSummary.status ? <Pill tone={feeTone(feeSummary.status)}>{feeSummary.status}</Pill> : null}>

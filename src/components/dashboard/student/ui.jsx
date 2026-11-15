@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { Link } from "react-router-dom";
 // Small, shared UI primitives for the dashboard sections.
 // Pure presentational components — no data fetching, no auth logic.
 
@@ -54,15 +55,16 @@ export function Pill({ children, tone }) {
   return <span className={`pill pill-${t}`}>{children}</span>;
 }
 
-export function StatCard({ icon, label, value, sub, tone = "navy" }) {
-  return (
-    <div className="stat-card">
+export function StatCard({ icon, label, value, sub, tone = "navy", to }) {
+  const content = (
+    <div className={`stat-card ${to ? "transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500" : ""}`}>
       <span className={`stat-icon tone-${tone}`}>{icon}</span>
       <p className="stat-value">{value}</p>
       <p className="stat-label">{label}</p>
       {sub && <p className="stat-hint">{sub}</p>}
     </div>
   );
+  return to ? <Link to={to} aria-label={`${label}: ${value}`} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500">{content}</Link> : content;
 }
 
 export function ProgressBar({ value, max, tone = "green" }) {

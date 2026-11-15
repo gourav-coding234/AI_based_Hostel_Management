@@ -42,12 +42,12 @@ export default function Overview() {
   // set directly on each doc (matching the admin/warden Fees pages and the
   // CSV import schema) — not a list of `amount` line items, and not
   // ordered by a `date` field the schema doesn't have.
-  const fees = useStudentCollection("fees", studentId);
+  const fees = useStudentCollection("fees", studentId, { live: true });
   const attendance = useStudentCollection("attendance", studentId, { orderByField: "date" });
-  const complaints = useStudentCollection("complaints", studentId);
+  const complaints = useStudentCollection("complaints", studentId, { live: true });
   const gatePasses = useStudentCollection("gatePasses", studentId, { live: true });
   const movement = useStudentCollection("inOutStatus", studentId, { live: true });
-  const leaveRequests = useStudentCollection("leaveRequests", studentId);
+  const leaveRequests = useStudentCollection("leaveRequests", studentId, { live: true });
   // Fetch a bit more than we display — filtering by wing happens client-side
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
   // silently drop relevant notices behind irrelevant ones targeted at a
@@ -143,6 +143,7 @@ export default function Overview() {
           value={roomStatus}
           sub={roomStatus === "Allotted" ? `${myAllocation.room} · ${myAllocation.bed}` : "Awaiting allotment"}
           tone="teal"
+          to="/dashboard/student/room"
         />
         <StatCard
           icon={<WalletIcon />}
@@ -154,6 +155,7 @@ export default function Overview() {
               : "No fee record yet"
           }
           tone={feeRemaining > 0 ? "amber" : "teal"}
+          to="/dashboard/student/fees"
         />
         <StatCard
           icon={<CheckSquareIcon />}
@@ -165,6 +167,7 @@ export default function Overview() {
               : attendance.error ? "Could not load attendance" : "No records yet"
           }
           tone="teal"
+          to="/dashboard/student/attendance"
         />
         <StatCard
           icon={<WrenchIcon />}
@@ -172,8 +175,9 @@ export default function Overview() {
           value={openComplaints}
           sub={`${resolvedComplaints} resolved · ${complaints.items.length} total filed`}
           tone={openComplaints > 0 ? "rose" : "teal"}
+          to="/dashboard/student/complaints"
         />
-        <Link to="/dashboard/student/leave"><StatCard icon={<AlertIcon />} label="Leave requests" value={leaveRequests.loading ? "…" : leaveRequests.items.filter((r) => r.status === "Pending").length} sub={`${leaveRequests.items.length} total submitted`} tone={leaveRequests.items.some((r) => r.status === "Pending") ? "amber" : "teal"} /></Link>
+        <StatCard icon={<AlertIcon />} label="Leave requests" value={leaveRequests.loading ? "…" : leaveRequests.items.filter((r) => r.status === "Pending").length} sub={`${leaveRequests.items.length} total submitted`} tone={leaveRequests.items.some((r) => r.status === "Pending") ? "amber" : "teal"} to="/dashboard/student/leave" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -12,6 +12,28 @@ const overviewCache = new Map();
 const queryResultCache = new Map();
 const QUERY_CACHE_LIMIT = 60;
 
+function sortableMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortRecords(records, field, direction = "desc") {
+  const dir = direction === "asc" ? 1 : -1;
+  return [...records].sort((a, b) => {
+    const preferred = direction === "asc" ? field : "createdAt";
+    const fallback = direction === "asc" ? "createdAt" : field;
+    const av = a[preferred] ?? a[fallback] ?? a.registrationDate ?? a.registeredAt ?? a.date ?? a.from ?? "";
+    const bv = b[preferred] ?? b[fallback] ?? b.registrationDate ?? b.registeredAt ?? b.date ?? b.from ?? "";
+    const left = sortableMillis(av);
+    const right = sortableMillis(bv);
+    if (left || right) return (left - right) * dir || String(b.id).localeCompare(String(a.id));
+    return String(av).localeCompare(String(bv)) * dir || String(b.id).localeCompare(String(a.id));
+  });
+}
+
 if (typeof window !== "undefined") {
   window.addEventListener("hostel:firestore-data-changed", () => {
     overviewCache.clear();
@@ -83,7 +105,7 @@ export function useCollection(collectionName, options = {}) {
       q,
       (snap) => {
         publishReadStatus(statusKey, "", collectionName);
-        const nextState = { loading: false, data: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" };
+        const nextState = { loading: false, data: sortRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })), orderByField || "createdAt", orderByField ? orderByDirection : "desc"), error: "" };
         writeQueryCache(`query:${depsKey}`, nextState);
         setState(nextState);
       },
@@ -166,7 +188,7 @@ export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 }
         try {
           const snap = await getDocs(query(collection(db, name), ...constraints));
           publishReadStatus(statusKey, "", name);
-          return { key: k, records: snap.docs.map((d) => ({ id: d.id, ...d.data() })), error: "" };
+          return { key: k, records: sortRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })), orderByField || "createdAt", orderByField ? orderByDirection : "desc"), error: "" };
         } catch (err) {
           console.error(`Failed to load ${name}:`, err);
           const message = readErrorMessage(err);
@@ -221,7 +243,7 @@ export function useCollections(spec, { live = true, maxDocs = 100, cacheMs = 0 }
         q,
         (snap) => {
           publishReadStatus(statusKey, "", name);
-          dataRef[k] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          dataRef[k] = sortRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })), orderByField || "createdAt", orderByField ? orderByDirection : "desc");
           loadedFlags[k] = true;
           const allLoaded = keys.every((kk) => loadedFlags[kk]);
           const nextState = { loading: !allLoaded, error: errored ? errorMessage : "", data: { ...dataRef } };

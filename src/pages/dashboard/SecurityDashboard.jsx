@@ -5,6 +5,7 @@ import DashboardLayout from "../../layouts/DashboardLayout";
 const Overview = lazy(() => import("./security/Overview"));
 const GateDesk = lazy(() => import("./security/GateDesk"));
 const Attendance = lazy(() => import("./security/Attendance"));
+const LeaveExit = lazy(() => import("./security/LeaveExit"));
 const VisitorLog = lazy(() => import("./security/VisitorLog"));
 const IncidentReports = lazy(() => import("./security/IncidentReports"));
 const EmergencyContacts = lazy(() => import("./security/EmergencyContacts"));
@@ -21,6 +22,7 @@ export default function SecurityDashboard() {
         <Route path="gate-scan" element={<Navigate to="/dashboard/security/gate-desk" replace />} />
         <Route path="in-out" element={<Navigate to="/dashboard/security/gate-desk" replace />} />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="leave-exit" element={<LeaveExit />} />
         <Route path="visitors" element={<VisitorLog />} />
         <Route path="incidents" element={<IncidentReports />} />
         <Route path="emergency" element={<EmergencyContacts />} />

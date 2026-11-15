@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/dashboard/ConfirmDialog";
 import { Card, Button, Field, Pill, EmptyState } from "../../../components/dashboard/student/ui";
 import { UploadIcon } from "../../../components/dashboard/admin/icons";
 import { parseDataFile, validateRecords } from "../../../utils/fileImport";
-import { bulkAddDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
+import { bulkAddDocuments, bulkUpdateDocuments, bulkUpsertStudentsByEmail, bulkUpsertStudentAcademicRecords, bulkDeleteDocuments, deleteDocument, getCollection, updateDocument, logAudit, reconcileStudentAccountLinks, reconcileStudentRecordsForAccount } from "../../../firebase/firestore";
 import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { normalizeHostel } from "../../../utils/hostels";
 import { useCollection } from "../../../hooks/useCollection";
@@ -289,23 +289,37 @@ function expandStudentBundleRows(records) {
 async function importRecords(target, records, createdBy) {
   if (target.key === "blocks") {
     const current = await getCollection("blocks");
-    const names = new Set(current.map((block) => `${String(block.name || "").trim().toLocaleLowerCase()}|${String(block.type || "Boys").trim().toLocaleLowerCase()}`));
-    const newRecords = records.filter((record) => {
-      const key = `${String(record.name || "").trim().toLocaleLowerCase()}|${String(record.type || "Boys").trim().toLocaleLowerCase()}`;
-      if (!key || names.has(key)) return false;
-      names.add(key);
-      return true;
-    }).map((record) => ({
-      ...record,
-      name: String(record.name || "").trim(),
-      ...(record.type ? { type: record.type } : {}),
-      totalRooms: Number(record.totalRooms || 0),
-      totalBeds: Number(record.totalBeds || 0),
-      occupiedBeds: Number(record.occupiedBeds || 0),
-    }));
-    const skipped = records.length - newRecords.length;
-    const written = newRecords.length ? await bulkAddDocuments("blocks", newRecords, createdBy) : 0;
-    return { written, failed: skipped ? [{ target: "Hostel blocks", reason: `${skipped} block row(s) matched an existing hostel and block name and were skipped.` }] : [] };
+    const blockKey = (name, type) => `${String(name || "").trim().toLocaleLowerCase()}|${normalizeHostel(type) || String(type || "").trim().toLocaleLowerCase()}`;
+    const currentByKey = new Map(current.map((block) => [blockKey(block.name, block.type), block]));
+    const updatesById = new Map();
+    const newByKey = new Map();
+    const failed = [];
+    records.forEach((record, index) => {
+      const name = String(record.name || "").trim();
+      let type = normalizeHostel(record.type);
+      const matchingByName = current.filter((block) => String(block.name || "").trim().toLowerCase() === name.toLowerCase());
+      if (!type && matchingByName.length === 1) type = normalizeHostel(matchingByName[0].type);
+      if (!name || !type) {
+        failed.push({ target: "Hostel blocks", row: index + 2, reason: !name ? "Block name is required." : "Choose Boys or Girls for a new block so repeated block letters are assigned correctly." });
+        return;
+      }
+      const data = {
+        name,
+        type: type === "Girls Hostel" ? "Girls" : "Boys",
+        totalRooms: Number(record.totalRooms || 0),
+        totalBeds: Number(record.totalBeds || 0),
+        occupiedBeds: Number(record.occupiedBeds || 0),
+      };
+      const key = blockKey(name, type);
+      const existing = currentByKey.get(key);
+      if (existing) updatesById.set(existing.id, { id: existing.id, data });
+      else newByKey.set(key, data);
+    });
+    const updates = [...updatesById.values()];
+    const additions = [...newByKey.values()];
+    const updated = updates.length ? await bulkUpdateDocuments("blocks", updates) : 0;
+    const added = additions.length ? await bulkAddDocuments("blocks", additions, createdBy) : 0;
+    return { written: updated + added, updated, added, failed };
   }
   if (target.key === "students") {
     const accountResult = await ensureStudentAccounts(records, target.onProgress);
@@ -758,7 +772,7 @@ export default function DataImport() {
         </div>
       </Card>
 
-      <AdminBlocksSection />
+      <div id="hostel-blocks" className="scroll-mt-24"><AdminBlocksSection /></div>
       <DataDeleteSection />
 
       <Card title="How this works" className="bg-slate-50/60">

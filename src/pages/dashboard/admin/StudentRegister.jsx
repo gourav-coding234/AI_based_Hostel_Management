@@ -25,28 +25,30 @@ const YEAR_ORDER = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
  * person has ever had a hostel bed or a portal login.
  */
 export default function StudentRegister() {
-  const { data, loading, error } = useCollection("studentRegister", {
-    orderByField: "regNo",
-    orderByDirection: "asc",
-  });
+  const { data, loading, error } = useCollection("studentRegister");
+
+  const newestFirst = useMemo(() => [...data].sort((a, b) => {
+    const millis = (value) => value?.toDate ? value.toDate().getTime() : value ? Date.parse(value) || 0 : 0;
+    return millis(b.createdAt || b.registeredAt || b.registrationDate) - millis(a.createdAt || a.registeredAt || a.registrationDate) || String(b.regNo || "").localeCompare(String(a.regNo || ""));
+  }), [data]);
 
   const [branchFilter, setBranchFilter] = useState("All");
   const [yearFilter, setYearFilter] = useState("All");
 
   const branches = useMemo(
-    () => ["All", ...Array.from(new Set(data.map((s) => s.branch).filter(Boolean))).sort()],
-    [data]
+    () => ["All", ...Array.from(new Set(newestFirst.map((s) => s.branch).filter(Boolean))).sort()],
+    [newestFirst]
   );
   const years = useMemo(
-    () => ["All", ...YEAR_ORDER.filter((y) => data.some((s) => s.year === y))],
-    [data]
+    () => ["All", ...YEAR_ORDER.filter((y) => newestFirst.some((s) => s.year === y))],
+    [newestFirst]
   );
 
   const scoped = useMemo(() => {
-    return data.filter(
+    return newestFirst.filter(
       (s) => (branchFilter === "All" || s.branch === branchFilter) && (yearFilter === "All" || s.year === yearFilter)
     );
-  }, [data, branchFilter, yearFilter]);
+  }, [newestFirst, branchFilter, yearFilter]);
 
   const maleCount = scoped.filter((s) => s.gender === "Male").length;
   const femaleCount = scoped.filter((s) => s.gender === "Female").length;

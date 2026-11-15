@@ -1,29 +1,17 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { firebaseConfig } from "./config";
-import { db } from "./config";
+import { reconcileStudentRecordsForAccount } from "./firestore";
 import { publishDataChange } from "./dataChangeEvents";
-import { getCollection, reconcileStudentRecordsForAccount } from "./firestore";
 
-const SECONDARY_APP_NAME = "admin-user-creation";
-
-/**
- * Creating a user with the Firebase client SDK automatically signs the
- * caller in as that new user — which would boot the admin out of their own
- * session. The standard client-only workaround is to run the creation on a
- * second, isolated Firebase App instance and immediately sign that instance
- * out, leaving the admin's primary session untouched.
- *
- * Note: this is a client-side convenience, not a hardened approach — for a
- * production rollout this account-creation step belongs in a Cloud Function
- * using the Firebase Admin SDK instead.
- */
-function getSecondaryAuth() {
-  const existing = getApps().find((a) => a.name === SECONDARY_APP_NAME);
-  const appOptions = Object.fromEntries(Object.entries(firebaseConfig).filter(([, value]) => typeof value === "string" && value.trim() !== ""));
-  const secondaryApp = existing ?? initializeApp(appOptions, SECONDARY_APP_NAME);
-  return getAuth(secondaryApp);
+async function managedAccountRequest(user, payload) {
+  if (!user) throw new Error("Your administrator session has expired. Sign in again.");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/admin/manage-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || "The account could not be updated.");
+  return result;
 }
 
 /**
@@ -36,88 +24,37 @@ function getSecondaryAuth() {
  * actually points to, so the link has something real on the other end from
  * the moment the student account exists.
  */
-export async function createUserAccount({ name, email, password, role, hostelResidence, linkedStudentId, registrationNo, regNo, gender, branch, year, wing, room, bed, phone }) {
-  let academic = null;
-  if (role === "Student") {
-    const explicitRegNo = String(registrationNo || regNo || "").trim();
-    if (explicitRegNo) {
-      academic = (await getCollection("studentRegister", { whereClauses: [["regNo", "==", explicitRegNo]], limitCount: 1 }))[0] || null;
-      if (!academic) academic = (await getCollection("studentRegister", { whereClauses: [["registrationNo", "==", explicitRegNo]], limitCount: 1 }))[0] || null;
-    }
-    if (!academic && email) {
-      academic = (await getCollection("studentRegister", { whereClauses: [["email", "==", email.trim().toLowerCase()]], limitCount: 1 }))[0] || null;
-    }
-  }
-  const finalRegistrationNo = String(registrationNo || regNo || academic?.regNo || academic?.registrationNo || "").trim();
-  const secondaryAuth = getSecondaryAuth();
-
-  const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-  const uid = credential.user.uid;
-  await signOut(secondaryAuth);
-
-  const profile = {
-    name: name?.trim() || "",
-    email: email.trim(),
-    role,
-    hostelResidence: hostelResidence?.trim() || "",
-    createdAt: serverTimestamp(),
-  };
-  if (role === "Student" && finalRegistrationNo) {
-    profile.registrationNo = finalRegistrationNo;
-    profile.regNo = finalRegistrationNo;
-  }
-  if (role === "Student") {
-    profile.gender = gender || academic?.gender || "";
-    profile.branch = branch || academic?.branch || "";
-    profile.year = year || academic?.year || "";
-  }
-  if (role === "Parent" && linkedStudentId?.trim()) {
-    profile.linkedStudentId = linkedStudentId.trim();
-  }
-
-  await setDoc(doc(db, "users", uid), profile);
+export async function createUserAccount(account, user) {
+  const result = await managedAccountRequest(user, { action: "create", ...account });
   publishDataChange("users");
-
-  if (role === "Student") {
-    await setDoc(doc(db, "students", uid), {
-      name: profile.name,
-      email: profile.email,
-      registrationNo: finalRegistrationNo,
-      regNo: finalRegistrationNo,
-      gender: profile.gender,
-      branch: profile.branch,
-      year: profile.year,
-      phone: phone || academic?.phone || "",
-      hostelResidence: profile.hostelResidence || academic?.hostelResidence || academic?.wing || "",
-      wing: wing || academic?.wing || "",
-      floor: academic?.floor || "",
-      room: room || academic?.room || "",
-      bed: bed || academic?.bed || "",
-      allottedOn: academic?.allottedOn || "",
-      roommates: [],
-      createdAt: serverTimestamp(),
-    });
+  if (account.role === "Student") {
     publishDataChange("students");
-    if (finalRegistrationNo) await reconcileStudentRecordsForAccount(finalRegistrationNo, uid);
+    const registrationNo = String(account.registrationNo || account.regNo || result.registrationNo || "").trim();
+    if (registrationNo) {
+      try { await reconcileStudentRecordsForAccount(registrationNo, result.uid); }
+      catch (error) { console.warn("Could not reconcile older student records yet:", error); }
+    }
   }
-
-  return { uid, ...profile };
+  return { uid: result.uid, ...result };
 }
 
 /** Update another account through the server-side Firebase Admin API. */
 export async function updateManagedUserAccount({ user, targetUid, email, password }) {
-  if (!user) throw new Error("Your admin session has expired. Sign in again.");
-  const token = await user.getIdToken();
-  const response = await fetch("/api/admin/update-account", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ targetUid, email, password }),
+  return managedAccountRequest(user, { action: "update", targetUid, email, password }).then((result) => {
+    publishDataChange("users");
+    return result;
   });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.message || "Couldn't update this account. Please try again.");
+}
+
+export async function deleteManagedUserAccount(user, targetUid) {
+  const result = await managedAccountRequest(user, { action: "delete", targetUid });
+  publishDataChange("users");
+  return result;
+}
+
+export async function setManagedUserDisabled(user, targetUid, disabled) {
+  const result = await managedAccountRequest(user, { action: "set-disabled", targetUid, disabled });
+  publishDataChange("users");
   return result;
 }
 

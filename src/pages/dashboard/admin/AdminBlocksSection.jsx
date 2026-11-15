@@ -8,7 +8,12 @@ const EMPTY = { name: "", type: "Boys", totalRooms: "", totalBeds: "" };
 const normalized = (name) => String(name || "").trim().toLocaleLowerCase();
 
 export default function AdminBlocksSection() {
-  const { data: blocks, loading, error } = useCollection("blocks", { orderByField: "name", orderByDirection: "asc" });
+  const blocksQuery = useCollection("blocks");
+  const { loading, error } = blocksQuery;
+  const blocks = useMemo(() => [...blocksQuery.data].sort((a, b) => {
+    const millis = (value) => value?.toDate ? value.toDate().getTime() : value ? Date.parse(value) || 0 : 0;
+    return millis(b.createdAt) - millis(a.createdAt) || String(a.name || "").localeCompare(String(b.name || ""));
+  }), [blocksQuery.data]);
   const [draft, setDraft] = useState(EMPTY);
   const [editingId, setEditingId] = useState("");
   const [confirmBlock, setConfirmBlock] = useState(null);

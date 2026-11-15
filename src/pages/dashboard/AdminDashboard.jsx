@@ -7,6 +7,8 @@ const AdminOverview = lazy(() => import("./admin/Overview"));
 const DataImport = lazy(() => import("./admin/DataImport"));
 const ManageUsers = lazy(() => import("./admin/ManageUsers"));
 const StudentRegister = lazy(() => import("./admin/StudentRegister"));
+const StudentDirectory = lazy(() => import("./admin/StudentDirectory"));
+const Attendance = lazy(() => import("./admin/Attendance"));
 const Complaints = lazy(() => import("./admin/Complaints"));
 const Fees = lazy(() => import("./admin/Fees"));
 const Expenses = lazy(() => import("./admin/Expenses"));
@@ -27,6 +29,8 @@ export default function AdminDashboard() {
         <Route path="users" element={<ManageUsers />} />
         <Route path="data-import" element={<DataImport />} />
         <Route path="student-register" element={<StudentRegister />} />
+        <Route path="directory" element={<StudentDirectory />} />
+        <Route path="attendance" element={<Attendance />} />
         <Route path="blocks" element={<Navigate to="/dashboard/admin/data-import" replace />} />
         <Route path="visitors" element={<Visitors />} />
         <Route path="gate-passes" element={<GatePasses />} />

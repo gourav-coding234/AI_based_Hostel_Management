@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
 import { watchAuthState, signOut as firebaseSignOut } from "../firebase/auth";
 import { getUserProfile } from "../firebase/firestore";
+import { db } from "../firebase/config";
 import { getLocalProfilePhoto } from "../utils/localProfilePhotos";
 
 function withLocalProfilePhoto(uid, profile) {
@@ -21,8 +23,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let profileRequest = 0;
-    const unsubscribe = watchAuthState(async (firebaseUser) => {
+    let unsubscribeProfile = null;
+    const unsubscribeAuth = watchAuthState((firebaseUser) => {
       const requestId = ++profileRequest;
+      unsubscribeProfile?.();
+      unsubscribeProfile = null;
       setError(null);
       setUser(firebaseUser);
       setProfile(null);
@@ -33,11 +38,19 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      try {
-        const userProfile = await getUserProfile(firebaseUser.uid);
+      unsubscribeProfile = onSnapshot(doc(db, "users", firebaseUser.uid), (snapshot) => {
         if (requestId !== profileRequest) return;
-        setProfile(withLocalProfilePhoto(firebaseUser.uid, userProfile));
-      } catch (err) {
+        const nextProfile = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+        if (nextProfile?.status === "Inactive") {
+          setProfile(null);
+          setError("This account has been deactivated. Contact the administrator if you need access restored.");
+          setLoading(false);
+          firebaseSignOut().catch((signOutError) => console.error("Could not end the deactivated session:", signOutError));
+          return;
+        }
+        setProfile(withLocalProfilePhoto(firebaseUser.uid, nextProfile));
+        setLoading(false);
+      }, (err) => {
         if (requestId !== profileRequest) return;
         console.error("Failed to load user profile:", err);
         setError(err?.code === "resource-exhausted"
@@ -45,14 +58,14 @@ export function AuthProvider({ children }) {
           : err?.code === "permission-denied"
             ? "Firebase denied access to your account profile. Check your user document and Firestore rules."
             : `Couldn't load your profile: ${err?.message || "Please refresh."}`);
-      } finally {
-        if (requestId === profileRequest) setLoading(false);
-      }
+        setLoading(false);
+      });
     });
 
     return () => {
       profileRequest += 1;
-      unsubscribe();
+      unsubscribeProfile?.();
+      unsubscribeAuth();
     };
   }, []);
 

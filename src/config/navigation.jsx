@@ -54,7 +54,9 @@ export const NAVIGATION = {
       section: "Hostel",
       items: [
         { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
+        { label: "Student Directory", to: "/dashboard/admin/directory", icon: <UsersIcon /> },
         { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
+        { label: "Attendance", to: "/dashboard/admin/attendance", icon: <CalendarClockIcon /> },
       ],
     },
     {
@@ -170,6 +172,8 @@ export const NAVIGATION = {
       section: "Services",
       items: [
         { label: "Gate Pass", to: "/dashboard/parent/gate-pass", icon: <StudentQrIcon /> },
+        { label: "Leave Requests", to: "/dashboard/parent/leave", icon: <StudentAlertIcon /> },
+        { label: "Complaints", to: "/dashboard/parent/complaints", icon: <StudentWrenchIcon /> },
         { label: "Notices", to: "/dashboard/parent/notices", icon: <StudentMegaphoneIcon /> },
         { label: "Emergency Contacts", to: "/dashboard/parent/emergency", icon: <ShieldIcon /> },
       ],
@@ -186,6 +190,7 @@ export const NAVIGATION = {
       items: [
         { label: "Gate Desk", to: "/dashboard/security/gate-desk", icon: <ScanIcon /> },
         { label: "Attendance", to: "/dashboard/security/attendance", icon: <CheckSquareIcon /> },
+        { label: "Leave Verification", to: "/dashboard/security/leave-exit", icon: <CalendarClockIcon /> },
         { label: "Visitor Log", to: "/dashboard/security/visitors", icon: <UserPlusIcon /> },
       ],
     },

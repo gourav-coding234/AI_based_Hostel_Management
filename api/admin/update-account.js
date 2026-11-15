@@ -36,8 +36,8 @@ export default async function updateAccount(req, res) {
     }
 
     const callerProfile = await db.collection("users").doc(caller.uid).get();
-    if (!callerProfile.exists || callerProfile.get("role") !== "Admin") {
-      return reply(res, 403, { message: "Only an administrator can edit account credentials." });
+    if (!callerProfile.exists || callerProfile.get("role") !== "Admin" || callerProfile.get("status") === "Inactive") {
+      return reply(res, 403, { message: "Only an active administrator can edit account credentials." });
     }
 
     const targetUid = String(req.body?.targetUid || "").trim();

@@ -6,6 +6,7 @@ import {
   collection,
   query,
   where,
+  documentId,
   getDocs,
   orderBy,
   limit as fbLimit,
@@ -415,14 +416,30 @@ export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
   const accounts = (await getCollection("users", { whereClauses: [["role", "==", "Student"]] }));
   const uidByEmail = new Map(accounts.map((u) => [String(u.email || "").trim().toLowerCase(), u.id]));
   let written = 0;
-  const CHUNK = 400;
+  // Firestore's documentId `in` filter accepts up to 30 IDs. Checking each
+  // chunk lets imports stamp createdAt only on genuinely new roster rows,
+  // while preserving original creation order on subsequent imports.
+  const CHUNK = 30;
   for (let i = 0; i < records.length; i += CHUNK) {
+    const chunk = records.slice(i, i + CHUNK);
+    const registrationNos = chunk.map((row) => String(row.regNo || row.registrationNo || "").trim()).filter(Boolean);
+    const existingSnapshot = registrationNos.length
+      ? await getDocs(query(collection(db, "studentRegister"), where(documentId(), "in", registrationNos)))
+      : null;
+    const existingIds = new Set(existingSnapshot?.docs.map((snapshot) => snapshot.id) || []);
     const batch = writeBatch(db);
-    for (const row of records.slice(i, i + CHUNK)) {
+    for (const row of chunk) {
       const regNo = String(row.regNo || row.registrationNo || "").trim();
       if (!regNo) continue;
       const email = String(row.email || "").trim().toLowerCase();
-      batch.set(doc(db, "studentRegister", regNo), { ...row, regNo, email, importedBy: createdBy || null, updatedAt: serverTimestamp() }, { merge: true });
+      batch.set(doc(db, "studentRegister", regNo), {
+        ...row,
+        regNo,
+        email,
+        ...(!existingIds.has(regNo) ? { createdAt: serverTimestamp() } : {}),
+        importedBy: createdBy || null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
       const uid = uidByEmail.get(email);
       if (uid) batch.set(doc(db, "students", uid), {
         name: row.name || "",
@@ -543,11 +560,15 @@ function inrText(n) {
  * total - paid; status comes from the shared computeFeeStatus().
  * Throws Error("INVALID_AMOUNT") if amount <= 0 or exceeds what's owed.
  */
-export async function recordFeePayment(feeId, amount, actorName) {
+export async function recordFeePayment(feeId, amount, actorName, actorRole = "Warden", details = {}) {
   const ref = doc(db, "fees", feeId);
-  return runTransaction(db, async (tx) => {
+  const paymentId = details.paymentId || crypto.randomUUID();
+  const paymentRef = doc(db, "payments", paymentId);
+  const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("FEE_NOT_FOUND");
+    const priorPayment = await tx.get(paymentRef);
+    if (priorPayment.exists()) return { ...priorPayment.data(), duplicate: true };
     const fee = snap.data();
     const total = Math.max(Number(fee.total) || 0, 0);
     const paid = Math.max(Number(fee.paid) || 0, 0);
@@ -556,16 +577,48 @@ export async function recordFeePayment(feeId, amount, actorName) {
 
     const newPaid = paid + pay;
     const status = computeFeeStatus({ total, paid: newPaid, dueDate: fee.dueDate });
+    const studentId = fee.studentId || fee.studentUid || fee.uid || "";
+    const studentRef = studentId ? doc(db, "students", studentId) : null;
+    const studentSnap = studentRef ? await tx.get(studentRef) : null;
+    const student = studentSnap?.exists() ? studentSnap.data() : {};
+    const studentHostel = String(fee.hostel || fee.hostelType || student.hostel || student.hostelType || student.hostelResidence || "");
+    const gender = String(student.gender || fee.gender || "").toLowerCase();
+    const hostel = /girls/i.test(studentHostel) || /^(female|girl|girls)$/.test(gender) ? "Girls Hostel" : /boys/i.test(studentHostel) || /^(male|boy|boys)$/.test(gender) ? "Boys Hostel" : studentHostel;
+    const actorUid = details.actorUid || "";
+    const paidAt = serverTimestamp();
     tx.update(ref, {
       paid: newPaid,
       status,
-      lastPaymentAt: new Date().toISOString(),
+      lastPaymentAt: paidAt,
       updatedBy: actorName,
-      updatedByRole: "Warden",
+      updatedByRole: actorRole,
+      ...(actorUid ? { updatedByUid: actorUid } : {}),
+      lastPaymentId: paymentId,
       updatedAt: serverTimestamp(),
     });
-    return { paid: newPaid, remaining: total - newPaid, status };
+    tx.set(paymentRef, {
+      feeId,
+      studentId,
+      studentName: fee.studentName || student.name || "",
+      registrationNo: fee.registrationNo || fee.regNo || student.registrationNo || student.regNo || "",
+      hostel,
+      block: fee.block || fee.wing || student.wing || student.block || "",
+      room: fee.room || student.room || "",
+      amount: pay,
+      paymentDate: String(details.paymentDate || new Date().toISOString().slice(0, 10)),
+      paymentMethod: String(details.paymentMethod || "Cash"),
+      transactionId: String(details.transactionId || "").trim(),
+      remarks: String(details.remarks || "").trim(),
+      receivedBy: actorName,
+      receivedByUid: actorUid,
+      receivedByRole: actorRole,
+      createdAt: serverTimestamp(),
+    });
+    return { paid: newPaid, remaining: total - newPaid, status, paymentId };
   });
+  publishDataChange("payments");
+  publishDataChange("fees");
+  return result;
 }
 
 /**

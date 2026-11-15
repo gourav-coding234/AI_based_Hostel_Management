@@ -16,10 +16,8 @@ export function hostelForBlock(value, blocks = [], preferredHostel = "") {
   const configured = (preferred && matches.find((block) => normalizeHostel(block.type) === preferred)) || (matches.length === 1 ? matches[0] : null);
   const configuredType = normalizeHostel(configured?.type);
   if (configuredType) return configuredType;
-  const normalized = name.toLowerCase().replace(/^(block|wing)\s*/, "").trim();
-  // The configured college layout is Boys Hostel: A/B; Girls Hostel: C.
-  if (/^(a|b)(\b|\s)/.test(normalized) || normalized === "a" || normalized === "b") return "Boys Hostel";
-  if (/^(c)(\b|\s)/.test(normalized) || normalized === "c") return "Girls Hostel";
+  // Block letters can repeat between hostels. Never guess an assignment from
+  // the letter alone; use the block's configured type or the student's hostel.
   return "";
 }
 

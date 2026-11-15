@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useCollections } from "./useCollection";
 import { hostelForStudent } from "../utils/hostels";
+import { isHostelResident } from "../utils/hostelResidents";
 
 function normalizeRegistration(value) {
   return String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
@@ -128,7 +129,17 @@ export function useStudentDirectory() {
     data.students.forEach((student) => addSource(student, "student", student.id));
     registerRecords.forEach((record) => addSource(record, "register"));
 
-    return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+    // This shared directory is for hostel operations; an Auth account by
+    // itself is not a resident until the roster/allocation assigns a hostel,
+    // block or room.
+    const toMillis = (value) => {
+      if (value?.toDate) return value.toDate().getTime();
+      const parsed = value ? Date.parse(value) : NaN;
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+    return [...rows.values()]
+      .filter(isHostelResident)
+      .sort((a, b) => toMillis(b.createdAt || b.registeredAt || b.registrationDate) - toMillis(a.createdAt || a.registeredAt || a.registrationDate) || a.name.localeCompare(b.name));
   }, [data.users, data.students, data.registerByWing, data.registerByResidence, data.registerByBlock, data.blocks]);
 
   return { directory, loading, error };
