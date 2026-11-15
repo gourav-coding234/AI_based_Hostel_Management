@@ -18,6 +18,7 @@ import {
 import { db } from "./config";
 import { publishDataChange } from "./dataChangeEvents";
 import { computeFeeStatus } from "../utils/fees";
+import { normalizeHostel, hostelForStudent } from "../utils/hostels";
 
 /**
  * Fetches a user's profile document from the `users` collection.
@@ -436,6 +437,7 @@ export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
         ...row,
         regNo,
         email,
+        ...(normalizeHostel(row.gender) ? { hostel: normalizeHostel(row.gender), hostelType: normalizeHostel(row.gender) } : {}),
         ...(!existingIds.has(regNo) ? { createdAt: serverTimestamp() } : {}),
         importedBy: createdBy || null,
         updatedAt: serverTimestamp(),
@@ -448,6 +450,7 @@ export async function bulkUpsertStudentAcademicRecords(records, createdBy) {
         branch: row.branch || "",
         year: row.year || "",
         gender: row.gender || "",
+        ...(normalizeHostel(row.gender) ? { hostel: normalizeHostel(row.gender), hostelType: normalizeHostel(row.gender) } : {}),
         batch: row.batch || "",
         phone: row.phone || "",
         hostelResidence: row.hostelResidence || row.wing || "",
@@ -581,10 +584,14 @@ export async function recordFeePayment(feeId, amount, actorName, actorRole = "Wa
     const studentRef = studentId ? doc(db, "students", studentId) : null;
     const studentSnap = studentRef ? await tx.get(studentRef) : null;
     const student = studentSnap?.exists() ? studentSnap.data() : {};
-    const studentHostel = String(fee.hostel || fee.hostelType || student.hostel || student.hostelType || student.hostelResidence || "");
-    const gender = String(student.gender || fee.gender || "").toLowerCase();
-    const hostel = /girls/i.test(studentHostel) || /^(female|girl|girls)$/.test(gender) ? "Girls Hostel" : /boys/i.test(studentHostel) || /^(male|boy|boys)$/.test(gender) ? "Boys Hostel" : studentHostel;
     const actorUid = details.actorUid || "";
+    const actorRef = actorUid ? doc(db, "users", actorUid) : null;
+    const actorSnap = actorRef ? await tx.get(actorRef) : null;
+    const assignedHostel = normalizeHostel(actorSnap?.exists() ? actorSnap.data().hostel || actorSnap.data().assignedHostel : "");
+    const hostel = normalizeHostel(fee.hostel || fee.hostelType) ||
+      hostelForStudent({ ...student, gender: student.gender || fee.gender }, []) ||
+      normalizeHostel(student.hostelResidence) || assignedHostel;
+    if (actorRole === "Warden" && (!assignedHostel || assignedHostel !== hostel)) throw new Error("WARDEN_HOSTEL_MISMATCH");
     const paidAt = serverTimestamp();
     tx.update(ref, {
       paid: newPaid,
@@ -616,6 +623,27 @@ export async function recordFeePayment(feeId, amount, actorName, actorRole = "Wa
     });
     return { paid: newPaid, remaining: total - newPaid, status, paymentId };
   });
+  publishDataChange("payments");
+  publishDataChange("fees");
+  return result;
+}
+
+/** Warden payment route: server verifies hostel assignment and atomically
+ * stores both the payment ledger row and updated fee balance. */
+export async function recordWardenFeePayment(user, feeId, amount, details = {}) {
+  if (!user) throw new Error("Your session expired. Sign in again.");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/warden/record-payment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ feeId, amount, ...details }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(result.message || "The payment could not be saved.");
+    error.code = result.code || "PAYMENT_SAVE_FAILED";
+    throw error;
+  }
   publishDataChange("payments");
   publishDataChange("fees");
   return result;

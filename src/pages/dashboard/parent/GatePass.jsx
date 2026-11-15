@@ -23,7 +23,7 @@ export default function ParentGatePass() {
   const activePass = passList.find(isPassActive) || [...passList].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).find((pass) => passStatus(pass) === "Completed");
   async function exportGatePasses() {
     await downloadXlsxFile(passList, [
-      { label: "Gate Pass ID", value: (row) => row.id },
+      { label: "Gate Pass Code", value: (row) => row.code || "Legacy pass" },
       { label: "Student Name", value: () => studentUser?.name || "" },
       { label: "Registration Number", value: () => studentUser?.registrationNo || "" },
       { label: "Type", value: (row) => row.type },
@@ -53,7 +53,7 @@ export default function ParentGatePass() {
               <QrIcon />
             </span>
             <div>
-              <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
+              <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.code || "Legacy pass"}</p>
               <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
               <p className="mt-1 text-xs text-slate-400">{activePass.from} → {activePass.to}</p>
               {activePass.exitTime?.toDate && <p className="mt-1 text-xs text-slate-500">Exit recorded {activePass.exitTime.toDate().toLocaleString("en-IN")}</p>}
@@ -99,7 +99,7 @@ export default function ParentGatePass() {
               <tbody className="divide-y divide-slate-100">
                 {passList.map((p) => (
                   <tr key={p.id}>
-                    <td className="py-2.5 text-slate-400">{p.id}</td>
+                    <td className="py-2.5 text-slate-400">{p.code || "Legacy pass"}</td>
                     <td className="py-2.5 font-medium text-ink">{p.type || "—"}</td>
                     <td className="py-2.5 text-slate-500">{p.from || "—"} → {p.to || "—"}</td>
                     <td className="py-2.5"><Pill tone={passStatus(p)}>{passStatus(p)}</Pill></td>

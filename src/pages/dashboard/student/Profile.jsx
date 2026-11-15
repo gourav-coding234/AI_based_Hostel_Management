@@ -130,6 +130,16 @@ export default function Profile() {
             />
           </Field>
 
+          <Field label="About (optional)">
+            <textarea
+              rows={3}
+              placeholder="Anything you'd like to add — hobbies, interests, etc."
+              value={form.bio}
+              onChange={(e) => set("bio", e.target.value)}
+              className={`${inputCls} resize-none`}
+            />
+          </Field>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Emergency contact name">
               <input
@@ -150,16 +160,6 @@ export default function Profile() {
               />
             </Field>
           </div>
-
-          <Field label="About (optional)">
-            <textarea
-              rows={3}
-              placeholder="Anything you'd like to add — hobbies, interests, etc."
-              value={form.bio}
-              onChange={(e) => set("bio", e.target.value)}
-              className={`${inputCls} resize-none`}
-            />
-          </Field>
 
           {error && <p className="rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{error}</p>}
           {success && <p className="rounded-xl bg-teal-500/10 px-4 py-2.5 text-sm text-teal-700">{success}</p>}

@@ -5,6 +5,8 @@ import DataTable from "../../../components/ui/DataTable";
 import { WrenchIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { updateDocument, logAudit } from "../../../firebase/firestore";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
+import { dateKey } from "../../../utils/dateKey";
 
 const statusFilters = ["All", "Open", "In Progress", "Resolved"];
 const COMPLAINT_CATEGORIES = ["Room", "Wing", "Food", "Other"];
@@ -16,14 +18,31 @@ export default function WardenComplaints() {
   const complaints = complaintsQuery.data;
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [selectedDate, setSelectedDate] = useState("");
 
   const filtered = useMemo(() => {
     return complaints.filter(
       (c) =>
         (categoryFilter === "All" || c.category === categoryFilter) &&
-        (statusFilter === "All" || c.status === statusFilter)
+        (statusFilter === "All" || c.status === statusFilter) &&
+        (!selectedDate || dateKey(c.date || c.createdAt) === selectedDate)
     );
-  }, [complaints, categoryFilter, statusFilter]);
+  }, [complaints, categoryFilter, statusFilter, selectedDate]);
+
+  async function downloadComplaints() {
+    await downloadXlsxFile(filtered, [
+      { label: "Complaint", value: (c) => c.title || "" },
+      { label: "Category", value: (c) => c.category || "" },
+      { label: "Priority", value: (c) => c.priority || "" },
+      { label: "Student", value: (c) => c.studentName || "" },
+      { label: "Registration ID", value: (c) => c.registrationNo || "" },
+      { label: "Room", value: (c) => c.room || "" },
+      { label: "Description", value: (c) => c.description || "" },
+      { label: "Status", value: (c) => c.status || "" },
+      { label: "Assigned To", value: (c) => c.assignedTo || "" },
+      { label: "Date", value: (c) => c.date || c.createdAt || "" },
+    ], `complaints_${selectedDate || new Date().toISOString().slice(0, 10)}.xlsx`, "Complaints");
+  }
 
   async function assignStaff(id, staff) {
     const c = complaints.find((x) => x.id === id);
@@ -61,7 +80,8 @@ export default function WardenComplaints() {
       sortable: true,
       render: (c) => (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <input aria-label="Filter complaints by date" type="date" className="rounded-full border border-slate-200 px-3 py-1.5 text-xs" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
             <span className="font-medium text-ink">{c.title}</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{c.category}</span>
             <Pill tone={c.priority}>{c.priority}</Pill>
@@ -145,6 +165,7 @@ export default function WardenComplaints() {
                 </button>
               ))}
             </div>
+            <Button variant="outline" className="sm:ml-auto" onClick={downloadComplaints} disabled={!filtered.length}>Download Excel</Button>
           </div>
         }
       >

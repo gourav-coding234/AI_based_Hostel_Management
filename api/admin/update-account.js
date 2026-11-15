@@ -41,9 +41,11 @@ export default async function updateAccount(req, res) {
     }
 
     const targetUid = String(req.body?.targetUid || "").trim();
+    const name = String(req.body?.name || "").trim();
     const email = String(req.body?.email || "").trim().toLowerCase();
     const password = String(req.body?.password || "");
     if (!targetUid) return reply(res, 400, { message: "Choose an account to edit." });
+    if (!name || name.length > 120) return reply(res, 400, { message: "Enter a name up to 120 characters." });
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return reply(res, 400, { message: "Enter a valid email address." });
     }
@@ -62,19 +64,34 @@ export default async function updateAccount(req, res) {
     if (password) authChanges.password = password;
 
     const changedProfileEmail = email !== profileEmail;
-    if (changedProfileEmail) await targetProfileRef.update({ email });
+    const profileChanges = { name };
+    if (changedProfileEmail) profileChanges.email = email;
+    if (email !== oldEmail.toLowerCase()) {
+      const duplicate = await db.collection("users").where("email", "==", email).limit(10).get();
+      if (duplicate.docs.some((entry) => entry.id !== targetUid && entry.get("status") !== "Inactive")) {
+        return reply(res, 409, { message: "That email is already used by another account." });
+      }
+    }
+    await targetProfileRef.update(profileChanges);
     try {
-      if (Object.keys(authChanges).length) await auth.updateUser(targetUid, authChanges);
+      authChanges.displayName = name;
+      await auth.updateUser(targetUid, authChanges);
     } catch (error) {
-      if (changedProfileEmail) {
-        try { await targetProfileRef.update({ email: oldEmail }); } catch (rollbackError) {
+      try {
+        await targetProfileRef.update({ name: targetProfile.get("name") || "", email: profileEmail });
+      } catch (rollbackError) {
           console.error("Could not roll back account email in Firestore after Auth update failed:", rollbackError);
-        }
       }
       throw error;
     }
 
-    return reply(res, 200, { ok: true, email, passwordUpdated: Boolean(password) });
+    if (targetProfile.get("role") === "Student") {
+      const studentRef = db.collection("students").doc(targetUid);
+      const studentSnap = await studentRef.get();
+      if (studentSnap.exists) await studentRef.update({ name, email });
+    }
+
+    return reply(res, 200, { ok: true, name, email, passwordUpdated: Boolean(password) });
   } catch (error) {
     console.error("Admin account update failed:", error);
     const message = error?.code === "auth/email-already-exists"

@@ -3,6 +3,9 @@ import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { EmptyState } from "../../../components/ui/DataState";
 import { ChartIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { useAuth } from "../../../context/AuthContext";
+import { buildOccupancyReport } from "../../../utils/occupancy";
+import { wardenHostel } from "../../../utils/hostels";
 
 function toCsv(rows) {
   if (!rows.length) return "";
@@ -19,15 +22,19 @@ function download(rows, name) {
 }
 
 export default function Reports() {
+  const { profile } = useAuth();
+  const hostel = wardenHostel(profile);
   const { data, loading } = useCollections({
     students: { name: "students" },
+    studentRegister: { name: "studentRegister" },
+    blocks: { name: "blocks" },
     complaints: { name: "complaints" },
     leaveRequests: { name: "leaveRequests" },
     visitors: { name: "visitors" },
   });
 
   const reports = [
-    { id: "RPT-OCC", name: "Room occupancy", description: "Room and bed occupancy for your wings.", rows: data.students },
+    { id: "RPT-OCC", name: "Room occupancy", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister, data.blocks, hostel) },
     { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed with current status.", rows: data.complaints },
     { id: "RPT-LV", name: "Leave requests", description: "Leave applications and their approval status.", rows: data.leaveRequests },
     { id: "RPT-VIS", name: "Visitor log", description: "Visitor check-ins and check-outs.", rows: data.visitors },
@@ -55,7 +62,7 @@ export default function Reports() {
                 <p className="font-display text-sm font-semibold text-ink">{r.name}</p>
                 <p className="mt-1 text-sm text-slate-500">{r.description}</p>
                 <p className="mt-2 text-xs text-slate-400">
-                  {loading ? "Loading…" : `${r.rows.length} row${r.rows.length === 1 ? "" : "s"}`}
+      {loading ? "Loading…" : `${r.rows.length} row${r.rows.length === 1 ? "" : "s"}`}
                 </p>
               </div>
             </div>

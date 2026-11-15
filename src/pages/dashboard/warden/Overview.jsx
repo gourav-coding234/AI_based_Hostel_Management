@@ -17,6 +17,7 @@ import { useCollections } from "../../../hooks/useCollection";
 import { computeFeeStatus } from "../../../utils/fees";
 import { hostelForBlock, studentMatchesHostel, wardenHostel } from "../../../utils/hostels";
 import { mergeHostelResidents } from "../../../utils/hostelResidents";
+import { buildHostelOccupancySummary, buildOccupancyReport } from "../../../utils/occupancy";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -53,14 +54,17 @@ export default function WardenOverview() {
     hostelForBlock(b.name, data.blocks) === myHostel ||
     data.students.some((student) => studentMatchesHostel(student, myHostel, data.blocks) && String(student.hostelResidence || student.wing || student.block || "").trim().toLowerCase() === String(b.name || "").trim().toLowerCase())
   ) : data.blocks;
-  const totalBeds = myBlocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const occupiedBeds = myBlocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
-  const vacantBeds = Math.max(totalBeds - occupiedBeds, 0);
-  const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-
   // ---- Residents (students model supports block/wing, so scope it) ----
   const myStudents = mergeHostelResidents(data.students, data.studentRegister)
     .filter((s) => studentMatchesHostel(s, myHostel, data.blocks));
+  const totalBeds = myBlocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
+  const recordedOccupiedBeds = myBlocks.reduce((sum, b) => sum + (Number(b.occupiedBeds) || 0), 0);
+  const assignedResidents = myStudents.filter((student) => student.room).length;
+  const occupiedBeds = Math.max(recordedOccupiedBeds, assignedResidents);
+  const vacantBeds = Math.max(totalBeds - occupiedBeds, 0);
+  const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+  const occupancyRows = buildOccupancyReport(data.students, data.studentRegister, myBlocks, myHostel);
+  const hostelOccupancy = buildHostelOccupancySummary(data.students, data.studentRegister, data.blocks);
 
   // ---- Attendance (scoped via each student's wing — the attendance
   // record itself only carries studentId/date/status) ----
@@ -147,7 +151,7 @@ export default function WardenOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<UsersIcon />} label="Total residents" value={loading ? "…" : myStudents.length} sub={myHostel || "Across both hostels"} tone="navy" to="/dashboard/warden/directory" />
-        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${vacantBeds} beds vacant` : myHostel ? `No capacity data for ${myHostel}` : "No hostel assigned"} tone="teal" to="/dashboard/warden/directory" />
+        <StatCard icon={<BedIcon />} label="Occupancy" value={totalBeds ? `${occupancyPct}%` : `${occupiedBeds} occupied`} sub={totalBeds ? `${occupiedBeds} occupied · ${vacantBeds} vacant · ${totalBeds} capacity` : myHostel ? `${occupiedBeds} assigned · capacity not configured for ${myHostel}` : "No hostel assigned"} tone="teal" to="/dashboard/warden/directory" />
         <StatCard icon={<CheckSquareIcon />} label="Attendance today" value={loading ? "…" : attendancePct === null ? "—" : `${attendancePct}%`} sub={markedToday ? `${presentToday}/${markedToday} present` : "Not marked yet"} tone={attendancePct !== null && attendancePct < 75 ? "rose" : "teal"} to="/dashboard/warden/attendance" />
         <StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalOutstanding)} pending` : "No fee records yet"} tone="amber" to="/dashboard/warden/fees" />
       </div>
@@ -337,15 +341,23 @@ export default function WardenOverview() {
         </Card>
       </div>
 
-      {totalBeds > 0 && (
+      {myHostel && (
         <Card title="Bed occupancy">
           <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-slate-500">Beds filled</span>
-            <span className="font-semibold text-ink">{occupiedBeds}/{totalBeds}</span>
+            <span className="text-slate-500">{myHostel}</span>
+            <span className="font-semibold text-ink">{occupiedBeds} occupied · {totalBeds ? `${vacantBeds} vacant · ${totalBeds} capacity` : "capacity not configured"}</span>
           </div>
-          <ProgressBar value={occupiedBeds} max={totalBeds} tone="teal" />
+          {totalBeds > 0 && <ProgressBar value={occupiedBeds} max={totalBeds} tone="teal" />}
         </Card>
       )}
+
+      <Card title="Room occupancy">
+        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Block</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.block}-${row.room}`}><td className="py-2.5">{row.block}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Imported student room assignments will appear here." />}
+      </Card>
+
+      <Card title="Occupancy by hostel">
+        <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Hostel</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant</th><th className="pb-2">Capacity</th></tr></thead><tbody className="divide-y divide-slate-100">{hostelOccupancy.map((row) => <tr key={row.hostel}><td className="py-2.5 font-medium">{row.hostel}</td><td className="py-2.5">{row.occupied}</td><td className="py-2.5">{row.vacant ?? "Capacity not configured"}</td><td className="py-2.5">{row.capacity || "Capacity not configured"}</td></tr>)}</tbody></table></div>
+      </Card>
 
       <Card title="Recent notices" action={
         <Link to="/dashboard/warden/notices" className="flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800">

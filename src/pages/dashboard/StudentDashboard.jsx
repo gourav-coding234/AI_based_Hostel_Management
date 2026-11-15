@@ -9,6 +9,7 @@ const Attendance = lazy(() => import("./student/Attendance"));
 const GatePass = lazy(() => import("./student/GatePass"));
 const Complaints = lazy(() => import("./student/Complaints"));
 const Notices = lazy(() => import("./student/Notices"));
+const Feedback = lazy(() => import("./student/Feedback"));
 const Profile = lazy(() => import("./student/Profile"));
 const Leave = lazy(() => import("./student/Leave"));
 const EmergencyContacts = lazy(() => import("./parent/EmergencyContacts"));
@@ -25,6 +26,7 @@ export default function StudentDashboard() {
         <Route path="gate-pass" element={<GatePass />} />
         <Route path="complaints" element={<Complaints />} />
         <Route path="notices" element={<Notices />} />
+        <Route path="feedback" element={<Feedback />} />
         <Route path="leave" element={<Leave />} />
         <Route path="emergency" element={<EmergencyContacts />} />
       </Routes>

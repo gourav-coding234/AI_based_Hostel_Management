@@ -60,6 +60,23 @@ export default async function manageAccount(req, res) {
           const byEmail = await db.collection("studentRegister").where("email", "==", email).limit(1).get();
           academic = byEmail.empty ? null : byEmail.docs[0].data();
         }
+        const regNo = registrationNo || String(academic?.regNo || academic?.registrationNo || "").trim();
+        if (!regNo) return respond(res, 400, { message: "A registration number is required for every student account." });
+        const existingRoster = await db.collection("studentRegister").where("regNo", "==", regNo).limit(2).get();
+        const existingProfiles = await db.collection("students").where("registrationNo", "==", regNo).limit(2).get();
+        if (existingProfiles.docs.some((entry) => entry.get("email") !== email) || (existingRoster.docs.length && existingRoster.docs[0].get("email") && existingRoster.docs[0].get("email").toLowerCase() !== email)) {
+          return respond(res, 409, { message: "That registration number is already linked to another student." });
+        }
+        req.body.registrationNo = regNo;
+      }
+      let gender = String(req.body.gender || academic?.gender || "").trim();
+      let studentHostel = "";
+      if (role === "Student") {
+        const normalizedGender = gender.toLowerCase();
+        if (!/^(male|m|boy|boys|female|f|girl|girls)$/.test(normalizedGender)) return respond(res, 400, { message: "Choose the student's gender so their hostel can be assigned correctly." });
+        const code = /^(f|female|girl|girls)$/.test(normalizedGender) ? "G" : "B";
+        gender = code === "G" ? "Female" : "Male";
+        studentHostel = code === "G" ? "Girls Hostel" : "Boys Hostel";
       }
       let created;
       try { created = await auth.createUser({ email, password, displayName: name, disabled: false }); }
@@ -74,8 +91,9 @@ export default async function manageAccount(req, res) {
       };
       if (role === "Parent") profile.linkedStudentId = linkedStudentId;
       if (role === "Student") Object.assign(profile, {
+        studentCode: regNo, hostel: studentHostel, hostelType: studentHostel,
         registrationNo: regNo, regNo,
-        gender: req.body.gender || academic?.gender || "",
+        gender,
         branch: req.body.branch || academic?.branch || "",
         year: req.body.year || academic?.year || "",
       });
@@ -83,7 +101,7 @@ export default async function manageAccount(req, res) {
         const batch = db.batch();
         batch.set(db.collection("users").doc(created.uid), profile);
         if (role === "Student") batch.set(db.collection("students").doc(created.uid), {
-          name, email, registrationNo: regNo, regNo,
+          name, email, studentCode: regNo, hostel: studentHostel, hostelType: studentHostel, registrationNo: regNo, regNo,
           gender: profile.gender, branch: profile.branch, year: profile.year,
           phone: req.body.phone || academic?.phone || "",
           hostelResidence: profile.hostelResidence || academic?.hostelResidence || academic?.wing || "",
@@ -132,7 +150,9 @@ export default async function manageAccount(req, res) {
     const message = error?.code === "auth/invalid-email" ? "Enter a valid email address."
       : error?.code === "auth/weak-password" ? "Choose a stronger password with at least 6 characters."
         : error?.code === "auth/user-not-found" ? "That sign-in account no longer exists."
-          : "The account could not be updated. Check the server configuration and try again.";
-    return respond(res, 500, { message });
+          : error?.code === "auth/email-already-exists" ? "This email address is already registered."
+            : error?.message?.includes("Firebase Admin server credentials") ? error.message
+              : "The account could not be saved. Check the server logs and Firebase Admin configuration.";
+    return respond(res, error?.code === "auth/email-already-exists" ? 409 : 500, { message });
   }
 }

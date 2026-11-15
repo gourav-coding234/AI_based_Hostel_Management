@@ -18,7 +18,7 @@ function tsToDate(ts) {
   return new Date(ts);
 }
 
-const EMPTY_FORM = { name: "", email: "", password: "", role: "Student", registrationNo: "", hostelResidence: "", linkedStudentId: "" };
+const EMPTY_FORM = { name: "", email: "", password: "", role: "Student", registrationNo: "", gender: "", hostelResidence: "", linkedStudentId: "" };
 
 const roleAccent = {
   Admin: "bg-navy-950/5 text-navy-900",
@@ -58,7 +58,7 @@ export default function ManageUsers() {
   const [parentLinkSaving, setParentLinkSaving] = useState("");
   const [parentLinkFeedback, setParentLinkFeedback] = useState({});
   const [editingAccount, setEditingAccount] = useState(null);
-  const [accountDraft, setAccountDraft] = useState({ email: "", password: "" });
+  const [accountDraft, setAccountDraft] = useState({ name: "", email: "", password: "" });
   const [savingAccount, setSavingAccount] = useState(false);
   const [accountEditError, setAccountEditError] = useState("");
 
@@ -71,15 +71,35 @@ export default function ManageUsers() {
   });
   const blocks = refData.blocks;
   const blockCoverage = useMemo(() => {
-    const keyFor = (name, type) => `${String(name || "").trim().toLowerCase()}|${String(type || "").trim().toLowerCase()}`;
-    const result = new Map(blocks.map((block) => [keyFor(block.name, block.type), { ...block, referenced: false }]));
+    const cleanName = (name) => String(name || "").trim().replace(/^block\s+/i, "").toLowerCase();
+    const keyFor = (name, type) => `${cleanName(name)}|${type || ""}`;
+    const result = new Map();
+    blocks.forEach((block) => {
+      const type = block.type?.startsWith("Girls") ? "Girls" : block.type?.startsWith("Boys") ? "Boys" : "";
+      const key = keyFor(block.name, type);
+      const previous = result.get(key);
+      result.set(key, {
+        ...previous,
+        ...block,
+        id: previous?.id || block.id,
+        name: previous?.name || String(block.name || "").trim().replace(/^block\s+/i, "Block "),
+        type: type ? `${type} Hostel` : block.type || "",
+        occupiedBeds: Math.max(Number(previous?.occupiedBeds) || 0, Number(block.occupiedBeds) || 0),
+        totalBeds: Math.max(Number(previous?.totalBeds) || 0, Number(block.totalBeds) || 0),
+        referenced: false,
+        residentCount: 0,
+      });
+    });
     [...refData.students, ...refData.fees].forEach((record) => {
       const name = residentBlockName(record);
       if (!name || /^(boys|girls) hostel$/i.test(name)) return;
       const hostel = hostelForStudent(record, blocks);
       const type = hostel?.startsWith("Girls") ? "Girls" : hostel?.startsWith("Boys") ? "Boys" : "";
       const key = keyFor(name, type);
-      if (!result.has(key)) result.set(key, { id: `record:${key}`, name, type, occupiedBeds: 0, totalBeds: 0, referenced: true });
+      if (!result.has(key)) result.set(key, { id: `record:${key}`, name: String(name).replace(/^block\s+/i, "Block "), type: type ? `${type} Hostel` : "", occupiedBeds: 0, totalBeds: 0, referenced: true, residentCount: 0 });
+      const entry = result.get(key);
+      if (refData.students.includes(record) && (record.regNo || record.registrationNo || record.email || record.accountUid || record.userId)) entry.residentCount += 1;
+      if (!blocks.some((block) => keyFor(block.name, type) === key)) entry.referenced = true;
     });
     return [...result.values()];
   }, [blocks, refData.students, refData.fees]);
@@ -195,7 +215,7 @@ export default function ManageUsers() {
 
   function openAccountEditor(account) {
     setEditingAccount(account);
-    setAccountDraft({ email: account.email || "", password: "" });
+    setAccountDraft({ name: account.name || "", email: account.email || "", password: "" });
     setAccountEditError("");
   }
 
@@ -208,6 +228,7 @@ export default function ManageUsers() {
       const updated = await updateManagedUserAccount({
         user: currentUser,
         targetUid: editingAccount.id,
+        name: accountDraft.name,
         email: accountDraft.email,
         password: accountDraft.password,
       });
@@ -435,15 +456,16 @@ export default function ManageUsers() {
             </Field>
 
             {form.role === "Student" && (
-              <Field label="Registration number (optional, links roster and attendance)">
-                <input
-                  type="text"
-                  placeholder="Student registration number"
-                  value={form.registrationNo}
-                  onChange={(e) => setForm({ ...form, registrationNo: e.target.value })}
-                  className={inputCls}
-                />
-              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Registration number (required)">
+                  <input type="text" required placeholder="Student registration number" value={form.registrationNo} onChange={(e) => setForm({ ...form, registrationNo: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label="Gender (required)">
+                  <select required value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} className={inputCls}>
+                    <option value="">Select gender…</option><option value="Male">Male</option><option value="Female">Female</option>
+                  </select>
+                </Field>
+              </div>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -697,7 +719,7 @@ export default function ManageUsers() {
       </Card>
 
       {/* Warden assignments are hostel-wide; block letters remain room locations. */}
-      <Card title="Warden management" subtitle="Assign each warden to a whole hostel. Boys Hostel covers Blocks A and B; Girls Hostel covers Block C.">
+      <Card title="Warden management" subtitle="Assign each warden to a whole hostel. Blocks are managed within their hostel.">
         {reassignError && <p className="mb-4 rounded-xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">{reassignError}</p>}
         <DataTable
           columns={wardenColumns}
@@ -714,14 +736,14 @@ export default function ManageUsers() {
 
       <Card title="Block coverage">
         {blockCoverage.length === 0 ? (
-          <EmptyState title="No blocks yet" description="Add blocks in Data Import." />
+          <EmptyState title="No blocks yet" description="Blocks appear automatically when student records include a block or wing." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {blockCoverage.map((b) => (
               <div key={b.id} className="rounded-2xl border border-slate-200 p-4">
                 <p className="text-sm font-semibold text-ink">{b.name}</p>
                 <p className="mt-1 text-sm text-slate-600">{b.type ? `${b.type} Hostel` : "Hostel type not recorded"}</p>
-                <p className="text-xs text-slate-400">{b.referenced ? "Referenced by student or fee records · capacity not set" : `${b.occupiedBeds || 0}/${b.totalBeds || 0} beds occupied`}</p>
+                <p className="text-xs text-slate-400">{b.residentCount} residents · {b.totalBeds ? `${b.occupiedBeds || 0}/${b.totalBeds} beds occupied` : "capacity not set"}</p>
               </div>
             ))}
           </div>
@@ -734,6 +756,9 @@ export default function ManageUsers() {
             <h2 id="edit-managed-account-title" className="font-display text-xl font-semibold">Edit account</h2>
             <p className="mt-1 text-sm text-slate-500">Change sign-in details for {editingAccount.name || editingAccount.email}.</p>
             <form onSubmit={saveAccountChanges} className="mt-5 space-y-4">
+              <Field label="Account name">
+                <input type="text" required maxLength={120} value={accountDraft.name} onChange={(event) => setAccountDraft((current) => ({ ...current, name: event.target.value }))} className={inputCls} />
+              </Field>
               <Field label="Email address">
                 <input
                   type="email"

@@ -57,21 +57,14 @@ export default function StudentDirectory() {
     [directory, assignedHostel]
   );
 
-  const [wingFilter, setWingFilter] = useState("All");
-  const wings = useMemo(
-    () => ["All", ...Array.from(new Set(wingScoped.map((s) => s.wing).filter(Boolean)))],
-    [wingScoped]
-  );
   const [branchFilter, setBranchFilter] = useState("All");
-  const [blockFilter, setBlockFilter] = useState("All");
   const [yearFilter, setYearFilter] = useState("All");
   const branches = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.branch).filter(Boolean))], [wingScoped]);
-  const blocks = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.hostelResidence).filter(Boolean))], [wingScoped]);
   const years = useMemo(() => ["All", ...new Set(wingScoped.map((s) => s.year).filter(Boolean))], [wingScoped]);
 
   const scoped = useMemo(
-    () => wingScoped.filter((s) => (wingFilter === "All" || s.wing === wingFilter) && (branchFilter === "All" || s.branch === branchFilter) && (blockFilter === "All" || s.hostelResidence === blockFilter) && (yearFilter === "All" || s.year === yearFilter)),
-    [wingScoped, wingFilter, branchFilter, blockFilter, yearFilter]
+    () => wingScoped.filter((s) => (branchFilter === "All" || s.branch === branchFilter) && (yearFilter === "All" || s.year === yearFilter)),
+    [wingScoped, branchFilter, yearFilter]
   );
 
   function handleDownload() {
@@ -159,18 +152,12 @@ export default function StudentDirectory() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select aria-label="Filter by branch" className={`${inputCls} sm:w-44`} value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>{branches.map((v) => <option key={v} value={v}>{v === "All" ? "All branches" : v}</option>)}</select>
-            <select aria-label="Filter by hostel block" className={`${inputCls} sm:w-44`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>{blocks.map((v) => <option key={v} value={v}>{v === "All" ? "All blocks" : v}</option>)}</select>
             <select aria-label="Filter by year" className={`${inputCls} sm:w-36`} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>{years.map((v) => <option key={v} value={v}>{v === "All" ? "All years" : v}</option>)}</select>
-            <select className={`${inputCls} sm:w-44`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
-              {wings.map((w) => (
-                <option key={w} value={w}>{w}</option>
-              ))}
-            </select>
-            <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={handleDownload}>
-              <DownloadIcon /> Download Excel
-            </Button>
             <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={() => fileInputRef.current?.click()}>
               <UploadIcon /> Upload CSV
+            </Button>
+            <Button variant="outline" className="px-3 py-1.5 text-xs" onClick={handleDownload}>
+              <DownloadIcon /> Download Excel
             </Button>
             <input
               ref={fileInputRef}

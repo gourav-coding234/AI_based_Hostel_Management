@@ -16,9 +16,9 @@ import {
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { useCollection } from "../../../hooks/useCollection";
 import { useDocument } from "../../../hooks/useDocument";
-import { noticeAppliesTo } from "../../../utils/notices";
+import { noticeAppliesTo, noticeQueryTargets, hostelForNoticeProfile } from "../../../utils/notices";
 import { computeFeeStatus } from "../../../utils/fees";
-import { isPassActive, passStatus } from "../../../utils/gatePass";
+import { isPassOut, isPassExpired, passStatus } from "../../../utils/gatePass";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -52,9 +52,9 @@ export default function Overview() {
   // (see noticeAppliesTo), so limiting to exactly 3 before filtering could
   // silently drop relevant notices behind irrelevant ones targeted at a
   // different wing.
-  const noticesQuery = useCollection("notices", { orderByField: "date", limitCount: 10 });
+  const noticesQuery = useCollection("notices", { where: [["target", "in", noticeQueryTargets(profile || {})]], limitCount: 10 });
   const filteredNoticeData = noticesQuery.data
-    .filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence))
+    .filter((n) => noticeAppliesTo(n.target, hostelForNoticeProfile(profile)))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
     .slice(0, 3);
   const notices = { ...noticesQuery, data: filteredNoticeData, isEmpty: !noticesQuery.loading && !noticesQuery.error && filteredNoticeData.length === 0 };
@@ -96,9 +96,11 @@ export default function Overview() {
   const openComplaints = complaints.items.filter((c) => c.status !== "Resolved").length;
   const resolvedComplaints = complaints.items.filter((c) => c.status === "Resolved").length;
   const studentPasses = [...gatePasses.items].sort((a, b) => String(b.from || "").localeCompare(String(a.from || "")));
-  const activePass = studentPasses.find(isPassActive);
-  const completedPass = studentPasses.find((pass) => passStatus(pass) === "Completed");
+  // Only an approved, not-yet-scanned pass should expose a QR. Out and
+  // completed passes remain in history but are never shown as scannable.
   const movementStatus = movement.items[0];
+  const activePass = movementStatus?.status === "OUT" ? null : studentPasses.find((pass) => passStatus(pass) === "Approved" && !isPassOut(pass) && !isPassExpired(pass));
+  const completedPass = studentPasses.find((pass) => passStatus(pass) === "Completed");
 
   return (
     <div className="student-overview flex flex-col gap-6 animate-fade-in">
@@ -209,7 +211,7 @@ export default function Overview() {
           {activePass ? (
             <div className="flex flex-col items-center gap-3 text-center">
               <img
-                src={qrUrl(`${activePass.id}|${activePass.type}|${activePass.from}-${activePass.to}`)}
+                src={qrUrl(JSON.stringify({ gatePassId: activePass.id, code: activePass.code || "", registrationNo: activePass.registrationNo || activePass.regNo || "", type: activePass.type, from: activePass.from, to: activePass.to }))}
                 alt={`QR code for gate pass ${activePass.id}`}
                 width={120}
                 height={120}
@@ -218,8 +220,6 @@ export default function Overview() {
               <Pill tone={passStatus(activePass)}>{movementStatus?.status === "OUT" ? "Out" : passStatus(activePass)}</Pill>
               <p className="text-sm font-medium text-ink">{activePass.type}</p>
               <p className="text-xs text-slate-500">{activePass.from} → {activePass.to}</p>
-              {movementStatus?.status === "OUT" && <p className="text-xs text-slate-500">Exit recorded {movementStatus.exitTime?.toDate ? movementStatus.exitTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
-              {passStatus(activePass) === "Completed" && <p className="text-xs text-slate-500">Returned {activePass.returnedAt?.toDate ? activePass.returnedAt.toDate().toLocaleString("en-IN") : activePass.entryTime?.toDate ? activePass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>}
               <Link to="/dashboard/student/gate-pass" className="w-full">
                 <Button variant="outline" className="w-full">View full pass</Button>
               </Link>

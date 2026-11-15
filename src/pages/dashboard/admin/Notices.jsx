@@ -7,13 +7,12 @@ import { MegaphoneIcon } from "../../../components/dashboard/admin/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, updateDocument, deleteDocument } from "../../../firebase/firestore";
 
-const NOTICE_TARGETS = ["All Hostels", "A Wing", "B Wing", "C Wing"];
 const NOTICE_PRIORITIES = ["General", "Urgent", "Event"];
 
 const emptyDraft = {
   title: "",
   body: "",
-  target: NOTICE_TARGETS[0],
+  target: "Both",
   priority: NOTICE_PRIORITIES[0],
   // Only notices explicitly marked public are readable without signing in
   // (see the `notices` rule in firestore.rules) and shown on the landing
@@ -41,7 +40,7 @@ export default function Notices() {
     setDraft({
       title: n.title,
       body: n.body,
-      target: n.target,
+      target: ["All Hostels", "All Wings", "A Wing", "B Wing", "C Wing"].includes(n.target) ? "Both" : n.target,
       priority: n.priority,
       isPublic: Boolean(n.isPublic),
     });
@@ -131,8 +130,8 @@ export default function Notices() {
               <MegaphoneIcon />
             </span>
             <div>
-              <p className="font-display text-base font-semibold text-ink">Institute-wide notices</p>
-              <p className="text-sm text-slate-500">Broadcast to every block at once, or target a specific one.</p>
+              <p className="font-display text-base font-semibold text-ink">Hostel notices</p>
+              <p className="text-sm text-slate-500">Choose Boys Hostel, Girls Hostel, or both hostels as the audience.</p>
             </div>
           </div>
           {!isEditingForm && <Button onClick={startCreate}>New notice</Button>}
@@ -161,9 +160,7 @@ export default function Notices() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Target">
                 <select className={inputCls} value={draft.target} onChange={(e) => setDraft((d) => ({ ...d, target: e.target.value }))}>
-                  {NOTICE_TARGETS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
+                  <option value="Both">Both Hostels</option><option value="Boys Hostel">Boys Hostel</option><option value="Girls Hostel">Girls Hostel</option>
                 </select>
               </Field>
               <Field label="Priority">

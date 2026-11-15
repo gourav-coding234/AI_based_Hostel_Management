@@ -3,8 +3,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { AlertIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { useDocument } from "../../../hooks/useDocument";
-import { addDocument } from "../../../firebase/firestore";
+import { createStudentRequest } from "../../../firebase/studentRequests";
 
 const LEAVE_TYPES = ["Home Visit", "Medical", "Emergency", "Other"];
 
@@ -22,12 +21,9 @@ function validate({ type, reason, from, to }) {
 }
 
 export default function Leave() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const studentId = user?.uid || "";
-  const myRequests = useStudentCollection("leaveRequests", studentId, { orderByField: "from" });
-  // Same room record used by GatePass — only to tag the request with a
-  // wing/room so the warden's wing filter has something real to filter on.
-  const { data: studentRecord } = useDocument("students", studentId);
+  const myRequests = useStudentCollection("leaveRequests", studentId, { orderByField: "from", live: true });
 
   const [type, setType] = useState(LEAVE_TYPES[0]);
   const [reason, setReason] = useState("");
@@ -51,28 +47,13 @@ export default function Leave() {
     setSubmitting(true);
     setError("");
     try {
-      await addDocument(
-        "leaveRequests",
-        {
-          studentId,
-          studentName: profile?.name || user?.email,
-          type,
-          reason,
-          from,
-          to,
-          status: "Pending",
-          parentNotified: false,
-          wing: studentRecord?.wing || profile?.hostelResidence || "",
-          room: studentRecord?.room || "",
-        },
-        studentId
-      );
+      await createStudentRequest(user, { type: "leave", requestType: type, reason, from, to });
       setReason("");
       setFrom("");
       setTo("");
     } catch (err) {
       console.error("Failed to submit leave request:", err);
-      setError("Couldn't submit your request. Please try again.");
+      setError(err?.message || "Couldn't submit your request. Please try again.");
     } finally {
       setSubmitting(false);
     }

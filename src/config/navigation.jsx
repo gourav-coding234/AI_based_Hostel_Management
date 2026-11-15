@@ -55,7 +55,6 @@ export const NAVIGATION = {
       items: [
         { label: "Manage Users", to: "/dashboard/admin/users", icon: <UserPlusIcon /> },
         { label: "Student Directory", to: "/dashboard/admin/directory", icon: <UsersIcon /> },
-        { label: "Student Register", to: "/dashboard/admin/student-register", icon: <ClipboardIcon /> },
         { label: "Attendance", to: "/dashboard/admin/attendance", icon: <CalendarClockIcon /> },
       ],
     },
@@ -114,6 +113,7 @@ export const NAVIGATION = {
         { label: "Complaints", to: "/dashboard/student/complaints", icon: <StudentWrenchIcon /> },
         { label: "Leave Request", to: "/dashboard/student/leave", icon: <StudentAlertIcon /> },
         { label: "Notices", to: "/dashboard/student/notices", icon: <StudentMegaphoneIcon /> },
+        { label: "Feedback", to: "/dashboard/student/feedback", icon: <StudentMegaphoneIcon /> },
       ],
     },
   ],

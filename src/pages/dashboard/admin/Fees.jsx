@@ -42,30 +42,41 @@ export default function Fees() {
   const feesQuery = useCollection("fees");
   const paymentsQuery = useCollection("payments", { orderByField: "createdAt", limitCount: 100 });
   const studentsQuery = useCollection("students");
+  const registerQuery = useCollection("studentRegister");
   const blocksQuery = useCollection("blocks", { limitCount: 200 });
   const students = studentsQuery.data;
   const blocks = blocksQuery.data;
 
   const studentById = useMemo(() => {
     const map = new Map();
-    students.forEach((student) => {
-      [student.id, student.uid, student.userId, student.studentId].filter(Boolean).forEach((id) => map.set(String(id), student));
+    [...students, ...registerQuery.data].forEach((student) => {
+      [student.id, student.uid, student.userId, student.studentId, student.regNo, student.registrationNo].filter(Boolean).forEach((id) => map.set(String(id), student));
     });
     return map;
-  }, [students]);
+  }, [students, registerQuery.data]);
+
+  const studentByName = useMemo(() => {
+    const map = new Map();
+    [...students, ...registerQuery.data].forEach((student) => {
+      const key = String(student.name || student.studentName || "").trim().toLowerCase();
+      if (!key) return;
+      // Only keep an unambiguous name match; duplicate names must not be
+      // assigned to the wrong hostel.
+      map.set(key, map.has(key) ? null : student);
+    });
+    return map;
+  }, [students, registerQuery.data]);
 
   const hostelForFee = useCallback((fee) => {
-    const student = studentById.get(String(fee.studentId || fee.studentUid || fee.uid || ""));
+    const student = studentById.get(String(fee.studentId || fee.studentUid || fee.uid || fee.registrationNo || fee.regNo || "")) ||
+      studentByName.get(String(fee.studentName || fee.name || "").trim().toLowerCase());
     return normalizeHostel(fee.hostel || fee.hostelType) ||
-      hostelForStudent(student, blocks) ||
+      hostelForStudent({ ...student, gender: fee.gender || student?.gender }, blocks) ||
       hostelForBlock(fee.block, blocks, fee.hostel || fee.hostelType);
-  }, [studentById, blocks]);
+  }, [studentById, studentByName, blocks]);
 
   const feeGroupLabel = useCallback((fee) => {
-    const hostel = hostelForFee(fee);
-    const block = String(fee.block || "").trim();
-    const blockLabel = block ? (/^block\b/i.test(block) ? block : `Block ${block}`) : "Block not set";
-    return hostel ? `${hostel} · ${blockLabel}` : blockLabel;
+    return hostelForFee(fee);
   }, [hostelForFee]);
 
   // Recalculate status (and the remaining balance) from total/paid/dueDate
@@ -89,11 +100,11 @@ export default function Fees() {
   const [paymentDrafts, setPaymentDrafts] = useState({});
   const [paymentErrors, setPaymentErrors] = useState({});
   const [recordingId, setRecordingId] = useState("");
-  const [blockFilter, setBlockFilter] = useState("All Blocks");
+  const [hostelFilter, setHostelFilter] = useState("All Hostels");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
 
-  const blockFilters = useMemo(() => {
-    return ["All Blocks", ...Array.from(new Set(fees.map(feeGroupLabel))).sort(compareFeeGroups)];
+  const hostelFilters = useMemo(() => {
+    return ["All Hostels", ...Array.from(new Set(fees.map(feeGroupLabel).filter(Boolean))).sort(compareFeeGroups)];
   }, [fees, feeGroupLabel]);
 
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -106,16 +117,17 @@ export default function Fees() {
   const pendingCount = fees.filter((f) => f.status === "Pending").length;
   const overdueCount = fees.filter((f) => f.status === "Overdue").length;
 
-  const byBlock = useMemo(() => {
+  const byHostel = useMemo(() => {
     const map = new Map();
     fees.forEach((f) => {
       const group = feeGroupLabel(f);
-      if (!map.has(group)) map.set(group, { block: group, totalDue: 0, collected: 0 });
+      if (!group) return;
+      if (!map.has(group)) map.set(group, { hostel: group, totalDue: 0, collected: 0 });
       const entry = map.get(group);
       entry.totalDue += Number(f.total) || 0;
       entry.collected += Number(f.paid) || 0;
     });
-    return Array.from(map.values()).sort((a, b) => compareFeeGroups(a.block, b.block));
+    return Array.from(map.values()).sort((a, b) => compareFeeGroups(a.hostel, b.hostel));
   }, [fees, feeGroupLabel]);
 
   // A defaulter is anyone with an outstanding balance — cleared fees never
@@ -127,16 +139,15 @@ export default function Fees() {
 
   const filtered = useMemo(() => {
     return fees.filter((f) => {
-      const blockOk = blockFilter === "All Blocks" || feeGroupLabel(f) === blockFilter;
+      const hostelOk = (hostelFilter === "All Hostels" && Boolean(feeGroupLabel(f))) || feeGroupLabel(f) === hostelFilter;
       const statusOk = statusFilter === "All Statuses" || f.status === statusFilter;
-      return blockOk && statusOk;
+      return hostelOk && statusOk;
     });
-  }, [fees, blockFilter, statusFilter, feeGroupLabel]);
+  }, [fees, hostelFilter, statusFilter, feeGroupLabel]);
 
   const feeCsvHeaders = [
     { label: "Student", value: (f) => f.studentName },
     { label: "Hostel", value: (f) => hostelForFee(f) || "" },
-    { label: "Block", value: (f) => f.block },
     { label: "Room", value: (f) => f.room },
     { label: "Total", value: (f) => f.total },
     { label: "Paid", value: (f) => f.paid },
@@ -157,7 +168,7 @@ export default function Fees() {
       render: (d) => (
         <>
           <p className="font-medium text-ink">{d.studentName}</p>
-          <p className="text-xs text-slate-400">{d.block || "—"} · {d.room || "—"}</p>
+          <p className="text-xs text-slate-400">{feeGroupLabel(d)} · {d.room || "—"}</p>
         </>
       ),
     },
@@ -174,7 +185,7 @@ export default function Fees() {
       render: (d) => (
         <>
           <p className="font-medium text-ink">{d.studentName}</p>
-          <p className="text-xs text-slate-400">{d.block || "—"} · {d.room || "—"}</p>
+          <p className="text-xs text-slate-400">{feeGroupLabel(d)} · {d.room || "—"}</p>
         </>
       ),
     },
@@ -346,19 +357,19 @@ export default function Fees() {
         {!creating && <p className="text-sm text-slate-400">Add a fee record for a student who doesn't have one yet, or use Data Import for bulk entry.</p>}
       </Card>
 
-      <Card title="Collection by hostel and block">
+      <Card title="Collection by hostel">
         {feesQuery.loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
-        ) : byBlock.length === 0 ? (
+        ) : byHostel.length === 0 ? (
           <EmptyState icon={<WalletIcon />} title="No fee records yet" description="Import fee records via Data Import, or they'll appear here as they're added." />
         ) : (
           <div className="flex flex-col gap-5">
-            {byBlock.map((f) => {
+            {byHostel.map((f) => {
               const pct = f.totalDue ? Math.round((f.collected / f.totalDue) * 100) : 0;
               return (
-                <div key={f.block}>
+                <div key={f.hostel}>
                   <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium text-ink">{f.block}</span>
+                    <span className="font-medium text-ink">{f.hostel}</span>
                     <span className="text-slate-500">{inr(f.collected)} / {inr(f.totalDue)} · {pct}%</span>
                   </div>
                   <ProgressBar value={f.collected} max={f.totalDue || 1} tone={pct < 80 ? "rose" : "teal"} />
@@ -373,7 +384,7 @@ export default function Fees() {
         <DataTable
           columns={[
             { key: "studentName", label: "Student", sortable: true, render: (payment) => <><p className="font-medium text-ink">{payment.studentName || "—"}</p><p className="text-xs text-slate-400">{payment.registrationNo || ""}</p></> },
-            { key: "hostel", label: "Hostel / Block", render: (payment) => `${payment.hostel || "Hostel not set"} · ${payment.block || "Block not set"}` },
+          { key: "hostel", label: "Hostel", render: (payment) => payment.hostel || "—" },
             { key: "amount", label: "Amount", sortable: true, render: (payment) => inr(payment.amount) },
             { key: "paymentDate", label: "Payment date" },
             { key: "paymentMethod", label: "Method" },
@@ -392,8 +403,8 @@ export default function Fees() {
       <Card title="All fee records">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row">
-            <select className={`${inputCls} sm:w-48`} value={blockFilter} onChange={(e) => setBlockFilter(e.target.value)}>
-              {blockFilters.map((b) => <option key={b} value={b}>{b}</option>)}
+            <select className={`${inputCls} sm:w-48`} value={hostelFilter} onChange={(e) => setHostelFilter(e.target.value)}>
+              {hostelFilters.map((hostel) => <option key={hostel} value={hostel}>{hostel}</option>)}
             </select>
             <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}

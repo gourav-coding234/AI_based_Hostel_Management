@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, Pill, ProgressBar, inputCls } from "../../../components/dashboard/student/ui";
 import { EmptyState } from "../../../components/ui/DataState";
+import { ErrorState, LoadingState } from "../../../components/ui/DataState";
 import DataTable from "../../../components/ui/DataTable";
 import { SmileIcon, MehIcon, FrownIcon, SparkleIcon } from "../../../components/dashboard/admin/icons";
 import { useCollection } from "../../../hooks/useCollection";
@@ -21,6 +22,18 @@ export default function Feedback() {
   }, [feedbackEntries]);
 
   const total = feedbackEntries.length;
+  const rated = feedbackEntries.filter((f) => Number(f.rating) >= 1 && Number(f.rating) <= 5);
+  const averageRating = rated.length ? (rated.reduce((sum, f) => sum + Number(f.rating), 0) / rated.length).toFixed(1) : "—";
+  const categoryCounts = feedbackEntries.reduce((map, item) => {
+    const key = item.category || item.subject || "Other";
+    map[key] = (map[key] || 0) + 1;
+    return map;
+  }, {});
+  const hostelCounts = feedbackEntries.reduce((map, item) => {
+    const hostel = String(item.hostel || "").toLowerCase().includes("girl") ? "Girls Hostel" : String(item.hostel || "").toLowerCase().includes("boy") ? "Boys Hostel" : "Not set";
+    map[hostel] = (map[hostel] || 0) + 1;
+    return map;
+  }, {});
 
   const filtered = useMemo(() => {
     if (sentimentFilter === "All Sentiments") return feedbackEntries;
@@ -41,12 +54,21 @@ export default function Feedback() {
         </div>
       </Card>
 
-      {total === 0 ? (
+      {feedbackQuery.loading ? <Card><LoadingState label="Loading feedback…" /></Card> : feedbackQuery.error ? <Card><ErrorState message={feedbackQuery.error} /></Card> : total === 0 ? (
         <Card>
           <EmptyState icon={<SparkleIcon />} title="No feedback submitted yet" description="Feedback from students will show up here, broken down by sentiment." />
         </Card>
       ) : (
         <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="font-display text-2xl font-semibold text-ink">{total}</p><p className="mt-2 text-sm text-slate-500">Total responses</p></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="font-display text-2xl font-semibold text-ink">{averageRating}{averageRating !== "—" ? "/5" : ""}</p><p className="mt-2 text-sm text-slate-500">Average rating</p></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="font-display text-2xl font-semibold text-ink">{feedbackEntries.filter((f) => f.anonymous).length}</p><p className="mt-2 text-sm text-slate-500">Anonymous responses</p></div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="Feedback by category"><div className="flex flex-col gap-3">{Object.entries(categoryCounts).map(([name, count]) => <div key={name}><div className="mb-1 flex justify-between text-sm"><span>{name}</span><span>{count}</span></div><ProgressBar value={count} max={total} tone="teal" /></div>)}</div></Card>
+            <Card title="Feedback by hostel"><div className="flex flex-col gap-3">{Object.entries(hostelCounts).map(([name, count]) => <div key={name}><div className="mb-1 flex justify-between text-sm"><span>{name}</span><span>{count}</span></div><ProgressBar value={count} max={total} tone="teal" /></div>)}</div></Card>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {["Positive", "Neutral", "Negative"].map((s) => (
               <div key={s} className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -83,14 +105,18 @@ export default function Feedback() {
                   render: (f) => (
                     <>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-ink">{f.studentName || "Anonymous"}</span>
-                        <span className="text-xs text-slate-400">· {f.subject}</span>
+                        <span className="font-medium text-ink">{f.anonymous ? "Anonymous" : (f.studentName || "Student")}</span>
+                        {!f.anonymous && (f.registrationNo || f.regNo) && <span className="text-xs text-slate-400">· {f.registrationNo || f.regNo}</span>}
+                        <span className="text-xs text-slate-400">· {f.category || f.subject}</span>
                       </div>
-                      <p className="text-sm text-slate-600">{f.message}</p>
+                      <p className="text-sm text-slate-600">{f.comment || f.message}</p>
+                      {f.rating && <p className="text-xs text-amber-700">Rating: {f.rating}/5</p>}
                     </>
                   ),
                 },
                 { key: "date", label: "Date", sortable: true },
+                { key: "hostel", label: "Hostel", render: (f) => f.hostel || "—" },
+                { key: "status", label: "Status", render: (f) => f.status || "Submitted" },
                 {
                   key: "sentiment",
                   label: "Sentiment",

@@ -19,6 +19,7 @@ import {
 import { useCollections } from "../../../hooks/useCollection";
 import { mergeHostelResidents, mergeRegisteredStudents } from "../../../utils/hostelResidents";
 import { hostelForStudent } from "../../../utils/hostels";
+import { buildOccupancyReport } from "../../../utils/occupancy";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -53,7 +54,7 @@ export default function AdminOverview() {
     gatePasses: { name: "gatePasses", options: { orderByField: "from", limitCount: 100 } },
     movementsOut: { name: "inOutStatus", options: { where: [["status", "==", "OUT"]], limitCount: 100 } },
     attendanceToday: { name: "attendance", options: { where: [["date", "==", todayKey]], limitCount: 500 } },
-  }, { live: false, maxDocs: 100, cacheMs: 60_000 });
+  }, { live: false, maxDocs: 5000, cacheMs: 60_000 });
 
   const { blocks, studentRegister, students, users, complaints, fees, notices, leaveRequests, visitors, expenses, feedback, gatePasses, movementsOut, attendanceToday } = data;
   // Count unique students from the academic register and resident profiles.
@@ -81,6 +82,7 @@ export default function AdminOverview() {
   const recordedOccupiedBeds = blocks.reduce((sum, block) => sum + (Number(block.occupiedBeds) || 0), 0);
   const residentBedsInUse = residents.filter((student) => String(student.room || "").trim() && String(student.bed || "").trim()).length;
   const occupiedBeds = residentBedsInUse || recordedOccupiedBeds;
+  const occupancyRows = useMemo(() => buildOccupancyReport(students, studentRegister, blocks), [students, studentRegister, blocks]);
 
   // Fees
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -189,7 +191,7 @@ export default function AdminOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Link to="/dashboard/admin/feedback"><StatCard icon={<MegaphoneIcon />} label="Student feedback" value={loading ? "…" : feedback.length} sub="Items loaded in this overview snapshot" tone="teal" /></Link>
-        <Link to="/dashboard/admin/student-register"><StatCard icon={<UsersIcon />} label="Academic student register" value="Open register" sub="Full roster loads only when you open it" tone="navy" /></Link>
+        <Link to="/dashboard/admin/directory"><StatCard icon={<UsersIcon />} label="Student directory" value="Open directory" sub="Academic roster and resident accounts" tone="navy" /></Link>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -265,6 +267,10 @@ export default function AdminOverview() {
             <p className="text-sm font-semibold text-ink">{collectionPct}%</p>
           </div>
         </div>
+      </Card>
+
+      <Card title="Room occupancy by hostel">
+        {occupancyRows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Hostel</th><th className="pb-2">Block</th><th className="pb-2">Room</th><th className="pb-2">Occupied</th><th className="pb-2">Vacant beds</th><th className="pb-2">Students</th></tr></thead><tbody className="divide-y divide-slate-100">{occupancyRows.map((row) => <tr key={`${row.hostel}-${row.block}-${row.room}`}><td className="py-2.5">{row.hostel}</td><td className="py-2.5">{row.block}</td><td className="py-2.5">{row.room}</td><td className="py-2.5">{row.occupiedBeds}</td><td className="py-2.5">{row.vacantBeds ?? "Capacity not configured"}</td><td className="py-2.5">{row.studentNames} {row.registrationNumbers && <span className="text-xs text-slate-400">({row.registrationNumbers})</span>}</td></tr>)}</tbody></table></div> : <EmptyState title="No room assignments yet" description="Import student records with hostel, block, room and bed fields to build this report." />}
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

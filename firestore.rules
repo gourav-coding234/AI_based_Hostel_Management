@@ -90,6 +90,33 @@ service cloud.firestore {
       return activeAccount() && userRole() == "Parent";
     }
 
+    function hostelForUser(profile) {
+      let stated = profile.get('hostel', '');
+      let typed = profile.get('hostelType', '');
+      let residence = profile.get('hostelResidence', '');
+      let gender = profile.get('gender', '');
+      let girls = ['Girls Hostel', 'girls hostel', 'Girls hostel', 'Girl Hostel', 'girl hostel'];
+      let boys = ['Boys Hostel', 'boys hostel', 'Boys hostel', 'Boy Hostel', 'boy hostel'];
+      return stated in girls ? 'Girls Hostel' : stated in boys ? 'Boys Hostel' :
+        (typed in girls ? 'Girls Hostel' : typed in boys ? 'Boys Hostel' :
+        (residence in girls ? 'Girls Hostel' : residence in boys ? 'Boys Hostel' :
+        (gender in ['Female', 'female', 'FEMALE', 'F', 'f', 'Girl', 'girl', 'Girls', 'girls'] ? 'Girls Hostel' :
+         gender in ['Male', 'male', 'MALE', 'M', 'm', 'Boy', 'boy', 'Boys', 'boys'] ? 'Boys Hostel' : '')));
+    }
+
+    function noticeTargetMatches(profile) {
+      let hostel = hostelForUser(profile);
+      let wing = profile.get('wing', profile.get('block', profile.get('hostelResidence', '')));
+      return resource.data.get('target', '') in ['Both', 'Both Hostels', 'All Hostels'] ||
+        (hostel in ['Boys Hostel', 'Girls Hostel'] && resource.data.get('target', '') == hostel) ||
+        (wing is string && wing != '' && resource.data.get('target', '') == wing);
+    }
+
+    function linkedStudentProfile() {
+      let studentId = myLinkedStudentId();
+      return get(/databases/$(database)/documents/students/$(studentId)).data;
+    }
+
     // True for staff roles that legitimately need to see every student's
     // records (wardens/admins run the hostel; security needs gate-pass
     // lookups for anyone at the gate).
@@ -262,10 +289,14 @@ service cloud.firestore {
       // Security needs to look up any student's pass at the gate, so it
       // keeps blanket read — everyone else is scoped to their own record.
       allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
-      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
+      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId &&
+        request.resource.data.status == 'Pending' && request.resource.data.get('tripState', 'Not started') == 'Not started');
       // Security can perform one OUT then one IN movement. Pass identity and
       // approval data are immutable during either transition.
-      allow update: if isStaff() ||
+      allow update: if (isStaff() && resource.data.status == 'Pending' &&
+        request.resource.data.status in ['Approved', 'Rejected'] &&
+        request.resource.data.get('tripState', 'Not started') == resource.data.get('tripState', 'Not started') &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt', 'updatedAt'])) ||
         (isSecurity() &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tripState', 'status', 'updatedAt', 'exitTime', 'entryTime', 'returnedAt', 'scannedBy', 'scannedByUid', 'returnedByUid']) &&
          ((resource.data.status == 'Approved' && !(resource.data.get('tripState', '') in ['Out', 'Returned']) &&
@@ -310,15 +341,14 @@ service cloud.firestore {
     }
 
     match /notices/{noticeId} {
-      // Notices are institution-wide, not per-student — no scoping needed
-      // for signed-in users.
-      //
       // Notices explicitly flagged `isPublic: true` are additionally
-      // readable by anyone, signed in or not: that is what powers the
+      // readable by anyone who is not signed in: that powers the
       // notice board on the public landing page. The flag is set by staff
       // through the admin "Show on the public website" checkbox, so an
       // internal notice is never exposed unless someone opts it in.
-      allow read: if signedIn() || resource.data.isPublic == true;
+      allow read: if (resource.data.get('isPublic', false) == true && !signedIn()) || isStaff() || isSecurity() ||
+        (isStudent() && noticeTargetMatches(get(/databases/$(database)/documents/users/$(request.auth.uid)).data)) ||
+        (isParent() && myLinkedStudentId() != '' && noticeTargetMatches(linkedStudentProfile()));
 
       // Admin and Warden share this one collection. Admin keeps full
       // control. A Warden can publish/edit/delete notices but cannot use
@@ -421,7 +451,9 @@ service cloud.firestore {
 
     match /feedback/{feedbackId} {
       allow read: if isStaff() || isOwnRecord(resource.data.studentId);
-      allow create: if signedIn();
+      // Student submissions go through the authenticated server endpoint,
+      // which enforces validation and one-per-category-per-day atomically.
+      allow create: if isStaff();
       allow update, delete: if isStaff();
     }
 
@@ -440,7 +472,10 @@ service cloud.firestore {
       allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
       allow create: if (isSecurity() || isStaff()) &&
         request.resource.data.guardId == request.auth.uid &&
-        request.resource.data.type in ['IN', 'OUT'];
+        request.resource.data.type in ['IN', 'OUT'] &&
+        (request.resource.data.get('method', 'scan') != 'manual' ||
+         request.resource.data.type != 'OUT' ||
+         (request.resource.data.get('reason', '') is string && request.resource.data.get('reason', '').size() > 0));
       allow update: if false;
       allow delete: if isAdmin();
     }

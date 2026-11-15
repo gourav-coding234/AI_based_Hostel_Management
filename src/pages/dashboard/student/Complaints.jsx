@@ -16,7 +16,7 @@ const INVENTORY_ITEM_TYPES = ["Chair", "Table", "Bed", "Mattress", "Cupboard", "
 export default function Complaints() {
   const { user, profile } = useAuth();
   const studentId = user?.uid || "";
-  const complaintsQuery = useStudentCollection("complaints", studentId, { orderByField: "date" });
+  const complaintsQuery = useStudentCollection("complaints", studentId, { orderByField: "date", live: true });
   const complaints = complaintsQuery.items;
 
   // Lets other pages (e.g. the Overview quick links) deep-link straight
@@ -35,6 +35,7 @@ export default function Complaints() {
   const [quantity, setQuantity] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const isInventory = category === "Inventory";
 
@@ -45,13 +46,18 @@ export default function Complaints() {
 
   async function submitComplaint(e) {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) return;
+    if (submitting) return;
+    if (!studentId) { setError("Sign in again before submitting a complaint."); return; }
+    if (!title.trim() || !description.trim()) { setError("Enter a subject and description before submitting."); return; }
     setSubmitting(true);
     setError("");
+    setSuccess("");
     try {
       const payload = {
         studentId,
         studentName: profile?.name || user?.email,
+        studentCode: profile?.studentCode || profile?.registrationNo || profile?.regNo || "",
+        registrationNo: profile?.registrationNo || profile?.regNo || "",
         category,
         title,
         description,
@@ -70,6 +76,7 @@ export default function Complaints() {
       setTitle("");
       setDescription("");
       setQuantity(1);
+      setSuccess("Your complaint was submitted and is now visible to hostel staff.");
     } catch (err) {
       console.error("Failed to submit complaint:", err);
       setError("Couldn't submit your complaint. Please try again.");
@@ -114,6 +121,7 @@ export default function Complaints() {
 
             <Field label={isInventory ? "Problem / reason" : "Subject"}>
               <input
+                required
                 className={inputCls}
                 placeholder={isInventory ? "Short summary — e.g. broken chair leg" : "Short summary — e.g. leaking tap"}
                 value={title}
@@ -122,6 +130,7 @@ export default function Complaints() {
             </Field>
             <Field label="Description">
               <textarea
+                required
                 className={`${inputCls} min-h-[90px] resize-none`}
                 placeholder={
                   isInventory
@@ -150,7 +159,8 @@ export default function Complaints() {
                 ))}
               </div>
             </Field>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
+            {success && <p role="status" className="text-sm text-emerald-700">{success}</p>}
             <Button type="submit" disabled={submitting} className="self-start">
               {submitting ? "Submitting…" : "Submit complaint"}
             </Button>

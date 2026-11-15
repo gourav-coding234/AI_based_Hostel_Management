@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { CameraIcon, LogInIcon, LogOutIcon, ScanIcon } from "../../../components/dashboard/security/icons";
-import { recordGateMovement, recordManualMovement } from "../../../firebase/firestore";
+import { saveSecurityMovement } from "../../../firebase/securityMovement";
 import { useGateDesk } from "../../../hooks/useGateDesk";
 import { normalizeGender } from "../../../hooks/useAttendanceRoster";
 import { isPassActive, isPassOut, passStatus } from "../../../utils/gatePass";
@@ -31,12 +30,12 @@ function methodLabel(log) { return String(log.method || (log.gatePassId ? "scan"
 function dateOf(log) { return log.timeSort || (log.scannedAt?.toDate ? log.scannedAt.toDate().toISOString() : ""); }
 
 export default function GateDesk() {
-  const { user, profile } = useAuth();
   const { directory, studentById, passById, statusByStudent, passes, logs, loading, error } = useGateDesk();
   const [search, setSearch] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedPassId, setSelectedPassId] = useState("");
   const [manualReason, setManualReason] = useState("");
+  const [entryReasonRequired, setEntryReasonRequired] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [actionError, setActionError] = useState("");
@@ -49,7 +48,6 @@ export default function GateDesk() {
   const [now, setNow] = useState(() => new Date());
   const scannerRef = useRef(null);
 
-  const actor = { uid: user?.uid || "", name: profile?.name || user?.email || "Security" };
   const passByStudent = useMemo(() => {
     const map = new Map();
     [...passes].sort((a, b) => String(b.from || "").localeCompare(String(a.from || ""))).forEach((pass) => {
@@ -97,6 +95,7 @@ export default function GateDesk() {
     setSelectedStudentId(student?.id || "");
     setSelectedPassId(pass?.id || "");
     setManualReason("");
+    setEntryReasonRequired(false);
     setActionError("");
     setMessage("");
   }
@@ -117,7 +116,13 @@ export default function GateDesk() {
       await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 220, height: 220 } }, (text) => {
         const parsed = parseQr(text);
         const pass = passById.get(parsed.passId);
-        if (pass) { selectStudent(studentById.get(pass.studentId), pass); setSearch(""); }
+        if (pass && isPassOut(pass)) {
+          setActionError("This gate pass QR has already been used for exit. Select the student from Currently Out to record their return.");
+        }
+        else if (pass && passStatus(pass) === "Completed") {
+          setActionError("This gate pass has already been completed and cannot be reused.");
+        }
+        else if (pass) { selectStudent(studentById.get(pass.studentId), pass); setSearch(""); }
         else if (parsed.studentId && studentById.has(parsed.studentId)) { selectStudent(studentById.get(parsed.studentId)); setSearch(""); }
         else { setSearch(parsed.passId); setActionError("No matching pass was found. Search by student name or registration number."); }
         stopCamera();
@@ -140,17 +145,19 @@ export default function GateDesk() {
   }
   async function movement(student, direction, pass = null, manual = false) {
     if (!student || busy) return;
-    if (manual && direction === "Out" && !manualReason.trim()) { setActionError("Add a reason before recording a manual exit."); return; }
+    setSelectedStudentId(student.id);
+    setSelectedPassId(pass?.id || "");
+    if (manual && !manualReason.trim()) { setActionError("Add a reason before recording a manual movement."); return; }
+    if (direction === "In" && entryReasonRequired && !manualReason.trim()) { setActionError("Add a reason for this early or late entry."); return; }
     setBusy(student.id); setActionError(""); setMessage("");
     try {
-      if (manual) await recordManualMovement(student, direction, manualReason, actor);
-      else await recordGateMovement(pass.id, direction, actor, student.id);
+      await saveSecurityMovement({ direction, passId: pass?.id, studentId: student.id, manual, reason: manualReason.trim() });
       setMessage(direction === "Out" ? "Exit logged" : "Journey ended");
-      setSearch(""); setSelectedPassId(""); setSelectedStudentId(""); setManualReason("");
+      setSearch(""); setSelectedPassId(""); setSelectedStudentId(""); setManualReason(""); setEntryReasonRequired(false);
     } catch (err) {
       console.error("Gate Desk movement failed:", err);
-      const messages = { EXPIRED: "This pass has expired, so an exit cannot be logged with it.", ALREADY_OUT: "This student is already marked out.", NOT_OUT_YET: "This student is not currently marked out.", NOT_APPROVED: "This pass is not approved. Use manual movement if the student is leaving without a pass.", PASS_NOT_FOUND: "This pass could not be found. Refresh the list and try again.", REASON_REQUIRED: "Add a reason before recording a manual exit." };
-      setActionError(messages[err.message] || "Could not save the movement. Check the Firestore rules and try again.");
+      if (err.message === "ENTRY_REASON_REQUIRED") setEntryReasonRequired(true);
+      setActionError(err.messageText || ({ NOT_APPROVED: "Pass not approved yet.", PASS_REJECTED: "This pass was rejected and cannot be used.", PASS_ALREADY_USED: "This pass has already been used.", EXPIRED: "This pass has expired.", ALREADY_OUT: "This student is already marked out.", NOT_OUT_YET: "This student is not currently marked out.", REASON_REQUIRED: "Add a reason before recording a manual movement.", ENTRY_REASON_REQUIRED: "Add a reason for this early or late entry." }[err.message]) || "Could not save the movement. Check the server connection and try again.");
     } finally { setBusy(""); }
   }
 
@@ -199,16 +206,16 @@ export default function GateDesk() {
       {activePass && <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2"><p><b>Pass:</b> {activePass.type} · {activePass.id} · {passStatus(activePass)}</p><p><b>Reason:</b> {activePass.reason || "—"}</p><p><b>Valid:</b> {activePass.from || "—"} → {activePass.to || "—"}</p><p><b>Exit time:</b> {stamp(activePass.exitTime)}</p></div>}
       {selectedStatus && <p className="mt-3 text-sm text-slate-500">Last movement updated {stamp(selectedStatus.updatedAt)}</p>}
       <div className="mt-4 flex flex-wrap items-end gap-3">
+        {isOut && (entryReasonRequired || !isPassOut(activePass)) && <Field label="Entry reason (required)"><textarea required className={`${inputCls} min-h-[88px] resize-y`} value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Reason for early, late, or manual entry" /></Field>}
         {isOut ? <Button disabled={Boolean(busy)} onClick={() => movement(selectedStudent, "In", isPassOut(activePass) ? activePass : null, !isPassOut(activePass))}><LogInIcon /> {busy === selectedStudent?.id ? "Saving…" : "End journey / Log entry"}</Button>
           : activePass && passStatus(activePass) === "Approved" ? <Button disabled={Boolean(busy) || isExpired(activePass)} onClick={() => movement(selectedStudent, "Out", activePass)}><LogOutIcon /> Log exit</Button> : null}
         {!isOut && (!activePass || passStatus(activePass) !== "Approved" || isExpired(activePass)) && <>
-          <Field label="Manual exit reason"><input className={inputCls} value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Required for manual exit" /></Field>
+          <Field label="Manual exit reason (required)"><textarea required className={`${inputCls} min-h-[88px] resize-y`} value={manualReason} onChange={(event) => setManualReason(event.target.value)} placeholder="Why is the student leaving without a pass?" /></Field>
           <Button variant="outline" disabled={Boolean(busy)} onClick={() => movement(selectedStudent, "Out", null, true)}><LogOutIcon /> Mark OUT manually</Button>
         </>}
         {isOut && <p className="self-center text-sm text-slate-500">Exit recorded {stamp(selectedStatus?.exitTime || activePass?.exitTime)}</p>}
       </div>
       {activePass && ["Pending", "Rejected", "Completed"].includes(passStatus(activePass)) && <p className="mt-3 text-sm text-slate-500">This pass is {passStatus(activePass).toLowerCase()} and cannot be used to log a pass movement. Manual movement remains available when the student travels without a valid pass.</p>}
-      {isOut && <Button variant="outline" className="mt-3" disabled={Boolean(busy)} onClick={() => movement(selectedStudent, "In", null, true)}><LogInIcon /> End manual journey</Button>}
     </Card>}
 
     <Card title={`Currently Out · ${outStudents.length}`}>

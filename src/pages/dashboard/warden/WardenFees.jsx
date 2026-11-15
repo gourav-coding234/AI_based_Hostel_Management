@@ -5,7 +5,7 @@ import { Card, Pill, Button, ProgressBar, Field, inputCls } from "../../../compo
 import DataTable from "../../../components/ui/DataTable";
 import { WalletIcon, DownloadIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { getCollection, recordFeePayment, sendFeeReminder, logAudit } from "../../../firebase/firestore";
+import { getCollection, recordWardenFeePayment, sendFeeReminder, logAudit } from "../../../firebase/firestore";
 import { computeFeeStatus } from "../../../utils/fees";
 import { toCsvText } from "../../../utils/csv";
 import { useStudentDirectory } from "../../../hooks/useStudentDirectory";
@@ -26,7 +26,7 @@ export default function WardenFees() {
   // the UI still scopes every displayed row before rendering.
   const feesQuery = useCollection("fees", { skip: authLoading });
   const paymentsQuery = useCollection("payments", {
-    where: [["hostel", "==", myHostel]], orderByField: "createdAt", limitCount: 100,
+    where: [["hostel", "==", myHostel]], limitCount: 100,
     skip: authLoading || !myHostel,
   });
   const { directory } = useStudentDirectory();
@@ -103,9 +103,7 @@ export default function WardenFees() {
     setPaySaving(true);
     setPayError("");
     try {
-      await recordFeePayment(payingFee.id, amount, staffName, "Warden", {
-        ...payDetails, actorUid: user?.uid,
-      });
+      await recordWardenFeePayment(user, payingFee.id, amount, payDetails);
       logAudit({
         actor: staffName,
         action: "Recorded fee payment",
@@ -115,8 +113,12 @@ export default function WardenFees() {
     } catch (err) {
       console.error("Failed to record payment:", err);
       setPayError(
-        err?.message === "INVALID_AMOUNT"
+        err?.code === "INVALID_AMOUNT"
           ? "That amount is more than what's currently owed — the record may have just changed."
+          : err?.code === "WARDEN_HOSTEL_MISMATCH"
+            ? "This fee record does not match your assigned hostel. Ask the admin to correct the hostel assignment or fee record."
+          : err?.message && err.code !== "PAYMENT_SAVE_FAILED"
+            ? err.message
           : err?.code === "permission-denied"
             ? "Firebase blocked this payment. Confirm your warden account is assigned to this hostel, then publish the latest Firestore rules in Firebase Console."
             : err?.code === "unavailable" || err?.code === "deadline-exceeded"

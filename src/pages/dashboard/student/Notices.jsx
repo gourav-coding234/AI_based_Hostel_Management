@@ -4,12 +4,12 @@ import { Card, Pill } from "../../../components/dashboard/student/ui";
 import { AsyncSection } from "../../../components/ui/DataState";
 import { MegaphoneIcon } from "../../../components/dashboard/student/icons";
 import { useCollection } from "../../../hooks/useCollection";
-import { noticeAppliesTo } from "../../../utils/notices";
+import { noticeAppliesTo, noticeQueryTargets, hostelForNoticeProfile } from "../../../utils/notices";
 
 export default function Notices() {
   const { profile } = useAuth();
-  const noticesQuery = useCollection("notices", { orderByField: "date" });
-  const notices = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, profile?.hostelResidence));
+  const noticesQuery = useCollection("notices", { where: [["target", "in", noticeQueryTargets(profile || {})]] });
+  const notices = noticesQuery.data.filter((n) => noticeAppliesTo(n.target, hostelForNoticeProfile(profile)));
   const [openId, setOpenId] = useState(null);
 
   return (

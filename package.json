@@ -12,7 +12,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "oxlint src"
+    "lint": "oxlint src",
+    "smoke:parent-student": "node scripts/smoke-parent-student.mjs"
   },
   "dependencies": {
     "firebase": "^12.17.1",

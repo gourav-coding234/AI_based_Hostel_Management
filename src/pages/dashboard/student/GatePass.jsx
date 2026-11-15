@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
 import { QrIcon } from "../../../components/dashboard/student/icons";
-import { useDocument } from "../../../hooks/useDocument";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
-import { addDocument } from "../../../firebase/firestore";
+import { createStudentRequest } from "../../../firebase/studentRequests";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../../../firebase/config";
 import { getDemoStudentCollection, isDemoMode } from "../../../data/demoFixtures";
-import { isPassActive, isPassOut, passStatus } from "../../../utils/gatePass";
+import { isPassActive, isPassOut, isPassExpired, passStatus } from "../../../utils/gatePass";
 
 const GATE_PASS_TYPES = ["Outing", "Home Visit", "Medical", "Other"];
 
@@ -23,7 +22,8 @@ function qrUrl(data) {
 function qrPayload(pass) {
   return JSON.stringify({
     gatePassId: pass.id,
-    studentId: pass.studentId,
+    code: pass.code || "",
+    registrationNo: pass.registrationNo || pass.regNo || "",
     type: pass.type,
     from: pass.from,
     to: pass.to,
@@ -109,9 +109,7 @@ function pickActivePass(approvedPasses, now) {
   for (const p of approvedPasses) {
     const from = parseDate(p.from);
     const to = parseDate(p.to);
-    // A student who is currently Out on this pass still needs its QR to
-    // get back in, even if the return time has slipped past.
-    if (p.tripState === "Out") return p;
+    if (isPassOut(p) || isPassExpired(p, now)) continue;
     if ((p.from && !from) || (p.to && !to)) continue;
     const isExpired = to && now > to;
     const isUpcoming = from && now < from;
@@ -123,15 +121,10 @@ function pickActivePass(approvedPasses, now) {
 }
 
 export default function GatePass() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const studentId = user?.uid || "";
   const gatePasses = useMyGatePasses(studentId);
   const movement = useStudentCollection("inOutStatus", studentId, { live: true });
-  // Own room/wing record — used only to tag the pass with block/room so the
-  // admin/warden GatePasses pages' block & wing filters actually have
-  // something to filter on. Never used to gate access; that's Firestore's job.
-  const { data: studentRecord } = useDocument("students", studentId);
-
   const [type, setType] = useState(GATE_PASS_TYPES[0]);
   const [reason, setReason] = useState("");
   const [from, setFrom] = useState("");
@@ -170,30 +163,13 @@ export default function GatePass() {
     setSubmitting(true);
     setError("");
     try {
-      await addDocument(
-        "gatePasses",
-        {
-          studentId,
-          registrationNo: studentRecord?.registrationNo || studentRecord?.regNo || "",
-          studentName: profile?.name || user?.email,
-          type,
-          reason,
-          from,
-          to,
-          status: "Pending",
-          tripState: "Not started",
-          block: profile?.hostelResidence || "",
-          wing: studentRecord?.wing || profile?.hostelResidence || "",
-          room: studentRecord?.room || "",
-        },
-        studentId
-      );
+      await createStudentRequest(user, { type: "gatePass", requestType: type, reason, from, to });
       setReason("");
       setFrom("");
       setTo("");
     } catch (err) {
       console.error("Failed to submit gate pass request:", err);
-      setError("Couldn't submit your request. Please try again.");
+      setError(err?.message || "Couldn't submit your request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -210,7 +186,7 @@ export default function GatePass() {
           ) : journeyPass ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
                 <Pill tone={passStatus(journeyPass)}>{passStatus(journeyPass)}</Pill>
-              <p className="font-display text-base font-semibold text-ink">{journeyPass.type} · {journeyPass.id}</p>
+              <p className="font-display text-base font-semibold text-ink">{journeyPass.type} · {journeyPass.code || "Legacy pass"}</p>
               <p className="text-sm text-slate-500">Exit recorded {journeyPass.exitTime?.toDate ? journeyPass.exitTime.toDate().toLocaleString("en-IN") : "by security"}.</p>
               <p className="max-w-sm text-xs text-slate-400">This pass has already been used for exit and its QR is disabled. Security will record your return at the gate.</p>
             </div>
@@ -230,7 +206,7 @@ export default function GatePass() {
                   className="flex h-[180px] w-[180px] flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 p-2 text-center shadow-sm shadow-slate-200/60"
                 >
                   <QrIcon />
-                  <p className="text-xs text-slate-400">QR image couldn't load — use your pass ID at the gate instead.</p>
+                  <p className="text-xs text-slate-400">QR image couldn't load — use your pass code at the gate instead.</p>
                 </div>
               ) : (
                 <img
@@ -243,7 +219,7 @@ export default function GatePass() {
                 />
               )}
               <div>
-                <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.id}</p>
+                <p className="font-display text-base font-semibold text-ink">{activePass.type} · {activePass.code || "Legacy pass"}</p>
                 <p className="mt-1 text-sm text-slate-500">{activePass.reason}</p>
                 <p className="mt-1 text-xs text-slate-400">{displayDate(activePass.from)} → {displayDate(activePass.to)}</p>
               </div>
@@ -254,7 +230,7 @@ export default function GatePass() {
                 </Pill>
               </div>
               <p className="max-w-xs text-xs text-slate-400">
-                Show this QR code (or your pass ID, <span className="font-semibold text-slate-500">{activePass.id}</span>) to
+                Show this QR code (or your pass code, <span className="font-semibold text-slate-500">{activePass.code || "Legacy pass"}</span>) to
                 security at the gate — they verify and record it once on the way out and once on the way back in. Your trip
                 status above updates automatically once security logs it.
               </p>
@@ -262,7 +238,7 @@ export default function GatePass() {
           ) : completedPass ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <Pill tone={passStatus(completedPass)}>{passStatus(completedPass)}</Pill>
-              <p className="font-display text-base font-semibold text-ink">{completedPass.type} · {completedPass.id}</p>
+              <p className="font-display text-base font-semibold text-ink">{completedPass.type} · {completedPass.code || "Legacy pass"}</p>
               <p className="text-sm text-slate-500">Returned {completedPass.returnedAt?.toDate ? completedPass.returnedAt.toDate().toLocaleString("en-IN") : completedPass.entryTime?.toDate ? completedPass.entryTime.toDate().toLocaleString("en-IN") : "by security"}</p>
             </div>
           ) : pendingPass ? (
@@ -335,7 +311,7 @@ export default function GatePass() {
               <tbody className="divide-y divide-slate-100">
                 {passes.map((p) => (
                   <tr key={p.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className="py-2.5 text-slate-400">{p.id}</td>
+                    <td className="py-2.5 text-slate-400">{p.code || "Legacy pass"}</td>
                     <td className="py-2.5 font-medium text-ink">{p.type}</td>
                     <td className="py-2.5 text-slate-500">{p.from} → {p.to}</td>
                       <td className="py-2.5"><Pill tone={passStatus(p)}>{passStatus(p)}</Pill></td>

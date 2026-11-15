@@ -7,6 +7,8 @@ import { QrIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/i
 import { useCollection } from "../../../hooks/useCollection";
 import { updateDocument } from "../../../firebase/firestore";
 import { isPassOut, passStatus } from "../../../utils/gatePass";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
+import { dateKey } from "../../../utils/dateKey";
 
 const statusFilters = ["All Statuses", "Pending", "Approved", "Out", "Rejected", "Completed"];
 const validityFilters = ["Any date", "Active now", "Upcoming", "Expired"];
@@ -40,6 +42,7 @@ export default function GatePasses() {
   const [wingFilter, setWingFilter] = useState("All Wings");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [validityFilter, setValidityFilter] = useState("Any date");
+  const [selectedDate, setSelectedDate] = useState("");
 
   const filtered = useMemo(() => {
     const now = new Date();
@@ -47,9 +50,21 @@ export default function GatePasses() {
       const wingOk = wingFilter === "All Wings" || p.wing === wingFilter;
       const statusOk = statusFilter === "All Statuses" || passStatus(p) === statusFilter;
       const validityOk = validityFilter === "Any date" || getValidity(p, now) === validityFilter;
-      return wingOk && statusOk && validityOk;
+      const dateOk = !selectedDate || dateKey(p.from || p.createdAt) === selectedDate;
+      return wingOk && statusOk && validityOk && dateOk;
     });
-  }, [passes, wingFilter, statusFilter, validityFilter]);
+  }, [passes, wingFilter, statusFilter, validityFilter, selectedDate]);
+
+  async function downloadPasses() {
+    await downloadXlsxFile(filtered, [
+      { label: "Gate Pass Code", value: (p) => p.code || "Legacy pass" },
+      { label: "Student", value: (p) => p.studentName || "" }, { label: "Student ID", value: (p) => p.registrationNo || "" },
+      { label: "Type", value: (p) => p.type || "" }, { label: "Reason", value: (p) => p.reason || "" },
+      { label: "From", value: (p) => p.from || "" }, { label: "To", value: (p) => p.to || "" },
+      { label: "Status", value: (p) => passStatus(p) }, { label: "Trip", value: (p) => p.tripState || "" },
+      { label: "Block", value: (p) => p.wing || p.block || "" }, { label: "Room", value: (p) => p.room || "" },
+    ], `gatepasses_${selectedDate || new Date().toISOString().slice(0, 10)}.xlsx`, "Gate Passes");
+  }
 
   const pendingCount = passes.filter((p) => p.status === "Pending").length;
   const outCount = passes.filter(isPassOut).length;
@@ -96,6 +111,7 @@ export default function GatePasses() {
       render: (p) => (
         <>
           <p className="font-medium text-ink">{p.studentName}</p>
+          <p className="text-xs text-slate-400">{p.code || "Legacy pass"} · {p.registrationNo || "Registration unavailable"}</p>
           <p className="text-xs text-slate-400">{p.wing || "—"}, {p.room || "—"}</p>
         </>
       ),
@@ -157,7 +173,8 @@ export default function GatePasses() {
       </div>
 
       <Card title="Gate pass requests">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input aria-label="Filter gate passes by date" type="date" className={`${inputCls} sm:w-48`} value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
           <select className={`${inputCls} sm:w-48`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
             {wingFilters.map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
@@ -167,6 +184,7 @@ export default function GatePasses() {
           <select className={`${inputCls} sm:w-48`} value={validityFilter} onChange={(e) => setValidityFilter(e.target.value)}>
             {validityFilters.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
+          <Button variant="outline" className="sm:ml-auto" onClick={downloadPasses} disabled={!filtered.length}>Download Excel</Button>
         </div>
 
         <DataTable

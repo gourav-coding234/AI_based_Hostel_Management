@@ -10,3 +10,8 @@ export function passStatus(pass) {
 
 export const isPassOut = (pass) => passStatus(pass) === "Out";
 export const isPassActive = (pass) => ["Approved", "Out"].includes(passStatus(pass));
+export function isPassExpired(pass, now = new Date()) {
+  if (!pass?.to) return false;
+  const end = new Date(pass.to);
+  return !Number.isNaN(end.getTime()) && now.getTime() > end.getTime();
+}

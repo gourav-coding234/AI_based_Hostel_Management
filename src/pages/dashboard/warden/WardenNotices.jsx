@@ -7,10 +7,9 @@ import { MegaphoneIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { addDocument, updateDocument, deleteDocument } from "../../../firebase/firestore";
 
-const NOTICE_TARGETS = ["All Wings", "A Wing", "B Wing", "C Wing"];
 const NOTICE_PRIORITIES = ["General", "Urgent", "Event"];
 
-const emptyDraft = { title: "", body: "", target: NOTICE_TARGETS[0], priority: NOTICE_PRIORITIES[0] };
+const emptyDraft = { title: "", body: "", target: "Both", priority: NOTICE_PRIORITIES[0] };
 
 export default function WardenNotices() {
   const { user, profile } = useAuth();
@@ -30,7 +29,7 @@ export default function WardenNotices() {
 
   function startEdit(n) {
     setEditingId(n.id);
-    setDraft({ title: n.title, body: n.body, target: n.target, priority: n.priority });
+    setDraft({ title: n.title, body: n.body, target: ["All Wings", "All Hostels", "A Wing", "B Wing", "C Wing"].includes(n.target) ? "Both" : n.target, priority: n.priority });
   }
 
   function cancelEdit() {
@@ -120,7 +119,7 @@ export default function WardenNotices() {
             </span>
             <div>
               <p className="font-display text-base font-semibold text-ink">Notice board</p>
-              <p className="text-sm text-slate-500">Published notices appear on every student's dashboard.</p>
+              <p className="text-sm text-slate-500">Choose Boys Hostel, Girls Hostel, or both hostels as the audience.</p>
             </div>
           </div>
           {!isEditingForm && <Button onClick={startCreate}>New notice</Button>}
@@ -149,9 +148,7 @@ export default function WardenNotices() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Target">
                 <select className={inputCls} value={draft.target} onChange={(e) => setDraft((d) => ({ ...d, target: e.target.value }))}>
-                  {NOTICE_TARGETS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
+                  <option value="Both">Both Hostels</option><option value="Boys Hostel">Boys Hostel</option><option value="Girls Hostel">Girls Hostel</option>
                 </select>
               </Field>
               <Field label="Priority">

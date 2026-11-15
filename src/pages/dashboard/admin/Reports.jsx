@@ -3,6 +3,7 @@ import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
 import { EmptyState } from "../../../components/ui/DataState";
 import { ChartIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
+import { buildOccupancyReport } from "../../../utils/occupancy";
 
 function toCsv(rows) {
   if (!rows.length) return "";
@@ -21,6 +22,7 @@ function download(rows, name) {
 export default function Reports() {
   const { data, loading } = useCollections({
     students: { name: "students" },
+    studentRegister: { name: "studentRegister" },
     fees: { name: "fees" },
     blocks: { name: "blocks" },
     complaints: { name: "complaints" },
@@ -30,7 +32,7 @@ export default function Reports() {
   const reports = [
     { id: "RPT-STU", name: "Student directory", description: "Full list of residents with room, block and contact details.", rows: data.students },
     { id: "RPT-FEE", name: "Fee collection summary", description: "Per-student dues, collections and outstanding balances.", rows: data.fees },
-    { id: "RPT-OCC", name: "Occupancy report", description: "Room and bed occupancy across every block.", rows: data.blocks },
+    { id: "RPT-OCC", name: "Occupancy report", description: "Room occupancy, vacancies and assigned students by hostel.", rows: buildOccupancyReport(data.students, data.studentRegister, data.blocks) },
     { id: "RPT-CMP", name: "Complaints log", description: "All complaints filed institute-wide with current status.", rows: data.complaints },
     { id: "RPT-EXP", name: "Hostel expenses", description: "Recorded expenses with category, date, and payment method.", rows: data.expenses },
   ];

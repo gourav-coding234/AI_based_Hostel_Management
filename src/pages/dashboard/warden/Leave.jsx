@@ -5,6 +5,8 @@ import DataTable from "../../../components/ui/DataTable";
 import { CalendarClockIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
 import { useCollection } from "../../../hooks/useCollection";
 import { getCollection, decideLeaveRequest } from "../../../firebase/firestore";
+import { downloadXlsxFile } from "../../../utils/xlsxExport";
+import { dateKey } from "../../../utils/dateKey";
 
 const statusFilters = ["All Statuses", "Pending", "Approved", "Rejected"];
 
@@ -16,14 +18,27 @@ export default function Leave() {
 
   const [wingFilter, setWingFilter] = useState("All Wings");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
+  const [selectedDate, setSelectedDate] = useState("");
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
       const wingOk = wingFilter === "All Wings" || r.wing === wingFilter;
       const statusOk = statusFilter === "All Statuses" || r.status === statusFilter;
-      return wingOk && statusOk;
+      const dateOk = !selectedDate || dateKey(r.from || r.createdAt) === selectedDate;
+      return wingOk && statusOk && dateOk;
     });
-  }, [requests, wingFilter, statusFilter]);
+  }, [requests, wingFilter, statusFilter, selectedDate]);
+
+  async function downloadRequests() {
+    await downloadXlsxFile(filtered, [
+      { label: "Leave Code", value: (r) => r.code || "Legacy request" },
+      { label: "Student", value: (r) => r.studentName || "" }, { label: "Student ID", value: (r) => r.registrationNo || "" },
+      { label: "Type", value: (r) => r.type || "" }, { label: "Reason", value: (r) => r.reason || "" },
+      { label: "From", value: (r) => r.from || "" }, { label: "To", value: (r) => r.to || "" },
+      { label: "Status", value: (r) => r.status || "" }, { label: "Parent notified", value: (r) => r.parentNotified ? "Yes" : "No" },
+      { label: "Block", value: (r) => r.wing || "" }, { label: "Room", value: (r) => r.room || "" },
+    ], `leave_requests_${selectedDate || new Date().toISOString().slice(0, 10)}.xlsx`, "Leave Requests");
+  }
 
   const pendingCount = requests.filter((r) => r.status === "Pending").length;
   const approvedCount = requests.filter((r) => r.status === "Approved").length;
@@ -84,6 +99,7 @@ export default function Leave() {
             <span className="font-medium text-ink">{r.studentName}</span>
             <Pill tone="General">{r.type}</Pill>
           </div>
+          <p className="text-xs text-slate-400">{r.code || "Legacy request"} · {r.registrationNo || "Registration unavailable"}</p>
           <p className="text-xs text-slate-400">{r.wing || "—"}, {r.room || "—"}</p>
         </>
       ),
@@ -136,13 +152,15 @@ export default function Leave() {
       </div>
 
       <Card title="Leave requests">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input aria-label="Filter leave requests by date" type="date" className={`${inputCls} sm:w-48`} value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
           <select className={`${inputCls} sm:w-48`} value={wingFilter} onChange={(e) => setWingFilter(e.target.value)}>
             {wingFilters.map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
           <select className={`${inputCls} sm:w-48`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             {statusFilters.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
+          <Button variant="outline" className="sm:ml-auto" onClick={downloadRequests} disabled={!filtered.length}>Download Excel</Button>
         </div>
 
         <DataTable

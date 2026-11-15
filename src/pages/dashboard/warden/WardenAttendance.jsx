@@ -198,7 +198,7 @@ export default function WardenAttendance() {
 
   const EXCEL_COLUMNS = [
     { label: "Date", value: (r) => r.date },
-    { label: "Registration Number", value: (r) => r.registrationNo || r.studentId },
+    { label: "Registration Number", value: (r) => r.registrationNo || "" },
     { label: "Student Name", value: (r) => r.studentName },
     { label: "Wing/Block", value: (r) => r.wing || "" },
     { label: "Gender", value: (r) => r.gender || "Unspecified" },

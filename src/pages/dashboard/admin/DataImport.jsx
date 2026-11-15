@@ -10,7 +10,6 @@ import { IMPORT_TARGETS } from "../../../utils/importSchemas";
 import { normalizeHostel } from "../../../utils/hostels";
 import { useCollection } from "../../../hooks/useCollection";
 import { isDemoMode } from "../../../data/demoFixtures";
-import AdminBlocksSection from "./AdminBlocksSection";
 
 function validateMixedRecords(records) {
   if (!records.length) return { validRecords: [], errors: [{ row: 0, field: "dataType", message: "The file has no data rows." }], byTarget: {} };
@@ -857,7 +856,6 @@ export default function DataImport() {
         </div>
       </Card>
 
-      <div id="hostel-blocks" className="scroll-mt-24"><AdminBlocksSection /></div>
       <DataDeleteSection />
 
       <Card title="How this works" className="bg-slate-50/60">
