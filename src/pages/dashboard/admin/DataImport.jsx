@@ -286,6 +286,81 @@ function expandStudentBundleRows(records) {
   return expanded;
 }
 
+function importedBlockName(record) {
+  const raw = record.blockName || record.block || record.wing || record.hostelResidence || "";
+  let name = String(raw).trim()
+    .replace(/\b(?:boys|girls|male|female)\s+hostel\b/ig, " ")
+    .replace(/\bhostel\b/ig, " ")
+    .replace(/[|,;]+/g, " ")
+    .replace(/\s+/g, " ").trim();
+  if (!name) return "";
+  if (/^(?:boys|girls)\s*$/i.test(name)) return "";
+  name = name.replace(/^(?:block|wing)\s+/i, "").replace(/\s+(?:block|wing)$/i, "").trim();
+  if (!name) return "";
+  return /^[a-z0-9]{1,3}$/i.test(name) ? `Block ${name.toUpperCase()}` : name;
+}
+
+function blockKey(name, type) {
+  const compactName = String(name || "").trim().toLowerCase().replace(/^(?:block|wing)\s+/, "").replace(/\s+(?:block|wing)$/, "");
+  return `${compactName}|${normalizeHostel(type)}`;
+}
+
+async function syncImportedStudentBlocks(records, createdBy) {
+  const [blocks, accounts, studentProfiles] = await Promise.all([
+    getCollection("blocks"),
+    getCollection("users", { whereClauses: [["role", "==", "Student"]] }),
+    getCollection("students"),
+  ]);
+  const accountByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account]));
+  const profileByEmail = new Map(studentProfiles.map((student) => [String(student.email || "").trim().toLowerCase(), student]));
+  const recordsWithBlocks = records.map((record) => {
+    const email = String(record.email || "").trim().toLowerCase();
+    const account = accountByEmail.get(email) || {};
+    const student = profileByEmail.get(email) || {};
+    const hostel = normalizeHostel(record.hostel || record.hostelType || record.gender || student.hostel || student.hostelType || student.gender || account.hostel || account.hostelType || account.gender);
+    const name = importedBlockName(record);
+    return hostel && name ? { ...record, hostel, blockName: name } : null;
+  }).filter(Boolean);
+  if (!recordsWithBlocks.length) return { created: 0 };
+
+  const blockByKey = new Map(blocks.map((block) => [blockKey(block.name, block.type), block]));
+  const needed = new Map();
+  recordsWithBlocks.forEach((record) => {
+    const key = blockKey(record.blockName, record.hostel);
+    if (!blockByKey.has(key) && !needed.has(key)) needed.set(key, {
+      name: record.blockName,
+      type: record.hostel === "Girls Hostel" ? "Girls" : "Boys",
+      totalRooms: 0,
+      totalBeds: 0,
+      occupiedBeds: 0,
+      autoCreatedFromImport: true,
+    });
+  });
+  const created = needed.size ? await bulkAddDocuments("blocks", [...needed.values()], createdBy) : 0;
+  const refreshedBlocks = created ? await getCollection("blocks") : blocks;
+  const refreshedByKey = new Map(refreshedBlocks.map((block) => [blockKey(block.name, block.type), block]));
+  const uidByEmail = new Map(accounts.map((account) => [String(account.email || "").trim().toLowerCase(), account.id]));
+  const studentUpdates = new Map();
+  const rosterUpdates = new Map();
+
+  recordsWithBlocks.forEach((record) => {
+    const block = refreshedByKey.get(blockKey(record.blockName, record.hostel));
+    if (!block) return;
+    const assignment = { hostel: record.hostel, hostelType: record.hostel, block: block.name, wing: block.name, blockId: block.id };
+    const email = String(record.email || "").trim().toLowerCase();
+    const uid = uidByEmail.get(email);
+    if (uid) studentUpdates.set(uid, { id: uid, data: assignment });
+    const registrationNo = String(record.regNo || record.registrationNo || "").trim();
+    if (registrationNo) rosterUpdates.set(registrationNo, { id: registrationNo, data: assignment });
+  });
+
+  await Promise.all([
+    studentUpdates.size ? bulkUpdateDocuments("students", [...studentUpdates.values()]) : Promise.resolve(0),
+    rosterUpdates.size ? bulkUpdateDocuments("studentRegister", [...rosterUpdates.values()]) : Promise.resolve(0),
+  ]);
+  return { created };
+}
+
 async function importRecords(target, records, createdBy) {
   if (target.key === "blocks") {
     const current = await getCollection("blocks");
@@ -324,8 +399,11 @@ async function importRecords(target, records, createdBy) {
   if (target.key === "students") {
     const accountResult = await ensureStudentAccounts(records, target.onProgress);
     const result = await bulkUpsertStudentsByEmail(records, createdBy);
+    const blockSync = await syncImportedStudentBlocks(records, createdBy);
     return {
       ...result,
+      written: result.written,
+      createdBlocks: blockSync.created,
       createdAccounts: accountResult.createdAccounts,
       failed: result.failed.map((failure) => ({
         ...failure,
@@ -336,7 +414,8 @@ async function importRecords(target, records, createdBy) {
   if (target.key === "studentRegister") {
     const accountResult = await ensureStudentAccounts(records.filter((record) => record.email), target.onProgress);
     const { written, linked } = await bulkUpsertStudentAcademicRecords(records, createdBy);
-    return { written, linked, createdAccounts: accountResult.createdAccounts, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
+    const blockSync = await syncImportedStudentBlocks(records, createdBy);
+    return { written, linked, createdAccounts: accountResult.createdAccounts, createdBlocks: blockSync.created, failed: Array.from(accountResult.errors, ([email, reason]) => ({ email, reason })) };
   }
   if (target.key === "visitors") {
     const withSortableTime = records.map((record) => {
@@ -415,6 +494,7 @@ export default function DataImport() {
   const [parseError, setParseError] = useState("");
   const [validation, setValidation] = useState(null); // { validRecords, errors }
   const [importedCount, setImportedCount] = useState(0);
+  const [createdBlockCount, setCreatedBlockCount] = useState(0);
   const [importFailures, setImportFailures] = useState([]);
   const [importProgress, setImportProgress] = useState(null);
   const [fileAlreadyImported, setFileAlreadyImported] = useState(null);
@@ -440,6 +520,7 @@ export default function DataImport() {
     setParseError("");
     setValidation(null);
     setImportedCount(0);
+    setCreatedBlockCount(0);
     setImportFailures([]);
     setImportProgress(null);
     setFileAlreadyImported(null);
@@ -498,6 +579,7 @@ export default function DataImport() {
       if (isMixedImport) {
         let writtenTotal = 0;
         let createdAccountsTotal = 0;
+        let createdBlocksTotal = 0;
         const failures = [];
         const linkedCollections = new Set(["fees", "attendance", "complaints", "gatePasses", "visitors", "leaveRequests", "feedback"]);
         const priority = { students: 0, studentRegister: 1 };
@@ -524,9 +606,10 @@ export default function DataImport() {
               }
             }
             if (!rowsToImport.length) continue;
-            const { written, failed = [], createdAccounts = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
+            const { written, failed = [], createdAccounts = 0, createdBlocks = 0 } = await importRecords({ ...item, onProgress: (done, total, createdCount) => setImportProgress({ target: item.label, done, total, createdAccounts: createdCount }) }, rowsToImport, user?.uid);
             writtenTotal += written;
             createdAccountsTotal += createdAccounts || 0;
+            createdBlocksTotal += createdBlocks || 0;
             failures.push(...failed.map((failure) => ({ ...failure, target: item.label })));
           } catch (err) {
             console.error(`Mixed import failed for ${item.collection}:`, err);
@@ -534,6 +617,7 @@ export default function DataImport() {
           }
         }
         setImportedCount(writtenTotal);
+        setCreatedBlockCount(createdBlocksTotal);
         if (writtenTotal > 0) {
           try {
             await logAudit({
@@ -569,8 +653,9 @@ export default function DataImport() {
           })));
         }
       }
-      const { written, failed = [], createdAccounts } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
+      const { written, failed = [], createdAccounts, createdBlocks = 0 } = await importRecords({ ...target, onProgress: (done, total, createdCount) => setImportProgress({ target: target.label, done, total, createdAccounts: createdCount }) }, recordsToImport, user?.uid);
       setImportedCount(written);
+      setCreatedBlockCount(createdBlocks);
       if (written > 0) {
         try {
           await logAudit({
@@ -741,7 +826,7 @@ export default function DataImport() {
           {status === "done" && (
             <div className="flex flex-col gap-2">
               <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
+                Imported {importedCount} record{importedCount === 1 ? "" : "s"}{isMixedImport ? " across the selected data sections" : ` into “${target.collection}”`}. {createdBlockCount ? `Created ${createdBlockCount} hostel block${createdBlockCount === 1 ? "" : "s"} automatically and linked the imported students to them. ` : ""}{importProgress?.createdAccounts ? `Created ${importProgress.createdAccounts} new Student account${importProgress.createdAccounts === 1 ? "" : "s"} with the initial password 123456.` : ""} They'll now
                 appear on the relevant dashboards automatically as the database syncs; open dashboard pages update without a manual refresh.
                 {importFailures.length > 0 && ` ${importFailures.length} record${importFailures.length === 1 ? "" : "s"} could not be linked or imported; see details below.`}
               </div>

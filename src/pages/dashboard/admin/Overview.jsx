@@ -17,7 +17,7 @@ import {
   MegaphoneIcon,
 } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
-import { mergeHostelResidents, mergeRegisteredStudents, residentBlockName } from "../../../utils/hostelResidents";
+import { mergeHostelResidents, mergeRegisteredStudents } from "../../../utils/hostelResidents";
 import { hostelForStudent } from "../../../utils/hostels";
 
 function inr(n) {
@@ -63,27 +63,11 @@ export default function AdminOverview() {
   const residents = useMemo(() => mergeHostelResidents(students, studentRegister), [students, studentRegister]);
   const wardens = useMemo(() => users.filter((account) => account.role === "Warden"), [users]);
   const totalStudents = registeredStudents.length;
-  const overviewBlocks = useMemo(() => {
-    const blockKey = (name, type) => `${String(name || "").trim().toLowerCase()}|${String(type || "").trim().toLowerCase()}`;
-    const result = new Map(blocks.map((block) => [blockKey(block.name, block.type), { ...block, residentCount: 0, recordedBeds: Number(block.occupiedBeds) || 0 }]));
-    const addReference = (record, isResident) => {
-      const name = residentBlockName(record);
-      if (!name || /^(boys|girls) hostel$/i.test(name)) return;
-      const hostel = hostelForStudent(record, blocks);
-      const type = hostel?.startsWith("Girls") ? "Girls" : hostel?.startsWith("Boys") ? "Boys" : "";
-      const key = blockKey(name, type);
-      const current = result.get(key) || { id: `assigned:${key}`, name, type, totalBeds: 0, totalRooms: 0, occupiedBeds: 0, inferred: true, residentCount: 0 };
-      if (isResident) current.residentCount += 1;
-      else if (Number.isFinite(Number(record.totalBeds))) current.totalBeds = Math.max(Number(current.totalBeds) || 0, Number(record.totalBeds));
-      result.set(key, current);
-    };
-    residents.forEach((resident) => addReference(resident, true));
-    // Fee imports retain their hostel and block labels. Include these
-    // Firestore references so real blocks remain visible when the legacy
-    // blocks collection has not yet been backfilled; capacities remain blank.
-    fees.forEach((fee) => addReference(fee, false));
-    return [...result.values()];
-  }, [blocks, residents, fees]);
+  const hostelResidentCounts = useMemo(() => residents.reduce((counts, student) => {
+    const hostel = hostelForStudent(student, blocks);
+    if (hostel) counts[hostel] += 1;
+    return counts;
+  }, { "Boys Hostel": 0, "Girls Hostel": 0 }), [residents, blocks]);
   const loading = snapshotLoading;
   const studentsOut = movementsOut.length;
   const recentByDate = (records, field) => [...records].sort((a, b) => String(b[field] || "").localeCompare(String(a[field] || "")));
@@ -94,12 +78,9 @@ export default function AdminOverview() {
 
   // Occupancy
   const totalBeds = blocks.reduce((sum, b) => sum + (Number(b.totalBeds) || 0), 0);
-  const occupiedBeds = blocks.reduce((sum, b) => {
-    const key = `${String(b.name || "").trim().toLowerCase()}|${String(b.type || "").trim().toLowerCase()}`;
-    const linked = overviewBlocks.find((entry) => `${String(entry.name || "").trim().toLowerCase()}|${String(entry.type || "").trim().toLowerCase()}` === key);
-    return sum + (linked?.residentCount || Number(b.occupiedBeds) || 0);
-  }, 0);
-  const occupancyPct = totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+  const recordedOccupiedBeds = blocks.reduce((sum, block) => sum + (Number(block.occupiedBeds) || 0), 0);
+  const residentBedsInUse = residents.filter((student) => String(student.room || "").trim() && String(student.bed || "").trim()).length;
+  const occupiedBeds = residentBedsInUse || recordedOccupiedBeds;
 
   // Fees
   const totalDue = fees.reduce((sum, f) => sum + (Number(f.total) || 0), 0);
@@ -161,7 +142,7 @@ export default function AdminOverview() {
             <p className="text-sm text-slate-300">Welcome back,</p>
             <h2 className="font-display text-2xl font-semibold">{displayName}</h2>
             <p className="mt-1.5 text-sm text-slate-300">
-              {totalStudents} registered students · {overviewBlocks.length} hostel blocks · {wardens.length} wardens
+              {totalStudents} registered students · {hostelResidentCounts["Boys Hostel"]} Boys Hostel residents · {hostelResidentCounts["Girls Hostel"]} Girls Hostel residents · {wardens.length} wardens
             </p>
           </div>
           <div className="flex gap-2">
@@ -182,9 +163,10 @@ export default function AdminOverview() {
       <p className="-mt-3 text-xs text-slate-400">This overview uses a short snapshot (up to 100 records per collection) to keep loading light. Figures based on activity lists may be partial; open a register for the full current data.</p>
       {overviewError && <ErrorState message={overviewError} />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Link to="/dashboard/admin/directory"><StatCard icon={<UsersIcon />} label="Total students" value={loading ? "…" : totalStudents} sub="Unique students in the register and resident records" tone="teal" /></Link>
-        <Link to="/dashboard/admin/data-import#hostel-blocks"><StatCard icon={<BuildingIcon />} label="Hostel occupancy" value={totalBeds ? `${occupancyPct}%` : "—"} sub={totalBeds ? `${occupiedBeds}/${totalBeds} beds filled · ${overviewBlocks.length} blocks` : `${overviewBlocks.length} blocks · capacity ${overviewBlocks.length ? "not set" : "not recorded"}`} tone="navy" /></Link>
+        <Link to="/dashboard/admin/directory"><StatCard icon={<BuildingIcon />} label="Boys Hostel students" value={loading ? "…" : hostelResidentCounts["Boys Hostel"]} sub="All assigned students across this hostel" tone="navy" /></Link>
+        <Link to="/dashboard/admin/directory"><StatCard icon={<BuildingIcon />} label="Girls Hostel students" value={loading ? "…" : hostelResidentCounts["Girls Hostel"]} sub="All assigned students across this hostel" tone="navy" /></Link>
         <Link to="/dashboard/admin/fees"><StatCard icon={<WalletIcon />} label="Fee collection" value={totalDue ? `${collectionPct}%` : "—"} sub={totalDue ? `${inr(totalCollected)} collected` : "No fee records yet"} tone="amber" /></Link>
         <Link to="/dashboard/admin/complaints"><StatCard icon={<WrenchIcon />} label="Open complaints in snapshot" value={openComplaints} sub={`${complaints.length} recent records loaded`} tone={openComplaints > 0 ? "rose" : "teal"} /></Link>
         <Link to="/dashboard/admin/attendance"><StatCard icon={<CalendarClockIcon />} label="Attendance today" value={attendancePct === null ? "—" : `${attendancePct}%`} sub={attendanceCount ? `${presentToday}/${attendanceCount} marked present` : "No records for today"} tone="teal" /></Link>
@@ -233,35 +215,18 @@ export default function AdminOverview() {
           )}
         </Card>
 
-        <Card title="Blocks at a glance">
-          {overviewBlocks.length === 0 ? (
-            <EmptyState icon={<BuildingIcon />} title="No blocks yet" description="Add blocks in Data Import." />
-          ) : (
-            <ul className="flex flex-col divide-y divide-slate-100">
-              {overviewBlocks.map((b) => {
-                const total = Number(b.totalBeds) || 0;
-                const occupied = b.residentCount || Number(b.occupiedBeds) || 0;
-                const pct = total ? Math.round((occupied / total) * 100) : 0;
-                return (
-                  <li key={b.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-ink">{b.name}</p>
-                        <p className="text-xs text-slate-400">{b.type || "Hostel type not set"} Hostel</p>
-                      </div>
-                      <Pill tone={total && occupied / total > 0.95 ? "Urgent" : "General"}>
-                        {total ? `${occupied}/${total}` : `${occupied} residents`}
-                      </Pill>
-                    </div>
-                    {total > 0 && <div className="flex items-center gap-2">
-                      <ProgressBar value={occupied} max={total} tone={pct > 95 ? "amber" : "teal"} />
-                      <span className="w-9 shrink-0 text-right text-xs text-slate-400">{pct}%</span>
-                    </div>}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+        <Card title="Students by hostel">
+          <ul className="flex flex-col divide-y divide-slate-100">
+            {[
+              ["Girls Hostel", hostelResidentCounts["Girls Hostel"]],
+              ["Boys Hostel", hostelResidentCounts["Boys Hostel"]],
+            ].map(([hostel, count]) => (
+              <li key={hostel} className="flex items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
+                <p className="text-sm font-medium text-ink">{hostel}</p>
+                <Pill tone="General">{loading ? "…" : `${count} students`}</Pill>
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
 
