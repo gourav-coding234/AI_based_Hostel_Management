@@ -148,8 +148,11 @@ export default function GatePass() {
   }, []);
   // Recomputed fresh from `passes` every render — nothing about which pass
   // is "active" is ever cached in state or localStorage.
-  const activePass = useMemo(() => pickActivePass(passes.filter((p) => isPassActive(p) && !isPassOut(p)), now), [passes, now]);
-  const journeyPass = passes.find(isPassOut);
+  const isCurrentlyOut = movement.items[0]?.status === "OUT";
+  const activePass = useMemo(() => isCurrentlyOut ? null : pickActivePass(passes.filter((p) => isPassActive(p) && !isPassOut(p)), now), [passes, now, isCurrentlyOut]);
+  // A pass left in Out state by an older/manual movement must not hide a new
+  // approved pass after Security has recorded the student back IN.
+  const journeyPass = isCurrentlyOut ? passes.find(isPassOut) : null;
   const completedPass = passes.find((pass) => passStatus(pass) === "Completed");
   const pendingPass = passes.find((p) => p.status === "Pending");
 

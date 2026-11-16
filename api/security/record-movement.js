@@ -42,6 +42,12 @@ export default async function recordMovement(req, res) {
       const statusRef = db.collection("inOutStatus").doc(actualStudentId);
       const studentRef = db.collection("students").doc(actualStudentId);
       const [statusSnap, studentSnap] = await Promise.all([tx.get(statusRef), tx.get(studentRef)]);
+      // A manual return has no QR/pass id to update. Close any pass left in
+      // Out state for this student so it cannot remain the stale active pass
+      // after the movement itself has returned to IN.
+      const manuallyReturnedPasses = manual && direction === "In"
+        ? await tx.get(db.collection("gatePasses").where("studentId", "==", actualStudentId).where("status", "==", "Out"))
+        : null;
       const student = studentSnap.data() || {};
       const movement = statusSnap.data()?.status || "IN";
       if (manual) {
@@ -80,6 +86,11 @@ export default async function recordMovement(req, res) {
         ...(reason ? { reason } : {}),
         ...(direction === "Out" ? { exitTime: timestamp } : { entryTime: timestamp, returnedAt: timestamp }), updatedAt: timestamp,
       }, { merge: true });
+      manuallyReturnedPasses?.docs.forEach((docSnap) => tx.update(docSnap.ref, {
+        status: "Completed", tripState: "Returned", entryTime: timestamp,
+        returnedAt: timestamp, returnedByUid: caller.uid, entryReason: reason || "Manual return",
+        updatedAt: timestamp,
+      }));
       if (passRef) tx.update(passRef, direction === "Out"
         ? { status: "Out", tripState: "Out", exitTime: timestamp, scannedBy: actor.name || "Security", scannedByUid: caller.uid, updatedAt: timestamp }
         : { status: "Completed", tripState: "Returned", entryTime: timestamp, returnedAt: timestamp, returnedByUid: caller.uid, ...(reason ? { entryReason: reason } : {}), updatedAt: timestamp });
