@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../components/dashboard/student/ui";
-import { CameraIcon, LogInIcon, LogOutIcon, ScanIcon } from "../../../components/dashboard/security/icons";
-import { saveSecurityMovement } from "../../../firebase/securityMovement";
+import { CameraIcon, CheckSquareIcon, LogInIcon, LogOutIcon, ScanIcon } from "../../../components/dashboard/security/icons";
+import { approveStudentGatePass, saveSecurityMovement } from "../../../firebase/securityMovement";
 import { useGateDesk } from "../../../hooks/useGateDesk";
 import { normalizeGender } from "../../../hooks/useAttendanceRoster";
 import { isPassActive, isPassOut, passStatus } from "../../../utils/gatePass";
@@ -45,6 +45,9 @@ export default function GateDesk() {
   const [logSearch, setLogSearch] = useState("");
   const [scanning, setScanning] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [approvingPassId, setApprovingPassId] = useState("");
+  const [approvalError, setApprovalError] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState("");
   const [now, setNow] = useState(() => new Date());
   const scannerRef = useRef(null);
 
@@ -63,6 +66,7 @@ export default function GateDesk() {
     return directory.filter((student) => `${student.name} ${student.regNo} ${student.wing} ${student.email}`.toLowerCase().includes(term)).slice(0, 8).map((student) => ({ kind: "student", student }));
   }, [search, passById, directory, studentById]);
   const selectedPass = selectedPassId ? passById.get(selectedPassId) : null;
+  const pendingPasses = useMemo(() => passes.filter((pass) => passStatus(pass) === "Pending"), [passes]);
   const selectedStudent = selectedStudentId ? studentById.get(selectedStudentId) : selectedPass ? (studentById.get(selectedPass.studentId) || { id: selectedPass.studentId, name: selectedPass.studentName, regNo: selectedPass.registrationNo, wing: selectedPass.wing, gender: selectedPass.gender }) : null;
   const activePass = selectedPass || (selectedStudent ? passByStudent.get(selectedStudent.id) : null);
   const selectedStatus = selectedStudent ? statusByStudent.get(selectedStudent.id) : null;
@@ -98,6 +102,21 @@ export default function GateDesk() {
     setEntryReasonRequired(false);
     setActionError("");
     setMessage("");
+  }
+  async function approvePass(pass) {
+    if (approvingPassId) return;
+    setApprovingPassId(pass.id);
+    setApprovalError("");
+    setApprovalMessage("");
+    try {
+      await approveStudentGatePass(pass.id);
+      setApprovalMessage(`${pass.code || "Gate pass"} approved. The student can now use its QR code.`);
+    } catch (err) {
+      console.error("Failed to approve gate pass:", err);
+      setApprovalError(err.message || "Gate pass could not be approved. Try again.");
+    } finally {
+      setApprovingPassId("");
+    }
   }
   async function stopCamera() {
     const scanner = scannerRef.current;
@@ -183,6 +202,29 @@ export default function GateDesk() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {[["Total residents", directory.length], ["In", Math.max(directory.length - outStudents.length, 0)], ["Out", `${outStudents.length} · Boys ${outByGender.boys} / Girls ${outByGender.girls}`], ["Passes active today", passToday.length]].map(([label, value]) => <Card key={label}><p className="font-display text-2xl font-semibold text-ink">{loading ? "…" : value}</p><p className="mt-1 text-sm text-slate-500">{label}</p></Card>)}
     </div>
+
+    <Card title={`Pending gate pass approvals · ${pendingPasses.length}`}>
+      {approvalError && <p role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{approvalError}</p>}
+      {approvalMessage && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{approvalMessage}</p>}
+      {pendingPasses.length === 0 ? <p className="py-5 text-center text-sm text-slate-400">No gate passes are waiting for approval.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead><tr className="text-xs uppercase text-slate-400"><th className="pb-2">Student</th><th className="pb-2">Pass</th><th className="pb-2">Reason</th><th className="pb-2">Window</th><th className="pb-2 text-right">Action</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">{pendingPasses.map((pass) => {
+              const student = studentById.get(pass.studentId) || {};
+              const busy = approvingPassId === pass.id;
+              return <tr key={pass.id}>
+                <td className="py-3 font-medium text-ink">{pass.studentName || student.name || "Student"}<p className="text-xs text-slate-400">{pass.registrationNo || pass.regNo || student.regNo || "Registration unavailable"}</p></td>
+                <td className="py-3">{pass.type || "Gate pass"}<p className="text-xs text-slate-400">{pass.code || pass.id}</p></td>
+                <td className="py-3">{pass.reason || "—"}</td>
+                <td className="py-3">{pass.from || "—"} → {pass.to || "—"}</td>
+                <td className="py-3 text-right"><Button type="button" variant="outline" className="px-2.5 py-1 text-xs" title="Approve gate pass" aria-label={`Approve gate pass for ${pass.studentName || student.name || "student"}`} onClick={() => approvePass(pass)} disabled={Boolean(approvingPassId)}><CheckSquareIcon />{busy ? "Approving…" : "Approve"}</Button></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </Card>
 
     <Card title="Search or scan">
       <form onSubmit={submitSearch} className="flex flex-col gap-3 md:flex-row md:items-end">

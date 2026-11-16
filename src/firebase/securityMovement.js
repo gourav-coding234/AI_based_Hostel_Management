@@ -22,3 +22,20 @@ export async function saveSecurityMovement({ direction, passId, studentId, manua
   }
   return result;
 }
+
+export async function approveStudentGatePass(passId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Sign in again to approve gate passes.");
+  const token = await user.getIdToken();
+  const response = await fetch("/api/security/approve-gate-pass", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ passId }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error("The gate pass approval service is unavailable. Run the Vercel development server and try again.");
+  }
+  if (!response.ok) throw new Error(result.message || "Gate pass could not be approved. Try again.");
+  return result;
+}
