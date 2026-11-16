@@ -203,6 +203,19 @@ export default function GateDesk() {
       {[["Total residents", directory.length], ["In", Math.max(directory.length - outStudents.length, 0)], ["Out", `${outStudents.length} · Boys ${outByGender.boys} / Girls ${outByGender.girls}`], ["Passes active today", passToday.length]].map(([label, value]) => <Card key={label}><p className="font-display text-2xl font-semibold text-ink">{loading ? "…" : value}</p><p className="mt-1 text-sm text-slate-500">{label}</p></Card>)}
     </div>
 
+    <Card title="Search or scan">
+      <form onSubmit={submitSearch} className="flex flex-col gap-3 md:flex-row md:items-end">
+        <Field label="Pass ID, student name or registration number"><input className={inputCls} value={search} onChange={(event) => { setSearch(event.target.value); setActionError(""); }} placeholder="Search or scan a student's pass…" /></Field>
+        <Button type="submit" variant="outline" className="shrink-0"><ScanIcon /> Search</Button>
+        <Button type="button" onClick={scanning ? stopCamera : startCamera} className="shrink-0"><CameraIcon /> {scanning ? "Stop camera" : "Scan QR"}</Button>
+      </form>
+      <div id={READER_ID} className={`mt-3 max-w-[320px] overflow-hidden rounded-xl border border-slate-200 ${scanning ? "block" : "hidden"}`} />
+      {cameraError && <p className="mt-3 text-sm text-rose-600">{cameraError}</p>}
+      {search.trim() && results.length > 0 && !selectedStudent && <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">{results.map(({ student, pass }) => student && <li key={`${student.id}:${pass?.id || "student"}`}><button type="button" onClick={() => selectStudent(student, pass)} className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50">{student.name} · {student.regNo || "No registration number"} · {student.wing || "No wing"}{pass ? ` · ${pass.id}` : ""}</button></li>)}</ul>}
+      {actionError && <p role="alert" className="mt-3 text-sm text-rose-600">{actionError}</p>}
+      {message && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
+    </Card>
+
     <Card title={`Pending gate pass approvals · ${pendingPasses.length}`}>
       {approvalError && <p role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{approvalError}</p>}
       {approvalMessage && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{approvalMessage}</p>}
@@ -224,19 +237,6 @@ export default function GateDesk() {
           </table>
         </div>
       )}
-    </Card>
-
-    <Card title="Search or scan">
-      <form onSubmit={submitSearch} className="flex flex-col gap-3 md:flex-row md:items-end">
-        <Field label="Pass ID, student name or registration number"><input className={inputCls} value={search} onChange={(event) => { setSearch(event.target.value); setActionError(""); }} placeholder="Search or scan a student's pass…" /></Field>
-        <Button type="submit" variant="outline" className="shrink-0"><ScanIcon /> Search</Button>
-        <Button type="button" onClick={scanning ? stopCamera : startCamera} className="shrink-0"><CameraIcon /> {scanning ? "Stop camera" : "Scan QR"}</Button>
-      </form>
-      <div id={READER_ID} className={`mt-3 max-w-[320px] overflow-hidden rounded-xl border border-slate-200 ${scanning ? "block" : "hidden"}`} />
-      {cameraError && <p className="mt-3 text-sm text-rose-600">{cameraError}</p>}
-      {search.trim() && results.length > 0 && !selectedStudent && <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">{results.map(({ student, pass }) => student && <li key={`${student.id}:${pass?.id || "student"}`}><button type="button" onClick={() => selectStudent(student, pass)} className="w-full px-4 py-3 text-left text-sm hover:bg-slate-50">{student.name} · {student.regNo || "No registration number"} · {student.wing || "No wing"}{pass ? ` · ${pass.id}` : ""}</button></li>)}</ul>}
-      {actionError && <p role="alert" className="mt-3 text-sm text-rose-600">{actionError}</p>}
-      {message && <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p>}
     </Card>
 
     {(selectedStudent || selectedPass) && <Card title="Movement result" action={selectedPass && <Pill tone={passStatus(selectedPass)}>{passStatus(selectedPass)}</Pill>}>
