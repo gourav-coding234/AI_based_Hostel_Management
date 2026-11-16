@@ -17,33 +17,6 @@
         { "fieldPath": "date", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "gatePasses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "hostel", "order": "ASCENDING" },
-        { "fieldPath": "from", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "leaveRequests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "hostel", "order": "ASCENDING" },
-        { "fieldPath": "from", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "complaints",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "hostel", "order": "ASCENDING" },
-        { "fieldPath": "date", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

@@ -39,7 +39,6 @@ export default function GatePasses() {
   const assignedHostel = wardenHostel(profile);
   const passesQuery = useCollection("gatePasses", {
     where: assignedHostel ? [["hostel", "==", assignedHostel]] : [],
-    orderByField: "from",
     skip: !assignedHostel,
   });
   const passes = passesQuery.data;

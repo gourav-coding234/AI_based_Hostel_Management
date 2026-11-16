@@ -18,7 +18,6 @@ export default function WardenComplaints() {
   const assignedHostel = wardenHostel(profile);
   const complaintsQuery = useCollection("complaints", {
     where: assignedHostel ? [["hostel", "==", assignedHostel]] : [],
-    orderByField: "date",
     skip: !assignedHostel,
   });
   const complaints = complaintsQuery.data;

@@ -16,7 +16,6 @@ export default function Leave() {
   const assignedHostel = wardenHostel(profile);
   const requestsQuery = useCollection("leaveRequests", {
     where: assignedHostel ? [["hostel", "==", assignedHostel]] : [],
-    orderByField: "from",
     skip: !assignedHostel,
   });
   const requests = requestsQuery.data;
