@@ -9,6 +9,7 @@ import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 import { useParentNotifications } from "../../../hooks/useParentNotifications";
 import { isPassActive, passStatus } from "../../../utils/gatePass";
 import { inr, feeTone, summarizeChildFees, notificationToNotice } from "./parentData";
+import { formatDueDate } from "../../../utils/dates";
 
 function initials(name) {
   const source = (name || "?").trim();
@@ -181,7 +182,7 @@ export default function ParentOverview() {
             </div>
             <ProgressBar value={paid} max={totalFee} tone={feeRemaining > 0 ? "amber" : "teal"} />
             <p className="mt-2 text-xs text-slate-400">
-              {inr(feeRemaining)} pending{feeSummary.nextDue ? ` · next due ${feeSummary.nextDue}` : ""}
+              {inr(feeRemaining)} pending{formatDueDate(feeSummary.nextDue) ? ` · next due ${formatDueDate(feeSummary.nextDue)}` : ""}
             </p>
           </>
         ) : (

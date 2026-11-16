@@ -460,3 +460,11 @@ Vite 8 needs Node 20.19+ or 22.12+. Upgrade Node.
 Built for Government College of Engineering, Keonjhar —
 Jamunalia, Old Town, Keonjhar 758002, Odisha.
 Hostel Administration Office · principal@gcekjr.ac.in · 06766-213180
+
+### "Notices could not be loaded" / "The account could not be saved"
+
+These come from the serverless API routes, which need Firebase Admin credentials.
+Open `https://<your-site>/api/health` — it reports which setting is wrong
+(missing variable, malformed private key, Firestore API disabled, missing IAM
+role) without exposing any secret. After changing Vercel environment variables,
+**redeploy** (variables only apply to new deployments).

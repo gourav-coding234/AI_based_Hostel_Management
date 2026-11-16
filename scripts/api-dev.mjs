@@ -64,4 +64,14 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`\nPort ${port} is already in use - an earlier "npm run dev" is probably still running.`);
+    console.error(`Close that terminal, or free the port on Windows with:`);
+    console.error(`  for /f "tokens=5" %p in ('netstat -ano ^| findstr :${port} ^| findstr LISTENING') do taskkill /F /PID %p`);
+    console.error(`Or use another port:  set API_PORT=3002 && npm run dev\n`);
+    process.exit(1);
+  }
+  throw error;
+});
 server.listen(port, "127.0.0.1", () => console.log(`Local API handlers listening on http://127.0.0.1:${port}`));

@@ -1,5 +1,6 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 import { normalizeHostel } from "../../src/utils/hostels.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 const CATEGORIES = ["Food/Mess", "Cleanliness", "Maintenance", "Security", "Warden/Staff", "Facilities", "Other"];
 const respond = (res, status, body) => res.status(status).json(body);
@@ -64,6 +65,7 @@ export default async function studentFeedback(req, res) {
   } catch (error) {
     if (error.status === 409) return respond(res, 409, { message: error.message });
     console.error("Student feedback request failed:", error);
-    return respond(res, 500, { message: "Feedback could not be saved. Check server logs and Firebase Admin configuration." });
+    const info = describeAdminError(error, "Feedback could not be saved. Please try again.");
+    return respond(res, info.status, { code: info.code, message: info.message });
   }
 }

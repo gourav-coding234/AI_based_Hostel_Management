@@ -1,4 +1,5 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 
 function normalizeHostel(value) {
@@ -94,7 +95,11 @@ export default async function recordPayment(req, res) {
       WARDEN_HOSTEL_MISMATCH: [403, "This fee record does not belong to your assigned hostel."],
       INVALID_AMOUNT: [400, "The payment amount is greater than the outstanding balance."],
     };
-    const [status, message] = messages[error.message] || [500, error.message?.includes("not configured") ? error.message : "The payment could not be saved. Please try again."];
-    return respond(res, status, { code: error.message, message });
+    if (messages[error.message]) {
+      const [status, message] = messages[error.message];
+      return respond(res, status, { code: error.message, message });
+    }
+    const info = describeAdminError(error, "The payment could not be saved. Please try again.");
+    return respond(res, info.status, { code: info.code, message: info.message });
   }
 }

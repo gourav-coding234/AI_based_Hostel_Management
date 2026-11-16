@@ -1,3 +1,4 @@
+import { isSaneDate } from "../../../utils/dates";
 import { computeFeeStatus } from "../../../utils/fees";
 
 export function inr(n) {
@@ -37,7 +38,7 @@ export function summarizeChildFees(records) {
   const rows = records.map(feeRow);
   const total = rows.reduce((s, r) => s + r.total, 0);
   const paid = rows.reduce((s, r) => s + r.paid, 0);
-  const owing = records.filter((f, i) => rows[i].pending > 0 && f.dueDate).map((f) => f.dueDate).sort();
+  const owing = records.filter((f, i) => rows[i].pending > 0 && isSaneDate(f.dueDate)).map((f) => f.dueDate).sort();
   const nextDue = owing[0] || "";
   return {
     total,

@@ -7,6 +7,7 @@ import { useLinkedStudent } from "../../../hooks/useLinkedStudent";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { downloadXlsxFile } from "../../../utils/xlsxExport";
 import { inr, feeRow, feeTone, summarizeChildFees } from "./parentData";
+import { formatDueDate } from "../../../utils/dates";
 
 export default function ParentFees() {
   const linked = useLinkedStudent();
@@ -87,7 +88,7 @@ export default function ParentFees() {
           <Card>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending</p>
             <p className="mt-2 font-display text-2xl font-semibold text-amber-600">{inr(remaining)}</p>
-            {nextDue && <p className="mt-1 text-xs text-slate-400">Next due {nextDue}</p>}
+            {formatDueDate(nextDue) && <p className="mt-1 text-xs text-slate-400">Next due {formatDueDate(nextDue)}</p>}
           </Card>
         </div>
       )}
@@ -112,7 +113,7 @@ export default function ParentFees() {
                   const row = feeRow(f);
                   return (
                     <tr key={f.id}>
-                      <td className="py-2.5 text-slate-500">{f.dueDate || "—"}</td>
+                      <td className="py-2.5 text-slate-500">{formatDueDate(f.dueDate) || "—"}</td>
                       <td className="py-2.5 font-medium text-ink">{inr(row.total)}</td>
                       <td className="py-2.5 text-teal-700">{inr(row.paid)}</td>
                       <td className="py-2.5 text-amber-700">{inr(row.pending)}</td>

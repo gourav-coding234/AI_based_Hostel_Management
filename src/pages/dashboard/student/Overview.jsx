@@ -18,6 +18,7 @@ import { useAudienceNotices } from "../../../hooks/useAudienceNotices";
 import { useDocument } from "../../../hooks/useDocument";
 import { computeFeeStatus } from "../../../utils/fees";
 import { isPassOut, isPassExpired, passStatus } from "../../../utils/gatePass";
+import { formatDueDate } from "../../../utils/dates";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -144,7 +145,7 @@ export default function Overview() {
           value={`₹${feeRemaining.toLocaleString("en-IN")}`}
           sub={
             feeTotal
-              ? `${feeStatus} · ${inr(feePaid)} of ${inr(feeTotal)} paid${nextDueFee?.dueDate ? ` · Due ${nextDueFee.dueDate}` : ""}`
+              ? `${feeStatus} · ${inr(feePaid)} of ${inr(feeTotal)} paid${formatDueDate(nextDueFee?.dueDate) ? ` · Due ${formatDueDate(nextDueFee.dueDate)}` : ""}`
               : "No fee record yet"
           }
           tone={feeRemaining > 0 ? "amber" : "teal"}

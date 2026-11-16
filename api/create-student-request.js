@@ -1,4 +1,5 @@
 import { firebaseAdminServices } from "../src/firebase/adminServer.js";
+import { describeAdminError } from "../src/firebase/adminErrors.js";
 
 
 const reply = (res, status, body) => res.status(status).json(body);
@@ -49,6 +50,7 @@ export default async function createStudentRequest(req, res) {
     return reply(res, 201, { ok: true, id: recordRef.id, code });
   } catch (error) {
     console.error("Student request creation failed:", error);
-    return reply(res, 500, { message: error?.message?.includes("Firebase Admin server credentials") ? error.message : "The request could not be saved. Check your connection and try again." });
+    const info = describeAdminError(error, "The request could not be saved. Check your connection and try again.");
+    return reply(res, info.status, { code: info.code, message: info.message });
   }
 }

@@ -1,3 +1,5 @@
+import { isSaneDate } from "./dates";
+
 /**
  * Supports both fee-invoice records (total/paid) and payment-history records
  * (amount). This keeps old imported data and newer payment rows usable from
@@ -37,7 +39,7 @@ export function computeFeeStatus({ total, paid, dueDate } = {}) {
 
   if (outstanding <= 0) return "Paid";
 
-  const isPastDue = !!dueDate && new Date(dueDate) < new Date();
+  const isPastDue = isSaneDate(dueDate) && new Date(dueDate) < new Date();
   if (isPastDue) return "Overdue";
   if (paidAmt > 0) return "Partial";
   return "Pending";

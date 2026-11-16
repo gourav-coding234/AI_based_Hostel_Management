@@ -1,4 +1,5 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 const respond = (res, status, body) => res.status(status).json(body);
 const normalizeHostel = (value) => {
@@ -145,12 +146,15 @@ export default async function manageAccount(req, res) {
     return respond(res, 400, { message: "Unsupported account action." });
   } catch (error) {
     console.error("Admin account management failed:", error);
-    const message = error?.code === "auth/invalid-email" ? "Enter a valid email address."
-      : error?.code === "auth/weak-password" ? "Choose a stronger password with at least 6 characters."
-        : error?.code === "auth/user-not-found" ? "That sign-in account no longer exists."
-          : error?.code === "auth/email-already-exists" ? "This email address is already registered."
-            : error?.message?.includes("Firebase Admin server credentials") ? error.message
-              : "The account could not be saved. Check the server logs and Firebase Admin configuration.";
-    return respond(res, error?.code === "auth/email-already-exists" ? 409 : 500, { message });
+    const known = {
+      "auth/invalid-email": "Enter a valid email address.",
+      "auth/invalid-password": "Choose a stronger password with at least 6 characters.",
+      "auth/weak-password": "Choose a stronger password with at least 6 characters.",
+      "auth/user-not-found": "That sign-in account no longer exists.",
+      "auth/email-already-exists": "This email address is already registered.",
+    }[error?.code];
+    if (known) return respond(res, error.code === "auth/email-already-exists" ? 409 : 400, { message: known });
+    const info = describeAdminError(error, "The account could not be saved. Open /api/health on this site to see which server setting is wrong.");
+    return respond(res, info.status, { code: info.code, message: info.message });
   }
 }

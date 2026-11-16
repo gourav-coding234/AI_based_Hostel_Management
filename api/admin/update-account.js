@@ -1,4 +1,5 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 
 function reply(res, status, body) {
@@ -87,9 +88,9 @@ export default async function updateAccount(req, res) {
           ? "The sign-in account was not found."
           : error?.code === "auth/weak-password"
             ? "Choose a stronger password with at least 6 characters."
-            : error?.message?.startsWith("The secure account editor")
-              ? error.message
-              : "The account could not be updated. Check the server configuration and try again.";
-    return reply(res, 500, { message });
+            : "";
+    if (message) return reply(res, 400, { message });
+    const info = describeAdminError(error, "The account could not be updated. Open /api/health on this site to see which server setting is wrong.");
+    return reply(res, info.status, { code: info.code, message: info.message });
   }
 }

@@ -1,5 +1,6 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
 import { normalizeHostel } from "../../src/utils/hostels.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 
 const respond = (res, status, body) => res.status(status).json(body);
@@ -74,9 +75,7 @@ export default async function studentNotices(req, res) {
     return respond(res, 200, { notices });
   } catch (error) {
     console.error("Student/parent notices request failed:", error);
-    if (String(error?.message || "").includes("Firebase Admin server credentials are not configured")) {
-      return respond(res, 500, { message: "Notices are unavailable because Firebase Admin credentials are missing from the server environment. Configure FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, and FIREBASE_ADMIN_PRIVATE_KEY in the deployment settings." });
-    }
-    return respond(res, 500, { message: "Notices could not be loaded. Check the server configuration and try again." });
+    const info = describeAdminError(error, "Notices could not be loaded. Please try again.");
+    return respond(res, info.status, { code: info.code, message: info.message });
   }
 }

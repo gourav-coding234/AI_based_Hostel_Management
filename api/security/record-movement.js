@@ -1,4 +1,5 @@
 import { firebaseAdminServices } from "../../src/firebase/adminServer.js";
+import { describeAdminError } from "../../src/firebase/adminErrors.js";
 
 
 const reply = (res, status, body) => res.status(status).json(body);
@@ -96,6 +97,10 @@ export default async function recordMovement(req, res) {
       REASON_REQUIRED: "Enter a reason for a manual movement.", ALREADY_OUT: "This student is already marked out.",
       NOT_OUT_YET: "This student is not currently marked out.", STUDENT_NOT_FOUND: "Student record could not be found.",
     };
-    return reply(res, status, { code: error.message || "MOVEMENT_FAILED", message: messages[error.message] || (status === 500 ? "Movement could not be saved. Check server configuration and try again." : "Movement was rejected.") });
+    if (!messages[error.message] && status === 500) {
+      const info = describeAdminError(error, "Movement could not be saved. Please try again.");
+      return reply(res, info.status, { code: info.code, message: info.message });
+    }
+    return reply(res, status, { code: error.message || "MOVEMENT_FAILED", message: messages[error.message] || "Movement was rejected." });
   }
 }

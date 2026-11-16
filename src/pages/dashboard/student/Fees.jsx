@@ -5,6 +5,7 @@ import { AsyncSection } from "../../../components/ui/DataState";
 import { WalletIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { computeFeeStatus } from "../../../utils/fees";
+import { formatDueDate } from "../../../utils/dates";
 
 function inr(n) {
   return `₹${(n || 0).toLocaleString("en-IN")}`;
@@ -121,9 +122,9 @@ export default function Fees() {
           <Card>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending</p>
             <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-amber-600">{inr(remaining)}</p>
-            {nextDue?.dueDate && (
+            {formatDueDate(nextDue?.dueDate) && (
               <p className="mt-1 text-xs text-slate-400">
-                Due by {nextDue.dueDate}
+                Due by {formatDueDate(nextDue.dueDate)}
                 {nextDue.semester ? ` · ${nextDue.semester}` : ""}
               </p>
             )}
@@ -160,7 +161,7 @@ export default function Fees() {
                     <tbody className="divide-y divide-slate-100">
                       {group.items.map((f) => (
                         <tr key={f.id} className="transition-colors hover:bg-slate-50/70">
-                          <td className="py-2.5 text-slate-500">{f.dueDate || "—"}</td>
+                          <td className="py-2.5 text-slate-500">{formatDueDate(f.dueDate) || "—"}</td>
                           <td className="py-2.5 font-medium text-ink">{inr(f.total)}</td>
                           <td className="py-2.5 text-teal-700">{inr(f.paid)}</td>
                           <td className="py-2.5 text-amber-700">{inr(f.remaining)}</td>
