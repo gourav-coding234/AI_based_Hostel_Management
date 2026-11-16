@@ -7,7 +7,7 @@ export function describeAdminError(error, fallback = "The request could not be c
   const raw = String(error?.message || "");
   const code = error?.adminCode || error?.code;
 
-  if (error?.adminCode === "ADMIN_CREDENTIALS_MISSING" || error?.adminCode === "ADMIN_CREDENTIALS_INVALID") {
+  if (typeof error?.adminCode === "string" && error.adminCode.startsWith("ADMIN_")) {
     return { status: 500, code: error.adminCode, message: raw };
   }
   // Google/gRPC: 7 PERMISSION_DENIED, 5 NOT_FOUND, 16 UNAUTHENTICATED, 9 FAILED_PRECONDITION
@@ -29,5 +29,10 @@ export function describeAdminError(error, fallback = "The request could not be c
   if (/ENOTFOUND|ETIMEDOUT|ECONNRESET|fetch failed|DEADLINE_EXCEEDED|UNAVAILABLE/i.test(raw) || code === 14 || code === 4) {
     return { status: 503, code: "ADMIN_NETWORK", message: "The server could not reach Google services. Try again in a moment." };
   }
-  return { status: 500, code: "ADMIN_UNKNOWN", message: fallback };
+  if (/auth\/insufficient-permission|Caller does not have required permission|identitytoolkit/i.test(`${code} ${raw}`)) {
+    return { status: 500, code: "ADMIN_AUTH_PERMISSION", message: "The service account is not allowed to manage sign-in users. In Google Cloud Console > IAM, give it the role 'Firebase Authentication Admin' (or 'Firebase Admin SDK Administrator Service Agent'), and make sure the Identity Toolkit API is enabled." };
+  }
+  // Short, non-secret reason (error code + first line) to make unknown failures diagnosable.
+  const reason = `${code ? `${code}: ` : ""}${raw.split("\n")[0]}`.slice(0, 200);
+  return { status: 500, code: "ADMIN_UNKNOWN", message: reason ? `${fallback} Reason: ${reason}` : fallback };
 }

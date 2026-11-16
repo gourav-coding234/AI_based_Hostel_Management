@@ -19,6 +19,7 @@ export default async function health(req, res) {
     },
     // Names only (never values) so a misspelled variable name is easy to spot.
     seenEnvNames: Object.keys(process.env).filter((name) => /FIREBASE|SERVICE_ACCOUNT/i.test(name)).sort(),
+    nodeVersion: process.version,
     vercelEnvironment: process.env.VERCEL_ENV || null,
     checks: { adminInit: false, auth: false, firestore: false },
   };

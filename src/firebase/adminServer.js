@@ -107,11 +107,17 @@ export async function firebaseAdminServices(missingCredentialsMessage = MISSING_
     throw adminError("ADMIN_CREDENTIALS_INVALID", "FIREBASE_ADMIN_PRIVATE_KEY is damaged (part of it was changed or cut off while copying). Download a fresh key file and use FIREBASE_SERVICE_ACCOUNT_JSON with the base64 of the whole file instead.");
   }
 
-  const [appSdk, authSdk, firestoreSdk] = await Promise.all([
-    import("firebase-admin/app"),
-    import("firebase-admin/auth"),
-    import("firebase-admin/firestore"),
-  ]);
+  const reasonOf = (error) => `${error?.code ? `${error.code}: ` : ""}${String(error?.message || error).split("\n")[0]}`.slice(0, 220);
+  let appSdk, authSdk, firestoreSdk;
+  try {
+    [appSdk, authSdk, firestoreSdk] = await Promise.all([
+      import("firebase-admin/app"),
+      import("firebase-admin/auth"),
+      import("firebase-admin/firestore"),
+    ]);
+  } catch (error) {
+    throw adminError("ADMIN_SDK_LOAD_FAILED", `The firebase-admin package failed to load on the server (Node ${process.version}). Reason: ${reasonOf(error)}`);
+  }
   let app = appSdk.getApps()[0];
   if (!app) {
     try {
@@ -120,10 +126,14 @@ export async function firebaseAdminServices(missingCredentialsMessage = MISSING_
       throw adminError("ADMIN_CREDENTIALS_INVALID", `Firebase Admin rejected the credentials: ${String(error?.message || error).split("\n")[0].slice(0, 160)}`);
     }
   }
-  return {
-    auth: authSdk.getAuth(app),
-    db: firestoreSdk.getFirestore(app),
-    FieldValue: firestoreSdk.FieldValue,
-    projectId,
-  };
+  try {
+    return {
+      auth: authSdk.getAuth(app),
+      db: firestoreSdk.getFirestore(app),
+      FieldValue: firestoreSdk.FieldValue,
+      projectId,
+    };
+  } catch (error) {
+    throw adminError("ADMIN_SERVICES_FAILED", `Firebase Admin started but its Auth/Firestore services failed. Reason: ${reasonOf(error)}`);
+  }
 }
