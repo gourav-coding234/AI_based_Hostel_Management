@@ -13,7 +13,7 @@
 // only changes. (The old widget re-read up to 10,000 documents on every
 // question, which is what drained the free Firestore quota.)
 
-import { collection, limit as fbLimit, onSnapshot, query, where } from "firebase/firestore";
+import { collection, documentId, limit as fbLimit, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { mergeRegisteredStudents } from "../utils/hostelResidents";
 
@@ -55,6 +55,10 @@ function scopedSources(role, user, profile) {
   }
   if (role === "Student" && uid) {
     return [
+      // The room/allocation record is keyed by the signed-in student's UID.
+      // Without this read, student questions about their room and profile
+      // were missing from the chatbot context after the live-store change.
+      { name: "students", where: [[documentId(), "==", uid]] },
       { name: "fees", where: mine(uid) }, { name: "attendance", where: mine(uid) },
       { name: "complaints", where: mine(uid) }, { name: "leaveRequests", where: mine(uid) },
       { name: "gatePasses", where: mine(uid) }, { name: "notices" },
@@ -63,6 +67,9 @@ function scopedSources(role, user, profile) {
   }
   if (role === "Parent" && linked) {
     return [
+      // Parent links point to students/{uid}; load only that linked child's
+      // allocation record so room/branch/year answers remain available.
+      { name: "students", where: [[documentId(), "==", linked]] },
       { name: "fees", where: mine(linked) }, { name: "attendance", where: mine(linked) },
       { name: "complaints", where: mine(linked) }, { name: "leaveRequests", where: mine(linked) },
       { name: "gatePasses", where: mine(linked) }, { name: "notices" },
@@ -99,6 +106,7 @@ export function startKnowledge(user, profile, role) {
 
   const store = {
     key, role, version: 0, collections: new Map(), skipped: new Set(),
+    failures: new Map(), pending: new Set(), truncated: new Set(), timedOut: false,
     unsubs: [], listeners: new Set(), updatedAt: null,
     ready: null,
   };
@@ -106,8 +114,16 @@ export function startKnowledge(user, profile, role) {
 
   const sources = scopedSources(role, user, profile);
   const firstSnapshots = sources.map((source) => new Promise((resolve) => {
+    store.pending.add(source.name);
     let settled = false;
-    const done = () => { if (!settled) { settled = true; resolve(); } };
+    const done = () => {
+      if (!settled) {
+        settled = true;
+        store.pending.delete(source.name);
+        if (store.timedOut) store.timedOut = store.pending.size > 0;
+        resolve();
+      }
+    };
     try {
       const constraints = [...(source.where || []).map(([f, op, v]) => where(f, op, v)), fbLimit(MAX_DOCS_PER_COLLECTION)];
       const unsub = onSnapshot(
@@ -117,13 +133,18 @@ export function startKnowledge(user, profile, role) {
           snap.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
           store.collections.set(source.name, map);
           store.skipped.delete(source.name);
+          store.failures.delete(source.name);
+          if (snap.size >= MAX_DOCS_PER_COLLECTION) store.truncated.add(source.name);
+          else store.truncated.delete(source.name);
           store.updatedAt = new Date();
+          done();
           emit(store);
-          done();
         },
-        () => { // permission denied or offline: this role simply cannot see it
+        (error) => { // retain the reason so the bot does not silently present partial data as complete
           store.skipped.add(source.name);
+          store.failures.set(source.name, error?.code || "read-failed");
           done();
+          emit(store);
         },
       );
       store.unsubs.push(unsub);
@@ -135,7 +156,11 @@ export function startKnowledge(user, profile, role) {
 
   store.ready = Promise.race([
     Promise.all(firstSnapshots),
-    new Promise((resolve) => setTimeout(resolve, READY_TIMEOUT_MS)),
+    new Promise((resolve) => setTimeout(() => {
+      store.timedOut = store.pending.size > 0;
+      if (store.timedOut) emit(store);
+      resolve();
+    }, READY_TIMEOUT_MS)),
   ]);
   return store;
 }
@@ -153,10 +178,17 @@ export function subscribeKnowledge(store, fn) {
 }
 
 export function knowledgeSummary(store) {
-  if (!store) return { collections: 0, records: 0, updatedAt: null };
+  if (!store) return { collections: 0, records: 0, updatedAt: null, pending: 0, failed: 0, truncated: 0 };
   let records = 0;
   store.collections.forEach((m) => { records += m.size; });
-  return { collections: store.collections.size, records, updatedAt: store.updatedAt };
+  return {
+    collections: store.collections.size,
+    records,
+    updatedAt: store.updatedAt,
+    pending: store.pending.size,
+    failed: store.failures.size,
+    truncated: store.truncated.size,
+  };
 }
 
 // ------------------------------------------------------------ utilities ----
@@ -473,7 +505,12 @@ export function buildKnowledgeContext(store, { user, profile, role }, question) 
   if (store.skipped.size) {
     statLines.push(`Not accessible to this role (do not guess): ${[...store.skipped].join(", ")}`);
   }
-  parts.push(`## LIVE STATISTICS (exact, computed from every record)\n${statLines.join("\n")}`);
+  const limitations = [];
+  if (store.pending.size) limitations.push(`Initial reads still loading: ${[...store.pending].join(", ")}.`);
+  if (store.truncated.size) limitations.push(`The per-collection safety limit (${MAX_DOCS_PER_COLLECTION}) was reached for: ${[...store.truncated].join(", ")}. Those totals are partial.`);
+  if (store.failures.size) limitations.push(`These collections could not be read (${[...store.failures.entries()].map(([name, code]) => `${name}: ${code}`).join(", ")}). Do not treat missing data from them as zero.`);
+  if (store.timedOut) limitations.push("The initial data sync took longer than expected; available records may be incomplete.");
+  parts.push(`## LIVE STATISTICS (${limitations.length ? "computed from currently loaded records and may be incomplete" : "exact for the loaded database snapshot"})\n${statLines.join("\n")}${limitations.length ? `\n\n## DATA LIMITATIONS\n${limitations.join("\n")}` : ""}`);
 
   // 2) Detailed tables within a size budget, most relevant collections first.
   const routed = new Set(ROUTES.filter(([, re]) => re.test(question)).map(([c]) => c));

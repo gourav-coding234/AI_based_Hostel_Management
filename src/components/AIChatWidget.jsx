@@ -9,13 +9,13 @@ import {
   subscribeKnowledge,
 } from "../ai/hostelKnowledge";
 
-// Use multiple active Gemini 3.x variants so the app can automatically move to
-// another model when one is temporarily overloaded or rate-limited.
+// Keep fallbacks to model IDs currently listed by Google's Gemini API for
+// text generation. Unsupported IDs return 404 and make the chat look broken.
 const GEMINI_MODEL_FALLBACKS = [
   "gemini-3.8-flash",
-  "gemini-3.5-flash",
-  "gemini-3.5-pro",
-  "gemini-3.8-pro",
+  "gemini-3.7-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-2.5-flash",
 ];
 
 function renderFormattedText(text) {
@@ -59,7 +59,7 @@ const SYSTEM_RULES = `You are "Hostel AI", the assistant inside the GCE Keonjhar
 
 HOW TO ANSWER
 - Answer ONLY from the LIVE STATISTICS and DETAILED RECORDS below. They are a real-time copy of the database, so they already include anything recently added or imported.
-- LIVE STATISTICS are exact and cover every record. Use them for totals and counts. Never count rows by eye when a statistic exists.
+- Use LIVE STATISTICS for totals and counts. If DATA LIMITATIONS are present, clearly say totals and lists may be incomplete; never describe a partial count as the full total.
 - DETAILED RECORDS may show only the most relevant rows if a table is large. If a table says it is truncated, say so and give the exact count from the statistics.
 - When asked for a list (for example "names of the girl students"), list every matching name, one per line, with no preamble. Use the "Female students" / "Male students" lines or filter the studentDirectory table.
 - Match names loosely (case-insensitive, partial names, spelling variations) and say if more than one person matches.
@@ -113,13 +113,17 @@ async function requestGeminiReply(contextText, history, userMessage) {
         const errorMessage = payload?.error?.message || "The AI service returned an error.";
         errors.push(`${model}: ${errorMessage}`);
 
+        const isUnavailableModel = /model .*not found|not supported for generatecontent|unknown model/i.test(errorMessage);
         const isTemporaryFailure =
           response.status === 429 ||
           response.status === 500 ||
           response.status === 503 ||
-          /high demand|temporar|rate limit|not available|unavailable|not found|not supported/i.test(errorMessage);
+          /high demand|temporar|rate limit|not available|unavailable/i.test(errorMessage);
 
-        if (!isTemporaryFailure) {
+        // If an API key cannot access a model, try the next supported one.
+        // Stop on other permanent request errors instead of masking them with
+        // later fallback errors.
+        if (!isTemporaryFailure && !isUnavailableModel) {
           throw new Error(errorMessage);
         }
 
@@ -273,9 +277,15 @@ export default function AIChatWidget() {
               <strong>Hostel AI</strong>
               <span>
                 {roleLabel}
-                {knowledge.records > 0
-                  ? ` · live: ${knowledge.records} records from ${knowledge.collections} collections`
-                  : open ? " · syncing data…" : ""}
+                {knowledge.failed > 0
+                  ? ` · ${knowledge.failed} data source${knowledge.failed === 1 ? "" : "s"} unavailable`
+                  : knowledge.pending > 0
+                    ? ` · syncing ${knowledge.pending} data source${knowledge.pending === 1 ? "" : "s"}…`
+                    : knowledge.truncated > 0
+                      ? " · some data is partial"
+                      : knowledge.records > 0
+                        ? ` · live data: ${knowledge.records} records from ${knowledge.collections} collections`
+                        : open ? " · syncing data…" : ""}
               </span>
             </div>
             <button type="button" className="ai-close-button" onClick={() => setOpen(false)} aria-label="Close chat">
