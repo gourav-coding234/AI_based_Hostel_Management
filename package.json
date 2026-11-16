@@ -5,7 +5,7 @@
   "description": "AI-Based Smart Hostel Management System for Government College of Engineering, Keonjhar",
   "type": "module",
   "engines": {
-    "node": ">=20.19.0",
+    "node": "22.x",
     "npm": ">=10.0.0"
   },
   "scripts": {
