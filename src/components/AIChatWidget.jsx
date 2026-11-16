@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, getDoc, getDocs, limit as fbLimit, query, where } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase/config";
 import aibotImage from "../assets/aibot.png";
-import { mergeRegisteredStudents } from "../utils/hostelResidents";
+import {
+  buildKnowledgeContext,
+  knowledgeSummary,
+  startKnowledge,
+  stopKnowledge,
+  subscribeKnowledge,
+} from "../ai/hostelKnowledge";
 
 // Use multiple active Gemini 3.x variants so the app can automatically move to
 // another model when one is temporarily overloaded or rate-limited.
@@ -13,26 +17,6 @@ const GEMINI_MODEL_FALLBACKS = [
   "gemini-3.5-pro",
   "gemini-3.8-pro",
 ];
-
-const ROLE_SCOPE_TEXT = {
-  Admin: "This user may ask about all hostel-wide records and aggregated operational data.",
-  Warden: "This user may ask about all records for their hostel block and the wider warden dashboard data, but not unrelated student private details outside their scope.",
-  Student: "This user may ask only about their own profile, room, fees, attendance, complaints, leave requests, gate passes, and notices relevant to their hostel group.",
-  Parent: "This user may ask only about their linked child, including fees, attendance, complaints, leave requests, gate passes, and notices relevant to that child.",
-  Security: "This user may ask only about visitors, gate pass checks, attendance, and operational security logs.",
-};
-
-const BLOCKED_KEYS = new Set([
-  "createdAt",
-  "updatedAt",
-  "createdBy",
-  "updatedBy",
-  "importedBy",
-  "markedAt",
-  "markedBy",
-  "markedByName",
-  "__proto__",
-]);
 
 function renderFormattedText(text) {
   if (!text) return "";
@@ -71,176 +55,33 @@ function renderFormattedText(text) {
   return parts;
 }
 
-function sanitizeRecord(record) {
-  if (!record || typeof record !== "object") return record;
+const SYSTEM_RULES = `You are "Hostel AI", the assistant inside the GCE Keonjhar hostel management portal.
 
-  const next = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (BLOCKED_KEYS.has(key)) continue;
+HOW TO ANSWER
+- Answer ONLY from the LIVE STATISTICS and DETAILED RECORDS below. They are a real-time copy of the database, so they already include anything recently added or imported.
+- LIVE STATISTICS are exact and cover every record. Use them for totals and counts. Never count rows by eye when a statistic exists.
+- DETAILED RECORDS may show only the most relevant rows if a table is large. If a table says it is truncated, say so and give the exact count from the statistics.
+- When asked for a list (for example "names of the girl students"), list every matching name, one per line, with no preamble. Use the "Female students" / "Male students" lines or filter the studentDirectory table.
+- Match names loosely (case-insensitive, partial names, spelling variations) and say if more than one person matches.
+- Combine tables when needed (for example fees + students + rooms). Records refer to students by name and registration number.
+- If something is not in the data, say exactly what is missing. Never invent names, numbers, dates or amounts.
+- Respect the signed-in user's role scope. If the data below does not contain what they ask about, explain that it is outside what their role can see.
+- Be concise and professional. Use short lists. Use **bold** only for key values. Amounts are in rupees (₹) unless the data says otherwise.
+- You can answer follow-up questions using the earlier messages in this conversation.`;
 
-    if (Array.isArray(value)) {
-      next[key] = value.slice(0, 4).map((item) => sanitizeRecord(item));
-      continue;
-    }
-
-    if (value && typeof value === "object" && !("toDate" in value)) {
-      next[key] = sanitizeRecord(value);
-      continue;
-    }
-
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      next[key] = value;
-    }
-  }
-
-  return next;
-}
-
-function toPreviewText(label, rows) {
-  if (!rows || rows.length === 0) return `${label}: no records found.`;
-
-  const preview = rows.slice(0, 4).map((item) => {
-    const cleaned = sanitizeRecord(item);
-    return JSON.stringify(cleaned);
-  });
-
-  return `${label}: ${rows.length} records loaded; examples (up to 4, not the full list): ${preview.join(" | ")}`;
-}
-
-async function fetchCollectionDocs(collectionName, filters = [], limitCount = 25) {
-  const ref = collection(db, collectionName);
-  const constraints = [...filters.map(([field, op, value]) => where(field, op, value)), fbLimit(limitCount)];
-  const queryRef = query(ref, ...constraints);
-  const snap = await getDocs(queryRef);
-  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-}
-
-async function buildRoleScopedContext(user, profile, role) {
-  const name = profile?.name || user?.displayName || user?.email || "user";
-  const uid = user?.uid;
-  const linkedStudentId = profile?.linkedStudentId;
-
-  const contextParts = [
-    `User identity: ${name} (${role})`,
-    `Allowed scope: ${ROLE_SCOPE_TEXT[role] || "This user may ask only about data relevant to their own account."}`,
-  ];
-
-  try {
-    if (role === "Admin" || role === "Warden") {
-      const [students, studentRegister] = await Promise.all([
-        fetchCollectionDocs("students", [], 5000),
-        fetchCollectionDocs("studentRegister", [], 5000),
-      ]);
-      const registeredStudents = mergeRegisteredStudents(students, studentRegister);
-      const fees = await fetchCollectionDocs("fees");
-      const notices = await fetchCollectionDocs("notices");
-      const attendance = await fetchCollectionDocs("attendance");
-      const complaints = await fetchCollectionDocs("complaints");
-      const leaveRequests = await fetchCollectionDocs("leaveRequests");
-      const gatePasses = await fetchCollectionDocs("gatePasses");
-      const visitors = await fetchCollectionDocs("visitors");
-
-      contextParts.push(
-        `Student directory total: ${registeredStudents.length} unique registered students, matching the admin overview count. This total merges studentRegister records with student allocation records and deduplicates matching students.`,
-        toPreviewText("students", students),
-        toPreviewText("studentRegister", studentRegister),
-        toPreviewText("fees", fees),
-        toPreviewText("notices", notices),
-        toPreviewText("attendance", attendance),
-        toPreviewText("complaints", complaints),
-        toPreviewText("leaveRequests", leaveRequests),
-        toPreviewText("gatePasses", gatePasses),
-        toPreviewText("visitors", visitors),
-      );
-    }
-
-    if (role === "Student") {
-      const studentSnap = await getDoc(doc(db, "students", uid));
-      const student = studentSnap.exists() ? { id: studentSnap.id, ...studentSnap.data() } : null;
-
-      const myFees = await fetchCollectionDocs("fees", [["studentId", "==", uid]]);
-      const myAttendance = await fetchCollectionDocs("attendance", [["studentId", "==", uid]]);
-      const myComplaints = await fetchCollectionDocs("complaints", [["studentId", "==", uid]]);
-      const myLeaveRequests = await fetchCollectionDocs("leaveRequests", [["studentId", "==", uid]]);
-      const myGatePasses = await fetchCollectionDocs("gatePasses", [["studentId", "==", uid]]);
-      const relevantNotices = await fetchCollectionDocs("notices", [["target", "==", profile?.hostelResidence || ""]], 20);
-
-      contextParts.push(
-        `studentRecord: ${student ? JSON.stringify(sanitizeRecord(student)) : "not found"}`,
-        toPreviewText("myFees", myFees),
-        toPreviewText("myAttendance", myAttendance),
-        toPreviewText("myComplaints", myComplaints),
-        toPreviewText("myLeaveRequests", myLeaveRequests),
-        toPreviewText("myGatePasses", myGatePasses),
-        toPreviewText("relevantNotices", relevantNotices),
-      );
-    }
-
-    if (role === "Parent") {
-      const targetStudentId = linkedStudentId || profile?.linkedStudentId;
-      if (!targetStudentId) {
-        contextParts.push("linkedStudentId: not assigned");
-      } else {
-        const studentSnap = await getDoc(doc(db, "students", targetStudentId));
-        const student = studentSnap.exists() ? { id: studentSnap.id, ...studentSnap.data() } : null;
-
-        const childFees = await fetchCollectionDocs("fees", [["studentId", "==", targetStudentId]]);
-        const childAttendance = await fetchCollectionDocs("attendance", [["studentId", "==", targetStudentId]]);
-        const childComplaints = await fetchCollectionDocs("complaints", [["studentId", "==", targetStudentId]]);
-        const childLeaveRequests = await fetchCollectionDocs("leaveRequests", [["studentId", "==", targetStudentId]]);
-        const childGatePasses = await fetchCollectionDocs("gatePasses", [["studentId", "==", targetStudentId]]);
-
-        contextParts.push(
-          `linkedStudentId: ${targetStudentId}`,
-          `studentRecord: ${student ? JSON.stringify(sanitizeRecord(student)) : "not found"}`,
-          toPreviewText("childFees", childFees),
-          toPreviewText("childAttendance", childAttendance),
-          toPreviewText("childComplaints", childComplaints),
-          toPreviewText("childLeaveRequests", childLeaveRequests),
-          toPreviewText("childGatePasses", childGatePasses),
-        );
-      }
-    }
-
-    if (role === "Security") {
-      const gatePasses = await fetchCollectionDocs("gatePasses");
-      const visitors = await fetchCollectionDocs("visitors");
-      const attendance = await fetchCollectionDocs("attendance");
-      contextParts.push(
-        toPreviewText("gatePasses", gatePasses),
-        toPreviewText("visitors", visitors),
-        toPreviewText("attendance", attendance),
-      );
-    }
-
-    return contextParts.join("\n\n");
-  } catch (error) {
-    console.error("AI context load failed:", error);
-    return `User identity: ${name} (${role})\n\nAllowed scope: ${ROLE_SCOPE_TEXT[role] || "role-limited access"}\n\nAI context unavailable: ${error.message || "unknown error"}.`;
-  }
-}
-
-async function requestGeminiReply(contextText, userMessage) {
+async function requestGeminiReply(contextText, history, userMessage) {
   // Deployed: call /api/gemini (serverless function holds GEMINI_API_KEY privately).
   // Local shortcut: if VITE_GEMINI_API_KEY is set in .env, call Google directly.
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const useDirect = typeof apiKey === "string" && apiKey.trim() !== "";
 
-  const prompt = `
-You are the hostel AI assistant for this project.
-Use only the data in the context below. Do not invent facts.
-If the user asks for information outside their allowed scope, politely state that they can only access their own or their role-approved dataset.
-If the data is missing, say so clearly.
-
-ROLE-SCOPED CONTEXT:
-${contextText}
-
-USER QUESTION:
-${userMessage}
-
-Answer in a concise, helpful, and professional way.
-When asked for the student directory total, use the explicit "Student directory total" value. Example lists are previews and must never be treated as the full collection or used as a total.
-`;
+  const trimmedHistory = [...history];
+  while (trimmedHistory.length && trimmedHistory[0].role !== "user") trimmedHistory.shift();
+  const contents = [
+    ...trimmedHistory.map((m) => ({ role: m.role === "user" ? "user" : "model", parts: [{ text: m.text }] })),
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+  const systemInstruction = { parts: [{ text: `${SYSTEM_RULES}\n\n${contextText}` }] };
 
   const errors = [];
 
@@ -258,10 +99,11 @@ When asked for the student directory total, use the explicit "Student directory 
         },
         body: JSON.stringify({
           ...(useDirect ? {} : { model }),
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          systemInstruction,
+          contents,
           generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 800,
+            temperature: 0.1,
+            maxOutputTokens: 4096,
           },
         }),
       });
@@ -309,8 +151,10 @@ export default function AIChatWidget() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [knowledge, setKnowledge] = useState({ collections: 0, records: 0, updatedAt: null });
   const chatBodyRef = useRef(null);
   const textareaRef = useRef(null);
+  const storeRef = useRef(null);
 
   const roleLabel = useMemo(() => role || "Guest", [role]);
 
@@ -325,8 +169,23 @@ export default function AIChatWidget() {
     }
   }, [open, loading, messages.length]);
 
+  // Start the live knowledge store the first time the chat opens. After the
+  // first load it only receives changes, so new/imported data appears here
+  // automatically.
+  useEffect(() => {
+    if (!isAuthenticated || !role || !open) return undefined;
+    const store = startKnowledge(user, profile, role);
+    storeRef.current = store;
+    if (!store) return undefined;
+    setKnowledge(knowledgeSummary(store));
+    return subscribeKnowledge(store, () => setKnowledge(knowledgeSummary(store)));
+  }, [isAuthenticated, role, open, user, profile]);
+
   useEffect(() => {
     if (!isAuthenticated || !role) {
+      stopKnowledge();
+      storeRef.current = null;
+      setKnowledge({ collections: 0, records: 0, updatedAt: null });
       setMessages([]);
       setInput("");
       setOpen(false);
@@ -336,7 +195,7 @@ export default function AIChatWidget() {
     setMessages([
       {
         role: "bot",
-        text: `Hi! I can answer hostel questions based on your ${role} Firebase data and role access.`,
+        text: `Hi! I stay in sync with your live hostel data, so new records and imports are available to me automatically. Ask me anything about what your ${role} account can see.`,
       },
     ]);
     setInput("");
@@ -356,8 +215,16 @@ export default function AIChatWidget() {
     setLoading(true);
 
     try {
-      const context = await buildRoleScopedContext(user, profile, role);
-      const reply = await requestGeminiReply(context, userMessage);
+      const store = storeRef.current || startKnowledge(user, profile, role);
+      if (!store) throw new Error("The live data connection is not available. Please sign in again.");
+      storeRef.current = store;
+      await store.ready;
+      const context = buildKnowledgeContext(store, { user, profile, role }, userMessage);
+      // Keep the last few turns so follow-up questions work.
+      const history = messages
+        .filter((m, i) => i > 0 && m.text && m.text !== "Working on that…")
+        .slice(-8);
+      const reply = await requestGeminiReply(context, history, userMessage);
       setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = { role: "bot", text: reply };
@@ -404,7 +271,12 @@ export default function AIChatWidget() {
           <div className="ai-chat-header">
             <div>
               <strong>Hostel AI</strong>
-              <span>{roleLabel}</span>
+              <span>
+                {roleLabel}
+                {knowledge.records > 0
+                  ? ` · live: ${knowledge.records} records from ${knowledge.collections} collections`
+                  : open ? " · syncing data…" : ""}
+              </span>
             </div>
             <button type="button" className="ai-close-button" onClick={() => setOpen(false)} aria-label="Close chat">
               ×
@@ -426,7 +298,7 @@ export default function AIChatWidget() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleInputKeyDown}
               rows={3}
-              placeholder="Ask about your own hostel data..."
+              placeholder="Ask anything about your hostel data..."
               disabled={loading}
             />
             <button type="submit" className="btn btn-primary btn-block" disabled={loading || !input.trim()}>
