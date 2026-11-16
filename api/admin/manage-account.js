@@ -46,6 +46,7 @@ export default async function manageAccount(req, res) {
       }
       let academic = null;
       const registrationNo = String(req.body.registrationNo || req.body.regNo || "").trim();
+      let previousStudentRecord = null;
       if (role === "Student") {
         if (registrationNo) {
           academic = (await db.collection("studentRegister").doc(registrationNo).get()).data() || null;
@@ -60,10 +61,40 @@ export default async function manageAccount(req, res) {
         }
         const regNo = registrationNo || String(academic?.regNo || academic?.registrationNo || "").trim();
         if (!regNo) return respond(res, 400, { message: "A registration number is required for every student account." });
-        const existingRoster = await db.collection("studentRegister").where("regNo", "==", regNo).limit(2).get();
-        const existingProfiles = await db.collection("students").where("registrationNo", "==", regNo).limit(2).get();
-        if (existingProfiles.docs.some((entry) => entry.get("email") !== email) || (existingRoster.docs.length && existingRoster.docs[0].get("email") && existingRoster.docs[0].get("email").toLowerCase() !== email)) {
-          return respond(res, 409, { message: "That registration number is already linked to another student." });
+
+        // A registration ID belongs to the student, not to a particular
+        // email/login. Deleting an account can leave its student profile in
+        // Firestore. Only reject the ID if a usable Student login still owns it.
+        const [usersByRegistration, usersByReg, studentsByRegistration, studentsByReg] = await Promise.all([
+          db.collection("users").where("registrationNo", "==", regNo).limit(10).get(),
+          db.collection("users").where("regNo", "==", regNo).limit(10).get(),
+          db.collection("students").where("registrationNo", "==", regNo).limit(10).get(),
+          db.collection("students").where("regNo", "==", regNo).limit(10).get(),
+        ]);
+        const previousRecords = new Map();
+        [...studentsByRegistration.docs, ...studentsByReg.docs].forEach((entry) => previousRecords.set(entry.id, entry));
+        if (previousRecords.size > 1) {
+          return respond(res, 409, { message: "More than one old student profile uses this registration number. Please resolve the duplicate profiles first." });
+        }
+        previousStudentRecord = [...previousRecords.values()][0] || null;
+
+        const accounts = new Map();
+        [...usersByRegistration.docs, ...usersByReg.docs].forEach((entry) => accounts.set(entry.id, entry));
+        if (previousStudentRecord && !accounts.has(previousStudentRecord.id)) {
+          const linkedAccount = await db.collection("users").doc(previousStudentRecord.id).get();
+          if (linkedAccount.exists) accounts.set(linkedAccount.id, linkedAccount);
+        }
+        for (const account of accounts.values()) {
+          if (account.get("role") !== "Student" || account.get("status") === "Inactive") continue;
+          try {
+            const authAccount = await auth.getUser(account.id);
+            if (!authAccount.disabled) {
+              return respond(res, 409, { message: "That registration number already belongs to an active student account." });
+            }
+          } catch (error) {
+            if (error?.code !== "auth/user-not-found") throw error;
+            // The old login was deleted; its Firestore profile can be reused.
+          }
         }
         req.body.registrationNo = regNo;
       }
@@ -100,13 +131,18 @@ export default async function manageAccount(req, res) {
         const batch = db.batch();
         batch.set(db.collection("users").doc(created.uid), profile);
         if (role === "Student") batch.set(db.collection("students").doc(created.uid), {
+          ...(previousStudentRecord?.data() || {}),
           name, email, studentCode: regNo, hostel: studentHostel, hostelType: studentHostel, registrationNo: regNo, regNo,
           gender: profile.gender, branch: profile.branch, year: profile.year,
-          phone: req.body.phone || academic?.phone || "",
-          hostelResidence: profile.hostelResidence || academic?.hostelResidence || academic?.wing || "",
-          wing: req.body.wing || academic?.wing || "", room: req.body.room || academic?.room || "",
-          bed: req.body.bed || academic?.bed || "", floor: academic?.floor || "",
-          allottedOn: academic?.allottedOn || "", roommates: [], createdAt: FieldValue.serverTimestamp(),
+          phone: req.body.phone || previousStudentRecord?.get("phone") || academic?.phone || "",
+          hostelResidence: profile.hostelResidence || previousStudentRecord?.get("hostelResidence") || academic?.hostelResidence || academic?.wing || "",
+          wing: req.body.wing || previousStudentRecord?.get("wing") || academic?.wing || "",
+          room: req.body.room || previousStudentRecord?.get("room") || academic?.room || "",
+          bed: req.body.bed || previousStudentRecord?.get("bed") || academic?.bed || "",
+          floor: previousStudentRecord?.get("floor") || academic?.floor || "",
+          allottedOn: previousStudentRecord?.get("allottedOn") || academic?.allottedOn || "",
+          roommates: previousStudentRecord?.get("roommates") || [],
+          createdAt: previousStudentRecord?.get("createdAt") || FieldValue.serverTimestamp(),
         });
         await batch.commit();
       } catch (error) {
