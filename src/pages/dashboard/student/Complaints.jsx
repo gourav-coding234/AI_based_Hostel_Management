@@ -5,6 +5,7 @@ import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../compon
 import { WrenchIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { addDocument } from "../../../firebase/firestore";
+import { normalizeHostel } from "../../../utils/hostels";
 
 // "Inventory" covers requests/complaints about room furniture & fittings —
 // merged in from the old standalone Inventory page (see Inventory.jsx,
@@ -55,6 +56,7 @@ export default function Complaints() {
     try {
       const payload = {
         studentId,
+        hostel: normalizeHostel(profile?.hostel || profile?.hostelType || profile?.hostelResidence || profile?.gender),
         studentName: profile?.name || user?.email,
         studentCode: profile?.studentCode || profile?.registrationNo || profile?.regNo || "",
         registrationNo: profile?.registrationNo || profile?.regNo || "",

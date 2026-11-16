@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
+import { wardenHostel } from "../../../utils/hostels";
 import { Card, Pill, Button } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { WrenchIcon } from "../../../components/dashboard/warden/icons";
@@ -14,7 +15,12 @@ const STAFF_LIST = ["Electrician", "Plumber", "Carpenter", "Mess Staff", "Housek
 
 export default function WardenComplaints() {
   const { profile, user } = useAuth();
-  const complaintsQuery = useCollection("complaints", { orderByField: "date" });
+  const assignedHostel = wardenHostel(profile);
+  const complaintsQuery = useCollection("complaints", {
+    where: assignedHostel ? [["hostel", "==", assignedHostel]] : [],
+    orderByField: "date",
+    skip: !assignedHostel,
+  });
   const complaints = complaintsQuery.data;
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -122,6 +128,8 @@ export default function WardenComplaints() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      {!assignedHostel && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No hostel is assigned to this warden account. Ask an administrator to assign Boys Hostel or Girls Hostel.</p>}
+      {complaintsQuery.error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Complaints could not be loaded for {assignedHostel}. Check the Firestore access rules.</p>}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Open</p>

@@ -4,6 +4,7 @@ import { Card, Pill, Button, Field, inputCls, EmptyState } from "../../../compon
 import { AlertIcon } from "../../../components/dashboard/student/icons";
 import { useStudentCollection } from "../../../hooks/useStudentCollection";
 import { addDocument, getDocument } from "../../../firebase/firestore";
+import { normalizeHostel } from "../../../utils/hostels";
 
 const LEAVE_TYPES = ["Home Visit", "Medical", "Emergency", "Other"];
 
@@ -55,7 +56,7 @@ export default function Leave() {
         studentId,
         registrationNo,
         studentName: profile?.name || studentProfile?.name || user.displayName || user.email || "Student",
-        hostel: profile?.hostel || profile?.hostelType || studentProfile?.hostel || studentProfile?.hostelType || studentProfile?.gender || "",
+        hostel: normalizeHostel(profile?.hostel || profile?.hostelType || profile?.hostelResidence || profile?.gender || studentProfile?.hostel || studentProfile?.hostelType || studentProfile?.hostelResidence || studentProfile?.gender),
         block: profile?.wing || profile?.block || profile?.hostelResidence || studentProfile?.wing || studentProfile?.block || studentProfile?.hostelResidence || "",
         room: profile?.room || studentProfile?.room || "",
         type,

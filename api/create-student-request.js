@@ -1,5 +1,6 @@
 import { firebaseAdminServices } from "../src/firebase/adminServer.js";
 import { describeAdminError } from "../src/firebase/adminErrors.js";
+import { normalizeHostel } from "../src/utils/hostels.js";
 
 
 const reply = (res, status, body) => res.status(status).json(body);
@@ -25,6 +26,8 @@ export default async function createStudentRequest(req, res) {
     const student = studentSnap.exists ? studentSnap.data() : {};
     const registrationNo = String(student.registrationNo || student.regNo || profile.registrationNo || profile.regNo || "").trim();
     if (!registrationNo) return reply(res, 400, { message: "Your registration number is missing. Ask the administrator to update your student profile." });
+    const hostel = normalizeHostel(student.hostel || student.hostelType || student.hostelResidence || student.gender || profile.hostel || profile.hostelType || profile.hostelResidence || profile.gender);
+    if (!hostel) return reply(res, 400, { message: "Your hostel assignment is missing. Ask the hostel office to update your profile before submitting a request." });
     const prefix = collectionName === "gatePasses" ? "GP" : "LV";
     const year = new Date().getFullYear();
     const counterRef = db.collection("counters").doc(`${prefix}-${year}`);
@@ -37,7 +40,7 @@ export default async function createStudentRequest(req, res) {
       transaction.create(recordRef, {
         code: readableCode, studentId: caller.uid, registrationNo,
         studentName: profile.name || caller.name || caller.email || "Student",
-        hostel: student.hostel || student.hostelType || profile.hostel || profile.hostelType || "",
+        hostel,
         block: student.block || student.wing || student.hostelResidence || profile.hostelResidence || "",
         wing: student.wing || student.block || student.hostelResidence || profile.hostelResidence || "",
         room: student.room || "", type: String(body.requestType || "Personal").trim().slice(0, 80),

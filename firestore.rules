@@ -24,7 +24,18 @@ service cloud.firestore {
     // two canonical hostel names before they grant access.
     function myHostel() {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return profile.get('hostel', profile.get('assignedHostel', profile.get('wardenHostel', '')));
+      let hostel = profile.get('hostel', '');
+      let residence = profile.get('hostelResidence', '');
+      let type = profile.get('hostelType', '');
+      let assigned = profile.get('assignedHostel', '');
+      let warden = profile.get('wardenHostel', '');
+      let girls = ['Girls Hostel', 'girls hostel', 'Girls hostel', 'Girl Hostel', 'girl hostel'];
+      let boys = ['Boys Hostel', 'boys hostel', 'Boys hostel', 'Boy Hostel', 'boy hostel'];
+      return hostel in girls ? 'Girls Hostel' : hostel in boys ? 'Boys Hostel' :
+        (residence in girls ? 'Girls Hostel' : residence in boys ? 'Boys Hostel' :
+        (type in girls ? 'Girls Hostel' : type in boys ? 'Boys Hostel' :
+        (assigned in girls ? 'Girls Hostel' : assigned in boys ? 'Boys Hostel' :
+        (warden in girls ? 'Girls Hostel' : warden in boys ? 'Boys Hostel' : ''))));
     }
 
     function feeStudentId(fee) {
@@ -121,6 +132,13 @@ service cloud.firestore {
     // lookups for anyone at the gate).
     function isStaff() {
       return isAdmin() || isWarden();
+    }
+
+    // Request records must carry the hostel at creation so a warden query can
+    // be scoped by Firestore itself, including for older student profiles.
+    function wardenOwnHostelRecord() {
+      return isWarden() && myHostel() in ['Boys Hostel', 'Girls Hostel'] &&
+        resource.data.get('hostel', resource.data.get('hostelType', '')) == myHostel();
     }
 
     // A student may only read a record that is about *themselves*, and a
@@ -287,12 +305,13 @@ service cloud.firestore {
     match /gatePasses/{gatePassId} {
       // Security needs to look up any student's pass at the gate, so it
       // keeps blanket read — everyone else is scoped to their own record.
-      allow read: if isStaff() || isSecurity() || isOwnRecord(resource.data.studentId);
-      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId &&
+      allow read: if isAdmin() || wardenOwnHostelRecord() || isSecurity() || isOwnRecord(resource.data.studentId);
+      allow create: if isAdmin() || (isWarden() && request.resource.data.get('hostel', '') == myHostel()) ||
+        (isStudent() && request.auth.uid == request.resource.data.studentId &&
         request.resource.data.status == 'Pending' && request.resource.data.get('tripState', 'Not started') == 'Not started');
       // Security can perform one OUT then one IN movement. Pass identity and
       // approval data are immutable during either transition.
-      allow update: if (isStaff() && resource.data.status == 'Pending' &&
+      allow update: if ((isAdmin() || wardenOwnHostelRecord()) && resource.data.status == 'Pending' &&
         request.resource.data.status in ['Approved', 'Rejected'] &&
         request.resource.data.get('tripState', 'Not started') == resource.data.get('tripState', 'Not started') &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedBy', 'approvedAt', 'rejectedBy', 'rejectedAt', 'updatedAt'])) ||
@@ -321,9 +340,11 @@ service cloud.firestore {
     }
 
     match /complaints/{complaintId} {
-      allow read: if isStaff() || isOwnRecord(resource.data.studentId);
-      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
-      allow update: if isStaff();
+      allow read: if isAdmin() || wardenOwnHostelRecord() || isOwnRecord(resource.data.studentId);
+      allow create: if isAdmin() || (isWarden() && request.resource.data.get('hostel', '') == myHostel()) ||
+        (isStudent() && request.auth.uid == request.resource.data.studentId &&
+         request.resource.data.get('hostel', '') == hostelForUser(get(/databases/$(database)/documents/users/$(request.auth.uid)).data));
+      allow update: if isAdmin() || wardenOwnHostelRecord();
       allow delete: if isAdmin();
     }
 
@@ -399,10 +420,12 @@ service cloud.firestore {
       // Security may read ONLY approved requests (to record physical exits)
       // — never Pending/Rejected — and has no write access at all, so it
       // can't approve, reject or otherwise change a leave request.
-      allow read: if isStaff() || isOwnRecord(resource.data.studentId) ||
+      allow read: if isAdmin() || wardenOwnHostelRecord() || isOwnRecord(resource.data.studentId) ||
         (isSecurity() && resource.data.status == 'Approved');
-      allow create: if isStaff() || (isStudent() && request.auth.uid == request.resource.data.studentId);
-      allow update: if isStaff();
+      allow create: if isAdmin() || (isWarden() && request.resource.data.get('hostel', '') == myHostel()) ||
+        (isStudent() && request.auth.uid == request.resource.data.studentId &&
+         request.resource.data.get('hostel', '') == hostelForUser(get(/databases/$(database)/documents/users/$(request.auth.uid)).data));
+      allow update: if isAdmin() || wardenOwnHostelRecord();
       allow delete: if isAdmin();
     }
 

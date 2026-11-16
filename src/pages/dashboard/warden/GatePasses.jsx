@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { serverTimestamp } from "firebase/firestore";
 import { useAuth } from "../../../context/AuthContext";
+import { wardenHostel } from "../../../utils/hostels";
 import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, XIcon } from "../../../components/dashboard/warden/icons";
@@ -35,7 +36,12 @@ function getValidity(pass, now) {
 
 export default function GatePasses() {
   const { user, profile } = useAuth();
-  const passesQuery = useCollection("gatePasses", { orderByField: "from" });
+  const assignedHostel = wardenHostel(profile);
+  const passesQuery = useCollection("gatePasses", {
+    where: assignedHostel ? [["hostel", "==", assignedHostel]] : [],
+    orderByField: "from",
+    skip: !assignedHostel,
+  });
   const passes = passesQuery.data;
   const wingFilters = ["All Wings", ...Array.from(new Set(passes.map((p) => p.wing).filter(Boolean)))];
 
@@ -154,6 +160,8 @@ export default function GatePasses() {
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
+      {!assignedHostel && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">No hostel is assigned to this warden account. Ask an administrator to assign Boys Hostel or Girls Hostel.</p>}
+      {passesQuery.error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Gate passes could not be loaded for {assignedHostel}. Check the Firestore access rules.</p>}
       <Card>
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600">
