@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { downloadCsvAsXlsx } from "../../../utils/xlsxExport";
-import { Card, Pill, Button, StatCard } from "../../../components/dashboard/student/ui";
+import { Card, Pill, Button, StatCard, inputCls } from "../../../components/dashboard/student/ui";
 import DataTable from "../../../components/ui/DataTable";
 import { QrIcon, CheckIcon, DownloadIcon } from "../../../components/dashboard/admin/icons";
 import { useCollections } from "../../../hooks/useCollection";
